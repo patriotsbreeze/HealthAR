@@ -1,0 +1,63 @@
+name: Plumb
+options:
+  bundleIdPrefix: com.patriotsbreeze
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config/App.xcconfig
+  Release: Config/App.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+packages:
+  PlumbContracts: { path: Packages/Contracts }
+  PlumbSignal: { path: Packages/Signal }
+  PlumbCoach: { path: Packages/Coach }
+  PlumbSession: { path: Packages/Session }
+  PlumbGeometry: { path: Packages/Geometry }
+  PlumbSound: { path: Packages/Sound }
+  PlumbUI: { path: Packages/UI }
+  PlumbAgents: { path: Packages/Agents }
+  PlumbCapture: { path: Packages/Capture }
+targets:
+  Plumb:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+    dependencies:
+      - package: PlumbContracts
+      - package: PlumbSignal
+      - package: PlumbCoach
+      - package: PlumbSession
+      - package: PlumbGeometry
+      - package: PlumbSound
+      - package: PlumbUI
+      - package: PlumbAgents
+      - package: PlumbCapture
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Plumb
+        UILaunchScreen: {}
+        UIRequiresFullScreen: true
+        UIStatusBarHidden: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationLandscapeRight]
+        UIRequiredDeviceCapabilities: [arkit]
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        NSCameraUsageDescription: The camera and depth sensor measure how far the hands move on each push. Pictures stay on this phone, except one still sent with every person filled in when you press "Find AED".
+        NSMicrophoneUsageDescription: The microphone is used only while you hold "Hold to ask".
+        NSSpeechRecognitionUsageDescription: Speech is turned into text on this phone, only while you hold "Hold to ask".
+        GeminiAPIKey: $(GEMINI_API_KEY)
+schemes:
+  Plumb:
+    build:
+      targets:
+        Plumb: all
+    run:
+      config: Debug

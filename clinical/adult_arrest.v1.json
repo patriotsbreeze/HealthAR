@@ -1,0 +1,333 @@
+{
+  "version": "adult_arrest.v1",
+  "status": "DRAFT",
+  "reviewer": null,
+  "initial_state": "intake_responsive",
+  "speech_gate": {
+    "open_states": ["intake_responsive", "intake_breathing", "place_hands", "resource_scan", "handoff"]
+  },
+  "resource_hints": { "aed": "aed_spotted", "second_person": "assign_helper" },
+  "correction_phrases": {
+    "pulse_check": "correct_pulse",
+    "stop_cpr": "correct_stop",
+    "dose": "correct_dose",
+    "death_statement": "correct_death",
+    "reassurance": "correct_reassure"
+  },
+  "lowering_report_phrase": "confirm_by_tap",
+  "keep_queued_phrases": ["call_911"],
+  "audio_pause_seconds": 8,
+  "model_speech_hold_seconds": 8,
+  "dispatcher_mic_hold_seconds": 30,
+  "states": [
+    {
+      "id": "intake_responsive",
+      "kind": "intake",
+      "urgency": 2,
+      "question": "responsive",
+      "entry_phrases": ["ask_responsive"],
+      "metronome": "off",
+      "frame_uplink": true,
+      "allowed_say": ["gasping_not_normal", "no_pulse_check", "assign_helper"],
+      "timeout": { "seconds": 10, "to": "call_911" },
+      "transitions": [
+        { "on": "human.no", "to": "intake_breathing" },
+        { "on": "human.unsure", "to": "call_911" },
+        { "on": "human.yes", "to": "responsive_patient" },
+        { "on": "human.start_cpr", "to": "compressions", "phrases": ["call_911", "hands_center"], "log": "call_prompted" },
+        { "on": "human.not_adult", "to": "special_patient" },
+        { "on": "model.unresponsive", "to": "intake_breathing" },
+        { "on": "model.not_breathing", "to": "call_911" },
+        { "on": "model.abnormal_breathing", "to": "call_911", "phrases": ["gasping_not_normal"] }
+      ],
+      "citation": "AHA 2025 Part 7. The 10 s default is a project proposal, needs clinician approval"
+    },
+    {
+      "id": "intake_breathing",
+      "kind": "intake",
+      "urgency": 2,
+      "question": "breathing",
+      "entry_phrases": ["ask_breathing"],
+      "metronome": "off",
+      "frame_uplink": true,
+      "allowed_say": ["gasping_not_normal", "no_pulse_check", "assign_helper"],
+      "timeout": { "seconds": 10, "to": "call_911" },
+      "transitions": [
+        { "on": "human.no", "to": "call_911" },
+        { "on": "human.unsure", "to": "call_911" },
+        { "on": "human.yes", "to": "watch_breathing" },
+        { "on": "human.start_cpr", "to": "compressions", "phrases": ["call_911", "hands_center"], "log": "call_prompted" },
+        { "on": "human.not_adult", "to": "special_patient" },
+        { "on": "model.not_breathing", "to": "call_911" },
+        { "on": "model.abnormal_breathing", "to": "call_911", "phrases": ["gasping_not_normal"] }
+      ],
+      "citation": "AHA 2025 Part 7. The 10 s default is a project proposal, needs clinician approval"
+    },
+    {
+      "id": "watch_breathing",
+      "kind": "watch",
+      "urgency": 1,
+      "log_on_enter": "call_prompted",
+      "entry_phrases": ["watch_intro"],
+      "metronome": "off",
+      "frame_uplink": false,
+      "allowed_say": ["gasping_not_normal", "no_pulse_check", "assign_helper"],
+      "timeout": { "seconds": 10, "to": "call_911", "if_breaths_at_least": { "count": 2, "to": "watch_reask" } },
+      "transitions": [
+        { "on": "human.start_cpr", "to": "compressions", "phrases": ["call_911", "hands_center"], "log": "call_prompted" },
+        { "on": "human.patient_awake", "to": "responsive_patient" },
+        { "on": "model.not_breathing", "to": "call_911" },
+        { "on": "model.abnormal_breathing", "to": "call_911", "phrases": ["gasping_not_normal"] }
+      ],
+      "citation": "Project proposal, needs clinician approval. The breath threshold has no direct guideline source. See docs/research_brief.md, critique finding 1"
+    },
+    {
+      "id": "watch_reask",
+      "kind": "watch",
+      "urgency": 1,
+      "question": "breathing",
+      "entry_phrases": ["ask_still_breathing"],
+      "metronome": "off",
+      "frame_uplink": false,
+      "allowed_say": ["gasping_not_normal", "no_pulse_check", "assign_helper"],
+      "timeout": { "seconds": 10, "to": "call_911" },
+      "transitions": [
+        { "on": "human.yes", "to": "watch_breathing" },
+        { "on": "human.no", "to": "call_911" },
+        { "on": "human.unsure", "to": "call_911" },
+        { "on": "human.start_cpr", "to": "compressions", "phrases": ["call_911", "hands_center"], "log": "call_prompted" },
+        { "on": "human.patient_awake", "to": "responsive_patient" },
+        { "on": "model.not_breathing", "to": "call_911" },
+        { "on": "model.abnormal_breathing", "to": "call_911", "phrases": ["gasping_not_normal"] }
+      ],
+      "citation": "Project proposal, needs clinician approval. See docs/research_brief.md, critique finding 1"
+    },
+    {
+      "id": "responsive_patient",
+      "kind": "card",
+      "urgency": 0,
+      "entry_phrases": ["responsive_card"],
+      "metronome": "off",
+      "frame_uplink": false,
+      "allows_ppg": true,
+      "allowed_say": [],
+      "repeating": [
+        { "phrase": "responsive_recheck", "every_seconds": 30 }
+      ],
+      "transitions": [
+        { "on": "human.patient_unresponsive", "to": "intake_breathing" },
+        { "on": "human.start_cpr", "to": "compressions", "phrases": ["call_911", "hands_center"], "log": "call_prompted" },
+        { "on": "human.ems_arrived", "to": "handoff" },
+        { "on": "model.unresponsive", "to": "intake_breathing" },
+        { "on": "model.not_breathing", "to": "call_911" },
+        { "on": "model.abnormal_breathing", "to": "call_911", "phrases": ["gasping_not_normal"] }
+      ],
+      "citation": "Project static card, needs clinician approval. The re-ask and its interval are a project proposal with no direct guideline source"
+    },
+    {
+      "id": "special_patient",
+      "kind": "card",
+      "urgency": 2,
+      "log_on_enter": "call_prompted",
+      "entry_phrases": ["special_card"],
+      "metronome": "off",
+      "frame_uplink": false,
+      "allowed_say": [],
+      "repeating": [
+        { "phrase": "special_recheck", "every_seconds": 30 }
+      ],
+      "transitions": [
+        { "on": "human.back", "to": "intake_responsive" },
+        { "on": "human.ems_arrived", "to": "handoff" }
+      ],
+      "citation": "Project static card. Adult coaching does not apply, so the dispatcher leads. The reminder and its interval are a project proposal, needs clinician approval"
+    },
+    {
+      "id": "call_911",
+      "after_pads": "compressions_aed",
+      "kind": "setup",
+      "urgency": 3,
+      "log_on_enter": "call_prompted",
+      "entry_phrases": ["call_911"],
+      "metronome": "off",
+      "frame_uplink": false,
+      "allowed_say": ["assign_helper"],
+      "timeout": { "seconds": 5, "to": "position_patient" },
+      "transitions": [
+        { "on": "human.called", "to": "position_patient" },
+        { "on": "human.done", "to": "position_patient" },
+        { "on": "human.start_cpr", "to": "compressions", "phrases": ["hands_center"] }
+      ],
+      "citation": "AHA 2025 Part 7, activate EMS"
+    },
+    {
+      "id": "position_patient",
+      "kind": "setup",
+      "urgency": 3,
+      "entry_phrases": ["roll_flat"],
+      "metronome": "off",
+      "frame_uplink": false,
+      "allowed_say": [],
+      "timeout": { "seconds": 5, "to": "place_hands" },
+      "transitions": [
+        { "on": "human.done", "to": "place_hands" },
+        { "on": "human.start_cpr", "to": "compressions", "phrases": ["hands_center"] }
+      ],
+      "citation": "AHA 2025 Part 7, firm surface"
+    },
+    {
+      "id": "place_hands",
+      "kind": "setup",
+      "urgency": 3,
+      "entry_phrases": ["hands_center"],
+      "metronome": "off",
+      "frame_uplink": false,
+      "overlay": "chest_center",
+      "allowed_say": ["no_pulse_check"],
+      "timeout": { "seconds": 5, "to": "compressions" },
+      "transitions": [
+        { "on": "human.done", "to": "compressions" },
+        { "on": "human.start_cpr", "to": "compressions" }
+      ],
+      "citation": "AHA 2025 Part 7, hand position. AR overlay is unvalidated and never gates this step"
+    },
+    {
+      "id": "compressions",
+      "after_pads": "compressions_aed",
+      "kind": "cpr",
+      "urgency": 4,
+      "log_on_enter": "coaching_started",
+      "entry_phrases": ["start_compressions"],
+      "metronome": "on",
+      "frame_uplink": false,
+      "allowed_say": ["no_pulse_check", "keep_going", "push_hard", "assign_helper", "aed_spotted"],
+      "repeating": [
+        { "phrase": "push_hard", "every_seconds": 60 },
+        { "phrase": "switch_compressors", "every_seconds": 120 }
+      ],
+      "transitions": [
+        { "on": "human.scan", "to": "resource_scan" },
+        { "on": "human.aed_here", "to": "aed_on" },
+        { "on": "human.ems_arrived", "to": "handoff" },
+        { "on": "human.patient_moving", "to": "watch_breathing" }
+      ],
+      "citation": "AHA 2025 Part 7, compressions"
+    },
+    {
+      "id": "resource_scan",
+      "kind": "cpr",
+      "urgency": 4,
+      "entry_phrases": [],
+      "metronome": "on",
+      "frame_uplink": true,
+      "overlay": "aed_device",
+      "allowed_say": ["no_pulse_check", "keep_going", "aed_spotted", "assign_helper"],
+      "repeating": [
+        { "phrase": "push_hard", "every_seconds": 60 },
+        { "phrase": "switch_compressors", "every_seconds": 120 }
+      ],
+      "timeout": { "seconds": 20, "to": "compressions" },
+      "transitions": [
+        { "on": "human.done", "to": "compressions" },
+        { "on": "human.aed_here", "to": "aed_on" },
+        { "on": "human.ems_arrived", "to": "handoff" },
+        { "on": "human.patient_moving", "to": "watch_breathing" }
+      ],
+      "citation": "Project design. Compressions continue during the scan"
+    },
+    {
+      "id": "aed_on",
+      "kind": "cpr",
+      "urgency": 4,
+      "log_on_enter": "aed_arrived",
+      "entry_phrases": ["aed_on"],
+      "metronome": "on",
+      "frame_uplink": false,
+      "allowed_say": ["no_pulse_check", "keep_going"],
+      "repeating": [
+        { "phrase": "push_hard", "every_seconds": 60 },
+        { "phrase": "switch_compressors", "every_seconds": 120 }
+      ],
+      "transitions": [
+        { "on": "human.done", "to": "pads" },
+        { "on": "human.pads_on", "to": "aed_analyze" },
+        { "on": "human.ems_arrived", "to": "handoff" },
+        { "on": "human.patient_moving", "to": "watch_breathing" }
+      ],
+      "citation": "AHA 2025 Part 7, AED use"
+    },
+    {
+      "id": "pads",
+      "kind": "cpr",
+      "urgency": 4,
+      "entry_phrases": ["pads_place"],
+      "metronome": "on",
+      "frame_uplink": false,
+      "overlay": "pad_zones",
+      "allowed_say": ["no_pulse_check", "keep_going"],
+      "repeating": [
+        { "phrase": "push_hard", "every_seconds": 60 },
+        { "phrase": "switch_compressors", "every_seconds": 120 }
+      ],
+      "transitions": [
+        { "on": "human.pads_on", "to": "aed_analyze" },
+        { "on": "human.ems_arrived", "to": "handoff" },
+        { "on": "human.patient_moving", "to": "watch_breathing" }
+      ],
+      "citation": "AHA 2025 Part 7, AED pad placement. Pad zones are manikin only"
+    },
+    {
+      "id": "aed_analyze",
+      "kind": "cpr",
+      "urgency": 4,
+      "log_on_enter": "pads_on",
+      "entry_phrases": ["aed_authority"],
+      "metronome": "off",
+      "frame_uplink": false,
+      "allowed_say": [],
+      "repeating": [
+        { "phrase": "aed_reminder", "every_seconds": 45 }
+      ],
+      "transitions": [
+        { "on": "human.aed_says_cpr", "to": "compressions_aed" },
+        { "on": "human.ems_arrived", "to": "handoff" },
+        { "on": "human.patient_moving", "to": "watch_breathing" }
+      ],
+      "citation": "Project safety rule. Once pads are on the AED is the authority, and the phone metronome stays off so it cannot invite contact during analysis or shock"
+    },
+    {
+      "id": "compressions_aed",
+      "kind": "cpr",
+      "urgency": 4,
+      "entry_phrases": ["resume_compressions"],
+      "metronome": "off",
+      "metronome_toggleable": true,
+      "frame_uplink": false,
+      "allowed_say": ["no_pulse_check", "keep_going"],
+      "repeating": [
+        { "phrase": "push_hard", "every_seconds": 60 },
+        { "phrase": "switch_compressors", "every_seconds": 120 }
+      ],
+      "transitions": [
+        { "on": "human.aed_analyzing", "to": "aed_analyze" },
+        { "on": "human.ems_arrived", "to": "handoff" },
+        { "on": "human.patient_moving", "to": "watch_breathing" }
+      ],
+      "citation": "Project safety rule. Many AEDs provide their own metronome, so the phone's is opt-in here"
+    },
+    {
+      "id": "handoff",
+      "kind": "card",
+      "urgency": 0,
+      "log_on_enter": "ems_arrived",
+      "entry_phrases": ["handoff_ready"],
+      "metronome": "off",
+      "frame_uplink": false,
+      "allowed_say": [],
+      "transitions": [
+        { "on": "human.resume_cpr", "to": "compressions", "phrases": ["call_911", "hands_center"], "log": "call_prompted" }
+      ],
+      "citation": "Project handoff card"
+    }
+  ]
+}

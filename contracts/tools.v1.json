@@ -1,0 +1,79 @@
+{
+  "version": "tools.v1",
+  "note": "Everything the Live model may do. Enums must match RescueCore. The model has no tools for overlay coordinates, step changes, stopping the metronome, or dialing.",
+  "function_declarations": [
+    {
+      "name": "report_finding",
+      "description": "Report something you heard or saw about the patient or scene. This is an observation only. The app decides what happens next.",
+      "behavior": "NON_BLOCKING",
+      "parameters": {
+        "type": "OBJECT",
+        "properties": {
+          "kind": {
+            "type": "STRING",
+            "enum": ["unresponsive", "responsive", "abnormal_breathing", "not_breathing", "breathing_normally", "patient_moving", "ems_arrived", "dispatcher_speaking", "aed_prompting"]
+          },
+          "source": { "type": "STRING", "enum": ["heard", "seen"] },
+          "confidence": { "type": "STRING", "enum": ["low", "medium", "high"] },
+          "state_version": { "type": "INTEGER", "description": "The version from the latest state brief." }
+        },
+        "required": ["kind", "source", "confidence", "state_version"]
+      }
+    },
+    {
+      "name": "report_resources",
+      "description": "Report equipment or people visible or mentioned in the scene.",
+      "behavior": "NON_BLOCKING",
+      "parameters": {
+        "type": "OBJECT",
+        "properties": {
+          "items": {
+            "type": "ARRAY",
+            "items": { "type": "STRING", "enum": ["aed", "gloves", "towel", "tourniquet", "second_person"] }
+          },
+          "state_version": { "type": "INTEGER" }
+        },
+        "required": ["items", "state_version"]
+      }
+    },
+    {
+      "name": "say",
+      "description": "Play one approved phrase by id. Only phrases listed in the latest state brief are allowed.",
+      "behavior": "NON_BLOCKING",
+      "parameters": {
+        "type": "OBJECT",
+        "properties": {
+          "phrase_id": { "type": "STRING" },
+          "state_version": { "type": "INTEGER" }
+        },
+        "required": ["phrase_id", "state_version"]
+      }
+    },
+    {
+      "name": "locate_object",
+      "description": "Ask the app to find an object in the current camera view and point to it.",
+      "behavior": "NON_BLOCKING",
+      "parameters": {
+        "type": "OBJECT",
+        "properties": {
+          "label": { "type": "STRING", "enum": ["aed"] },
+          "state_version": { "type": "INTEGER" }
+        },
+        "required": ["label", "state_version"]
+      }
+    },
+    {
+      "name": "log_event",
+      "description": "Add a note to the event log. It is labeled as AI-inferred.",
+      "behavior": "NON_BLOCKING",
+      "parameters": {
+        "type": "OBJECT",
+        "properties": {
+          "kind": { "type": "STRING", "enum": ["witnessed_collapse", "vomiting", "seizure_activity", "bystander_distress", "other"] },
+          "state_version": { "type": "INTEGER" }
+        },
+        "required": ["kind", "state_version"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "version": "knowledge_pack.v1",
+  "status": "DRAFT",
+  "reviewer": null,
+  "note": "Paraphrased from the named guidelines for the AI voice to draw on. Not reviewed by a clinician. No milligram doses: the app gives the one approved dose itself.",
+  "topics": [
+    {
+      "id": "chest_pain",
+      "title": "Chest pain or possible heart attack",
+      "source": "AHA/Red Cross First Aid 2024, chest pain, COR 1 C-LD, COR 2b B-NR, COR 2b C-EO; ILCOR First Aid 2025, weak",
+      "text": "An adult with chest pain needs emergency services and an ambulance to the hospital, not a ride in a private car. Women, older adults, and people with diabetes may instead have breathlessness, sweating, nausea, lightheadedness, or pain in the back, neck, jaw, or stomach. While waiting, an alert adult with no injury, no aspirin allergy, and no clinician's warning against it may chew and swallow aspirin. The app asks about aspirin itself. If anyone is unsure about aspirin, wait for EMS."
+    },
+    {
+      "id": "positioning",
+      "title": "Position and staying with someone",
+      "source": "AHA/Red Cross First Aid 2024, positioning, COR 1 C-EO",
+      "text": "With any possibly serious illness or injury, get emergency services coming and stay with the person if it is safe. Move them only if the area is unsafe. An awake person having trouble breathing should take whatever position is most comfortable, which is usually sitting up. Protect them from getting too hot or too cold."
+    },
+    {
+      "id": "fracture",
+      "title": "Possible broken bone",
+      "source": "AHA/Red Cross First Aid 2024, fractures, COR 1 C-EO, COR 2a C-EO, COR 2b C-EO",
+      "text": "Leave a deformed limb in the position it was found. A splint or padding can ease pain and limit further injury, although evidence for splinting in first aid is limited. Cover an open wound with a clean dressing. A limb that looks blue, purple, or pale needs emergency services right away. Treat heavy bleeding first."
+    },
+    {
+      "id": "painful_limb",
+      "title": "Painful limb, sprain, or strain",
+      "source": "AHA/Red Cross First Aid 2024, sprains and strains, COR 1 C-EO, COR 2a C-LD, COR 2b C-LD",
+      "text": "If a limb injury hurts enough to limit use, they should avoid whatever causes pain and get medical attention. Only if a clinician has said it is a sprain or strain, cold wrapped in a damp cloth can ease pain and swelling, for 20 to 30 minutes at a time and never directly on skin, and a compression wrap may add comfort after an ankle sprain."
+    },
+    {
+      "id": "spinal",
+      "title": "Possible neck, back, hip, or pelvic injury",
+      "source": "AHA/Red Cross First Aid 2024, spinal injury and positioning, COR 1 C-EO, COR 3 Harm C-LD",
+      "text": "Have them stay as still as possible, in the position found, unless the area is unsafe, and get emergency services coming. First aid providers should not use rigid neck collars or long boards routinely."
+    },
+    {
+      "id": "bleeding",
+      "title": "Severe bleeding",
+      "source": "AHA/Red Cross First Aid 2024, severe external bleeding, COR 1 C-LD, COR 1 B-NR, COR 2a; ILCOR First Aid 2025",
+      "text": "Press firmly and directly on the wound by hand first. Pressing on pressure points elsewhere is not recommended as a substitute. If bleeding from a limb is life-threatening and pressure does not control it, apply a tourniquet and tighten it until the bleeding stops. A manufactured tourniquet is better than an improvised one, and an improvised one should be at least two inches wide. Get emergency services coming."
+    },
+    {
+      "id": "stroke",
+      "title": "Possible stroke",
+      "source": "AHA/Red Cross First Aid 2024, stroke recognition, COR 1 B-NR; ILCOR First Aid 2025, strong",
+      "text": "Check FAST: is one side of the face drooping, is one arm weak, is speech slurred or strange. Any of these means time matters, so get emergency services coming right away."
+    },
+    {
+      "id": "choking",
+      "title": "Choking",
+      "source": "ILCOR First Aid 2025, foreign-body airway obstruction, weak",
+      "text": "If someone cannot cough effectively, act at once. Start with firm back slaps. If those do not work, use abdominal thrusts. It often takes more than one technique. Take out only an object you can see, and never sweep blindly with a finger. If they become unresponsive, follow the CPR steps. Get emergency services coming."
+    },
+    {
+      "id": "presumed_arrest",
+      "title": "Unresponsive and not breathing normally",
+      "source": "ILCOR First Aid 2025, strong; AHA/Red Cross First Aid 2024, positioning, COR 1 C-LD",
+      "text": "Someone unresponsive and not breathing normally needs CPR on their back on a firm surface. Gasping is not normal breathing. Bystanders should start without worrying about causing injury. There is no pulse check. Use the app's Not responding button so it guides CPR."
+    },
+    {
+      "id": "seizure",
+      "title": "Seizure",
+      "source": "AHA/Red Cross First Aid 2024, seizures, COR 1 C-LD, COR 1 C-EO, COR 3 Harm C-EO",
+      "text": "Help them to the ground, on their side, clear the area, and stay with them. Never restrain them. Put nothing in their mouth, and give no food, drink, or medicine until fully alert. Get emergency services for a first seizure, one over five minutes, repeated seizures without recovering between them, a seizure in water, injury, trouble breathing, choking, pregnancy, or if they are not back to normal within five to ten minutes."
+    },
+    {
+      "id": "overdose",
+      "title": "Possible opioid overdose",
+      "source": "AHA/Red Cross First Aid 2024, opioid overdose, COR 1 B-NR",
+      "text": "If they are unresponsive and not breathing normally, get emergency services coming, start CPR, and give naloxone if it is available. Use the app's Not responding button so it guides CPR."
+    },
+    {
+      "id": "anaphylaxis",
+      "title": "Severe allergic reaction",
+      "source": "AHA/Red Cross First Aid 2024, anaphylaxis, COR 1 B-NR, COR 1 C-EO, COR 2b B-NR",
+      "text": "Get emergency services coming. The person should use their own epinephrine autoinjector, and you may help them use it. If they do not improve and EMS is more than five to ten minutes away, a second autoinjector may be considered."
+    },
+    {
+      "id": "low_blood_sugar",
+      "title": "Possible low blood sugar",
+      "source": "AHA/Red Cross First Aid 2024, hypoglycemia, COR 1 C-LD, COR 1 C-EO, COR 2a, COR 3 Harm C-EO",
+      "text": "If they are awake and can swallow, encourage glucose tablets, or simple sugar if there are none. Never give anything by mouth to someone who is not awake or cannot swallow. Get emergency services if they cannot swallow, have a seizure, or are no better after ten minutes."
+    }
+  ]
+}

@@ -1,0 +1,126 @@
+{
+  "version": "possible_heart_attack.v1",
+  "status": "DRAFT",
+  "reviewer": null,
+  "flow": {
+    "id": "possible_heart_attack",
+    "title": "Possible heart attack",
+    "rule": "Chest pain or heart symptoms in an awake adult",
+    "sources": [
+      "AHA/Red Cross First Aid 2024, chest pain, COR 1 C-LD, COR 2b B-NR, COR 2b C-EO",
+      "ILCOR First Aid 2025, aspirin, weak"
+    ]
+  },
+  "open_states": ["chest_wait"],
+  "awake_resource_hints": { "aed": "aed_found" },
+  "entries": [
+    { "state": "triage", "edge": { "on": "human.triage_chest", "to": "chest_call" } },
+    { "state": "triage", "edge": { "on": "model.chest_pain", "to": "chest_call", "min_confidence": "medium" } },
+    { "state": "triage", "edge": { "on": "model.other_heart_signs", "to": "chest_call", "min_confidence": "medium" } },
+    { "state": "general_talk", "edge": { "on": "model.chest_pain", "to": "chest_call", "min_confidence": "medium" } },
+    { "state": "general_talk", "edge": { "on": "model.other_heart_signs", "to": "chest_call", "min_confidence": "medium" } }
+  ],
+  "states": [
+    {
+      "id": "chest_call",
+      "kind": "flow",
+      "urgency": 2,
+      "flow": "possible_heart_attack",
+      "log_on_enter": "call_prompted",
+      "entry_phrases": ["chest_possible", "call_911", "chest_sit"],
+      "metronome": "off",
+      "frame_uplink": false,
+      "guide": "sit_rest",
+      "allowed_say": ["assign_helper"],
+      "timeout": { "seconds": 15, "to": "chest_aspirin_check" },
+      "transitions": [
+        { "on": "human.done", "to": "chest_aspirin_check" },
+        { "on": "human.called", "to": "chest_aspirin_check" },
+        { "on": "model.aspirin_unsafe", "to": "chest_wait", "phrases": ["aspirin_stop"] }
+      ],
+      "citation": "AHA/Red Cross First Aid 2024, chest pain, COR 1 C-LD, and positioning, COR 1 C-EO. The 15 s step is a project proposal, needs clinician approval"
+    },
+    {
+      "id": "chest_aspirin_check",
+      "kind": "flow",
+      "urgency": 2,
+      "flow": "possible_heart_attack",
+      "question": "aspirin_risk_reported",
+      "entry_phrases": ["aspirin_check"],
+      "metronome": "off",
+      "frame_uplink": false,
+      "allowed_say": [],
+      "timeout": { "seconds": 20, "to": "chest_wait", "phrases": ["aspirin_skip"] },
+      "transitions": [
+        { "on": "human.yes", "to": "chest_wait", "phrases": ["aspirin_skip"] },
+        { "on": "human.no", "to": "chest_aspirin" },
+        { "on": "human.unsure", "to": "chest_wait", "phrases": ["aspirin_skip"] },
+        { "on": "model.aspirin_unsafe", "to": "chest_wait", "phrases": ["aspirin_stop"] }
+      ],
+      "citation": "AHA/Red Cross First Aid 2024, chest pain, aspirin, COR 2b B-NR and COR 2b C-EO. No reply means no aspirin, a project proposal, needs clinician approval"
+    },
+    {
+      "id": "chest_aspirin",
+      "kind": "flow",
+      "urgency": 2,
+      "flow": "possible_heart_attack",
+      "log_on_enter": "aspirin_advised",
+      "entry_phrases": ["aspirin_give"],
+      "metronome": "off",
+      "frame_uplink": false,
+      "allowed_say": [],
+      "timeout": { "seconds": 15, "to": "chest_wait" },
+      "transitions": [
+        { "on": "human.done", "to": "chest_wait" },
+        { "on": "model.aspirin_unsafe", "to": "chest_wait", "phrases": ["aspirin_stop"], "cuts_phrases": true }
+      ],
+      "citation": "AHA/Red Cross First Aid 2024, chest pain, aspirin, COR 2b B-NR, 162-325 mg. Reached only by a person's tap"
+    },
+    {
+      "id": "chest_wait",
+      "kind": "flow",
+      "urgency": 2,
+      "flow": "possible_heart_attack",
+      "entry_phrases": ["chest_wait_line"],
+      "metronome": "off",
+      "frame_uplink": false,
+      "allowed_say": ["assign_helper"],
+      "repeating": [
+        { "phrase": "chest_wait_line", "every_seconds": 30 }
+      ],
+      "transitions": [
+        { "on": "human.scan", "to": "chest_scan" },
+        { "on": "model.aspirin_unsafe", "to": "chest_wait", "phrases": ["aspirin_stop"] }
+      ],
+      "citation": "AHA/Red Cross First Aid 2024, chest pain, COR 1 C-LD, plus project. The 30 s re-ask is a project proposal, needs clinician approval"
+    },
+    {
+      "id": "chest_scan",
+      "kind": "flow",
+      "urgency": 2,
+      "flow": "possible_heart_attack",
+      "entry_phrases": ["aed_look"],
+      "metronome": "off",
+      "frame_uplink": true,
+      "overlay": "aed_device",
+      "allowed_say": ["assign_helper", "aed_found"],
+      "timeout": { "seconds": 20, "to": "chest_wait" },
+      "transitions": [
+        { "on": "human.done", "to": "chest_wait" },
+        { "on": "model.aspirin_unsafe", "to": "chest_scan", "phrases": ["aspirin_stop"] }
+      ],
+      "citation": "Project design. Finding the AED early, in case of collapse. AR is unvalidated and never gates this step"
+    }
+  ],
+  "phrases": [
+    { "id": "chest_possible", "text": "Possible heart attack.", "citation": "AHA 2024, 1 C-LD" },
+    { "id": "chest_sit", "text": "Sit them comfortably. Cushion behind their back.", "citation": "AHA/Red Cross First Aid 2024, positioning, COR 1 C-EO. St John Ambulance, heart attack, cushions behind them. The cushion is a proposal" },
+    { "id": "aspirin_check", "text": "Any aspirin allergy, injury, doctor's warning, or not fully alert?", "citation": "AHA 2024, 2b B-NR" },
+    { "id": "aspirin_give", "text": "Chew and swallow one 325 mg aspirin, or two 81 mg.", "citation": "AHA 2024, 2b B-NR, 162-325 mg" },
+    { "id": "aspirin_skip", "text": "No aspirin. Wait for EMS.", "citation": "AHA 2024, 2b C-EO" },
+    { "id": "aspirin_stop", "text": "Do not give aspirin. Wait for EMS.", "citation": "AHA 2024, 2b B-NR" },
+    { "id": "chest_wait_line", "text": "Stay with them until EMS arrives. If they collapse, tap Not responding now.", "citation": "AHA 2024, 1 C-LD, plus project" },
+    { "id": "aed_look", "text": "Sweep the phone around. Look for an AED, in case they collapse.", "citation": "Project" },
+    { "id": "aed_found", "text": "If there's an AED, have someone bring it. Follow the arrow if it shows.", "citation": "Project" }
+  ]
+}

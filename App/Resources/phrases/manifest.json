@@ -1,0 +1,518 @@
+{
+  "clips": {
+    "aed_authority": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 4.74,
+      "sha256": "c514d78139e31bdabb1e7334d4739da1b0967436e0e79e617b84e094b7f4a839",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Pads are on. Follow the AED now. Stay clear when it says.",
+      "voice": "Kore"
+    },
+    "aed_found": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 4.945,
+      "sha256": "69b05b39140e14d182a67b6ae3a747ee9f27fa424a0c0475c84744dc26d9b297",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "If there's an AED, have someone bring it. Follow the arrow if it shows.",
+      "voice": "Kore"
+    },
+    "aed_look": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 4.565,
+      "sha256": "f62253f8cc20761bb7685094b1c8cfa1ee7194b4ece83e41ce1c15ea6d9a71b8",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Sweep the phone around. Look for an AED, in case they collapse.",
+      "voice": "Kore"
+    },
+    "aed_on": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 5.395,
+      "sha256": "ed34c3af1842383a207280067b329697ee74862f04d584660e5ddfacb28494a7",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Turn the AED on and follow its voice. Keep pushing until it says stop.",
+      "voice": "Kore"
+    },
+    "aed_reminder": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 4.815,
+      "sha256": "475e91db60c22b346d49cef4e0942fa65e8dcdcdf300525298bf19b448a864a6",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "If the AED says to push, or nothing is happening, start pushing.",
+      "voice": "Kore"
+    },
+    "aed_spotted": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 3.82,
+      "sha256": "01fa18aec8c6cea6ad375b5f885238b2cdee7ca05159f2a5fef6e39efa2fbbb0",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "AED spotted. Have someone bring it here. Keep pushing.",
+      "voice": "Kore"
+    },
+    "ask_breathing": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 3.45,
+      "sha256": "ca5e005d9093e8d1f78e1fc05e25feb8205ebeef0587c67c423aaffb1f7cacc9",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Are they breathing normally? Gasping does not count.",
+      "voice": "Kore"
+    },
+    "ask_responsive": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 2.85,
+      "sha256": "a50036929140e6e5690439fe4e24e779166ae46f4d62c56c55ebb2dc42024080",
+      "style": "Calm, firm, direct question. Brisk, steady pace.",
+      "text": "Tap their shoulders and shout. Are they responding?",
+      "voice": "Kore"
+    },
+    "ask_still_breathing": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 1.6,
+      "sha256": "43d463b6e7ff9a290b43fe0b5c136a5a590b6982f99226a370c8403b8cdac535",
+      "style": "Calm, firm, direct question. Brisk, steady pace.",
+      "text": "Are they still breathing normally?",
+      "voice": "Kore"
+    },
+    "aspirin_check": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 5.195,
+      "sha256": "375f90ba51fd8557f19138812fb93c63abfacfaa2f21f0835be495fcd0357a50",
+      "style": "Calm, firm, direct question. Brisk, steady pace.",
+      "text": "Any aspirin allergy, injury, doctor's warning, or not fully alert?",
+      "voice": "Kore"
+    },
+    "aspirin_give": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 5.84,
+      "sha256": "9526a3eaf8bd4693087a56c6b9234d72534e9386e37c0284fe43181d1e569a74",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Chew and swallow one 325 mg aspirin, or two 81 mg.",
+      "voice": "Kore"
+    },
+    "aspirin_skip": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 2.6,
+      "sha256": "ca04f541f55ff671ec497dfccdcc07fdc2e76345eb1e40cc3492872fb515dc37",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "No aspirin. Wait for EMS.",
+      "voice": "Kore"
+    },
+    "aspirin_stop": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 2.83,
+      "sha256": "6e77d80bda59b27cbb16309db97a9cd3be73e81c93793ce8463bf30036547d8b",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Do not give aspirin. Wait for EMS.",
+      "voice": "Kore"
+    },
+    "assign_helper": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 4.015,
+      "sha256": "e8fad72bd80c2bdda9c4ad68f1d91c1d08f71c0fe2c44227dec28e50b09bfbca",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Someone else here? Have them call 911 and find an AED.",
+      "voice": "Kore"
+    },
+    "call_911": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 4.67,
+      "sha256": "25c6ff169fe2482a0c3a78470a54d2f60f6a20160be2526960415a3aa3b67111",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Call 911 now, on speaker. If someone is with you, have them call.",
+      "voice": "Kore"
+    },
+    "chest_possible": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 1.27,
+      "sha256": "418464f24086d116036099be077d2a813ab18186909938c407823a9203c93576",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Possible heart attack.",
+      "voice": "Kore"
+    },
+    "chest_sit": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 2.88,
+      "sha256": "96df4deae7d0ef314778fa2ee9cf0085bd3e221bf1d264abd97062a4a39c1cfc",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Sit them comfortably. Cushion behind their back.",
+      "voice": "Kore"
+    },
+    "chest_wait_line": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 5.85,
+      "sha256": "6750cc90540f681dba31c91a7d2b4fb4ffdc78948580bfb4399e5bdd8d755743",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Stay with them until EMS arrives. If they collapse, tap Not responding now.",
+      "voice": "Kore"
+    },
+    "choking_steps": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 6.295,
+      "sha256": "8eef2201f354c5aa698804ebbbd3bbe6f26263f0adef26c5387f57a3fe875e05",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Can't cough or speak? Call 911. Give back slaps, then abdominal thrusts.",
+      "voice": "Kore"
+    },
+    "confirm_by_tap": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 4.18,
+      "sha256": "91ceb24274267c7b193e88950f9a5115e94e77ecb2fd63513b35fea4d2c4265b",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "If you are sure, tap yes. If not, we start CPR.",
+      "voice": "Kore"
+    },
+    "correct_awake": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 3.39,
+      "sha256": "cdf7cc1450754c2e02e92225d52f23e6356fcc48630820f5edc49038a990fa29",
+      "style": "Calm, firm, matter-of-fact. Brisk, steady pace.",
+      "text": "Correction. I'm not sure about that. Follow the dispatcher.",
+      "voice": "Kore"
+    },
+    "correct_death": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 3.865,
+      "sha256": "9be57325475b162d6bce865555679a2927942a8aa1a3f86ae3b56678854da8a0",
+      "style": "Calm, firm, matter-of-fact. Brisk, steady pace.",
+      "text": "Correction. Keep going. Only EMS can decide that.",
+      "voice": "Kore"
+    },
+    "correct_diagnosis": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 4.895,
+      "sha256": "369c6eaff4d7f3b2c54e8c90974a8e251fc6d640cc77fdb254eb065993764aac",
+      "style": "Calm, firm, matter-of-fact. Brisk, steady pace.",
+      "text": "Correction. That is only a possibility. Only a clinician can say.",
+      "voice": "Kore"
+    },
+    "correct_dose": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 3.45,
+      "sha256": "78bbef752e6fde04c13f69ed3a67408d83816e74a6cdbc32825b53d6dead07c1",
+      "style": "Calm, firm, matter-of-fact. Brisk, steady pace.",
+      "text": "Correction. Ignore that number. Follow the dispatcher.",
+      "voice": "Kore"
+    },
+    "correct_identity": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 3.92,
+      "sha256": "a8eababf62a5cae35e1c12449300117d1dbe8cd3cb886e6fc20705d32cea7b32",
+      "style": "Calm, firm, matter-of-fact. Brisk, steady pace.",
+      "text": "Correction. I am an AI, not a doctor or nurse.",
+      "voice": "Kore"
+    },
+    "correct_pulse": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 3.885,
+      "sha256": "de2faf3a95de8307a96bad0c1862a9245d43d209f00e4dc5425b4cfac238c034",
+      "style": "Calm, firm, matter-of-fact. Brisk, steady pace.",
+      "text": "Correction. Do not check for a pulse. Follow my steps.",
+      "voice": "Kore"
+    },
+    "correct_reassure": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 4.15,
+      "sha256": "4c56d4f952265b4d280c3c4ea2b0adc49e945bd37742f8224cad5d3afc92cbb1",
+      "style": "Calm, firm, matter-of-fact. Brisk, steady pace.",
+      "text": "Correction. If you are not sure, treat it as not breathing.",
+      "voice": "Kore"
+    },
+    "correct_stop": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 4.235,
+      "sha256": "829b1630b0edb0f3ba152e315f3c2b0eae1f9cdba4664e26f83490a0d49dc537",
+      "style": "Calm, firm, matter-of-fact. Brisk, steady pace.",
+      "text": "Correction. Do not stop until EMS takes over or they move.",
+      "voice": "Kore"
+    },
+    "gasping_not_normal": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 4.305,
+      "sha256": "696e3d16dd4edc6aeca4cdbcb238aaba8a8188e0fefb7c4bd08855feb6a8c3d1",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Gasping is not normal breathing. Treat it as not breathing.",
+      "voice": "Kore"
+    },
+    "general_intro": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 3.865,
+      "sha256": "26b9de7569ee77983d67436eabb498aeff55b074ab6a378ef827e43be9686b4e",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Call 911. Follow the dispatcher. Stay with them.",
+      "voice": "Kore"
+    },
+    "handoff_ready": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 2.2,
+      "sha256": "4b8e63747db5d9e8166151926686ddbfda23155f77844d24e51378578788db2d",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Show this card to the paramedics.",
+      "voice": "Kore"
+    },
+    "hands_center": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 4.135,
+      "sha256": "85c68cd8040a148e77e7dc6c0f968e3d0aca6f8e20a6ca66a41bb6131104dcd4",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Heel of one hand on the center of the chest. Other hand on top.",
+      "voice": "Kore"
+    },
+    "keep_going": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 3.42,
+      "sha256": "70fdf3121257d60d748a421089700e22b45d2b1a5177f9de78d04f1e3f50b28c",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Keep going. Do not stop until help takes over.",
+      "voice": "Kore"
+    },
+    "limb_danger_ask": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 3.88,
+      "sha256": "b5611177b3c6b3ee3f391d1c37d7759b574531b41a540043478bdf4a76e8f544",
+      "style": "Calm, firm, direct question. Brisk, steady pace.",
+      "text": "Heavy bleeding? Neck or back pain? Limb blue or pale?",
+      "voice": "Kore"
+    },
+    "limb_danger_care": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 4.845,
+      "sha256": "7ed144271b0c04b0e7cf80066a24ecd84c8ec9a69f3ef06009a67c1940a47dea",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Press hard on any bleeding, cloth if handy. Keep them still.",
+      "voice": "Kore"
+    },
+    "limb_gloves": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 3.95,
+      "sha256": "2ea8bfce16267e118ecd126918a930e66fb75e8dfe9bfd81fdf10e4bd1c5e3fa",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Put gloves on only if they're in reach. Don't delay pressure.",
+      "voice": "Kore"
+    },
+    "limb_possible": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 2.995,
+      "sha256": "81415f06edbd4fe922271d312bf7a2441e7a9a242262e2fc050381fd0f98d770",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Possible broken bone. Keep it as found.",
+      "voice": "Kore"
+    },
+    "limb_seek_care": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 5.205,
+      "sha256": "0ac84d70ebf1b27ae535382b7a0483fcbd3d9d915014e4d3d885b05650f81fd7",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "They need medical care. Call 911 if unsure or it gets worse.",
+      "voice": "Kore"
+    },
+    "limb_support": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 4.115,
+      "sha256": "2f639ecb34948e976c1b8cccc8d8ee4ff8757e94f34f64a38bc59030e9b0dfd6",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Don't straighten it. Pad under it: towel, pillow.",
+      "voice": "Kore"
+    },
+    "limb_tourniquet": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 4.125,
+      "sha256": "25c2684e6ea8d2571e0e43db8323c09ccf62e1f7e5c594e8672deefc314b95c2",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "If pressure does not stop it, tighten a tourniquet above the wound.",
+      "voice": "Kore"
+    },
+    "limb_wound": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 2.725,
+      "sha256": "d7cb80251526a5f5b875cd48f0362945301ead12dffd4ced8894b6d62f85e7a4",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Cover open wounds with clean cloth.",
+      "voice": "Kore"
+    },
+    "no_pulse_check": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 2.725,
+      "sha256": "524195d7cb5e936293803166496b34855b6edfc8066918f2eaa5a0be15246b0b",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Do not check for a pulse. Keep pushing.",
+      "voice": "Kore"
+    },
+    "pads_place": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 3.8,
+      "sha256": "84eaa4ce02ad6a6693eb5adeef07158ee354727abf4dc7d8f979d3c01b587568",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Bare the chest. Stick the pads where the pictures show.",
+      "voice": "Kore"
+    },
+    "push_hard": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 4.525,
+      "sha256": "753f278cff674f7191858108d575bdb63acfb7740be37063d36ef2402d05ed76",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Push hard, at least two inches. Let the chest come back up.",
+      "voice": "Kore"
+    },
+    "rate_faster": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 1.125,
+      "sha256": "141a7d962e815ac6a930d5e859ef12380d338548f5a252517d84f29452def308",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "A bit faster.",
+      "voice": "Kore"
+    },
+    "rate_slower": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 1.11,
+      "sha256": "0d6534c15c04c8b90a84f79f63e307df545c948764290a84e1a030867ac053f4",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "A bit slower.",
+      "voice": "Kore"
+    },
+    "responsive_card": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 5.185,
+      "sha256": "f96188e4acb72cc4d74687b55b6969238db31368d799eccc8a297298b8fbbadc",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Stay with them. Call 911 if they seem unwell, and watch their breathing.",
+      "voice": "Kore"
+    },
+    "responsive_recheck": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 5.65,
+      "sha256": "5d74d8ee86431383998c6baf22102fa4f954db21742d4274612b20518bf18e9f",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Are they still responding and breathing normally? If not, tap Not responding now.",
+      "voice": "Kore"
+    },
+    "resume_compressions": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 3.23,
+      "sha256": "c8a656662e66d80a58ace0aed52cd6b4a0e6d0e6b06fc89e3e04dcd78f225da7",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Start pushing again now, hard and fast.",
+      "voice": "Kore"
+    },
+    "roll_flat": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 3.405,
+      "sha256": "06d9f2ac5b680f5f21e8058f5a91ebe6a29cfa5b83188b75b92f79f8dacec043",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Roll them flat on their back, on a firm surface.",
+      "voice": "Kore"
+    },
+    "special_card": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 3.705,
+      "sha256": "6a870f00f9b839ea2dbd1676cbf788b13dbf1fc9af696b188303079094a38e91",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Call 911 and follow the dispatcher's instructions.",
+      "voice": "Kore"
+    },
+    "special_recheck": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 5.52,
+      "sha256": "b6efa17292fc9a215ec0ef002d7a9cb3a3d9ac473f453146d0d271071bf28666",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Call 911 and follow the dispatcher. Tap Back if you tapped this by mistake.",
+      "voice": "Kore"
+    },
+    "start_compressions": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 4.71,
+      "sha256": "c2f5362f97c384134152f44d732b0a23eb2e013f2bc778b15e18827b3948e55f",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Push hard and fast, in time with the beat. Do not stop.",
+      "voice": "Kore"
+    },
+    "switch_compressors": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 3.96,
+      "sha256": "e604ed66e5fc929aa549c57d719369b1ea86cd7c8d1598b088cbeabdac1a575f",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "If someone can take over, switch now. Keep pauses short.",
+      "voice": "Kore"
+    },
+    "triage_ask": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 2.89,
+      "sha256": "635aade8f718d8461e90d6e15a9b825df65dd658658a72c7c9057e3ed236dcac",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Tell me what's happening, or tap below.",
+      "voice": "Kore"
+    },
+    "triage_recheck": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 5.625,
+      "sha256": "70e5c3ff9f9f94c35d22f9378391e0aec93e802fe9ab02fb5c87409bb91d4a31",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Call 911 if unsure. If they stop responding, tap Not responding now.",
+      "voice": "Kore"
+    },
+    "watch_intro": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 5.41,
+      "sha256": "3ef602e41b12be21458c457392c45bc565c6a8cb1f318a1434c7624fb709a4f9",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Call 911 now if nobody has. Tap Mark breath each time they breathe.",
+      "voice": "Kore"
+    }
+  },
+  "render_version": 1
+}

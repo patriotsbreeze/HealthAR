@@ -1,0 +1,155 @@
+{
+  "version": "possible_broken_bone.v1",
+  "status": "DRAFT",
+  "reviewer": null,
+  "flow": {
+    "id": "possible_broken_bone",
+    "title": "Possible broken bone",
+    "rule": "Injured arm or leg, or a sign of serious injury, in an awake adult",
+    "sources": [
+      "AHA/Red Cross First Aid 2024, fractures, COR 1 C-EO, COR 2a C-EO, COR 2b C-EO",
+      "AHA/Red Cross First Aid 2024, severe external bleeding, COR 1 C-LD, COR 1 B-NR",
+      "AHA/Red Cross First Aid 2024, spinal injury and positioning, COR 1 C-EO"
+    ]
+  },
+  "open_states": ["limb_wait", "limb_danger"],
+  "awake_resource_hints": { "gloves": "limb_gloves" },
+  "entries": [
+    { "state": "triage", "edge": { "on": "human.triage_limb", "to": "limb_start" } },
+    { "state": "triage", "edge": { "on": "model.limb_injury", "to": "limb_start", "min_confidence": "medium" } },
+    { "state": "triage", "edge": { "on": "model.heavy_bleeding", "to": "limb_danger", "min_confidence": "medium" } },
+    { "state": "triage", "edge": { "on": "model.limb_discolored", "to": "limb_danger", "min_confidence": "medium" } },
+    { "state": "triage", "edge": { "on": "model.neck_back_injury", "to": "limb_danger", "min_confidence": "medium" } },
+    { "state": "general_talk", "edge": { "on": "model.limb_injury", "to": "limb_start", "min_confidence": "medium" } },
+    { "state": "general_talk", "edge": { "on": "model.heavy_bleeding", "to": "limb_danger", "min_confidence": "medium" } },
+    { "state": "general_talk", "edge": { "on": "model.limb_discolored", "to": "limb_danger", "min_confidence": "medium" } },
+    { "state": "general_talk", "edge": { "on": "model.neck_back_injury", "to": "limb_danger", "min_confidence": "medium" } }
+  ],
+  "states": [
+    {
+      "id": "limb_start",
+      "kind": "flow",
+      "urgency": 1,
+      "flow": "possible_broken_bone",
+      "entry_phrases": ["limb_possible"],
+      "metronome": "off",
+      "frame_uplink": false,
+      "locate_materials": true,
+      "overlay": "injury_site",
+      "allowed_say": [],
+      "timeout": { "seconds": 6, "to": "limb_flags" },
+      "transitions": [
+        { "on": "human.done", "to": "limb_flags" },
+        { "on": "model.heavy_bleeding", "to": "limb_danger", "min_confidence": "medium" },
+        { "on": "model.limb_discolored", "to": "limb_danger", "min_confidence": "medium" },
+        { "on": "model.neck_back_injury", "to": "limb_danger", "min_confidence": "medium" }
+      ],
+      "citation": "AHA/Red Cross First Aid 2024, fractures, COR 2b C-EO. The 6 s step is a project proposal, needs clinician approval"
+    },
+    {
+      "id": "limb_flags",
+      "kind": "flow",
+      "urgency": 1,
+      "flow": "possible_broken_bone",
+      "question": "danger_signs",
+      "entry_phrases": ["limb_danger_ask"],
+      "metronome": "off",
+      "frame_uplink": false,
+      "locate_materials": true,
+      "overlay": "injury_site",
+      "allowed_say": [],
+      "timeout": { "seconds": 10, "to": "limb_danger" },
+      "transitions": [
+        { "on": "human.yes", "to": "limb_danger" },
+        { "on": "human.no", "to": "limb_splint" },
+        { "on": "human.unsure", "to": "limb_danger" },
+        { "on": "model.heavy_bleeding", "to": "limb_danger", "min_confidence": "medium" },
+        { "on": "model.limb_discolored", "to": "limb_danger", "min_confidence": "medium" },
+        { "on": "model.neck_back_injury", "to": "limb_danger", "min_confidence": "medium" }
+      ],
+      "citation": "AHA/Red Cross First Aid 2024, fractures and spinal injury, COR 1 C-EO. No reply or Not sure takes the danger branch, a project proposal, needs clinician approval"
+    },
+    {
+      "id": "limb_splint",
+      "kind": "flow",
+      "urgency": 1,
+      "flow": "possible_broken_bone",
+      "entry_phrases": ["limb_wound", "limb_support"],
+      "metronome": "off",
+      "frame_uplink": false,
+      "locate_materials": true,
+      "overlay": "injury_site",
+      "guide": "support_limb",
+      "allowed_say": [],
+      "cues": [
+        { "phrase": "limb_support", "material": "towel", "body": "injured_limb", "placement": "under", "callout": "Pad under · Towel" },
+        { "phrase": "limb_support", "material": "pillow", "body": "injured_limb", "placement": "under", "callout": "Pad under · Pillow" }
+      ],
+      "timeout": { "seconds": 10, "to": "limb_wait" },
+      "transitions": [
+        { "on": "human.done", "to": "limb_wait" },
+        { "on": "model.heavy_bleeding", "to": "limb_danger", "min_confidence": "medium" },
+        { "on": "model.limb_discolored", "to": "limb_danger", "min_confidence": "medium" },
+        { "on": "model.neck_back_injury", "to": "limb_danger", "min_confidence": "medium" }
+      ],
+      "citation": "AHA/Red Cross First Aid 2024, fractures, open wound COR 2b C-EO, support COR 2a C-EO. The support materials and the 10 s step are project proposals, need clinician approval"
+    },
+    {
+      "id": "limb_wait",
+      "kind": "flow",
+      "urgency": 1,
+      "flow": "possible_broken_bone",
+      "entry_phrases": ["limb_seek_care"],
+      "metronome": "off",
+      "frame_uplink": false,
+      "locate_materials": true,
+      "overlay": "injury_site",
+      "allowed_say": ["limb_support"],
+      "cues": [
+        { "phrase": "limb_support", "material": "towel", "body": "injured_limb", "placement": "under", "callout": "Pad under · Towel" },
+        { "phrase": "limb_support", "material": "pillow", "body": "injured_limb", "placement": "under", "callout": "Pad under · Pillow" }
+      ],
+      "repeating": [
+        { "phrase": "limb_seek_care", "every_seconds": 30 }
+      ],
+      "transitions": [
+        { "on": "model.heavy_bleeding", "to": "limb_danger", "min_confidence": "medium" },
+        { "on": "model.limb_discolored", "to": "limb_danger", "min_confidence": "medium" },
+        { "on": "model.neck_back_injury", "to": "limb_danger", "min_confidence": "medium" }
+      ],
+      "citation": "AHA/Red Cross First Aid 2024, fractures, COR 1 C-EO. The 30 s re-ask is a project proposal, needs clinician approval"
+    },
+    {
+      "id": "limb_danger",
+      "kind": "flow",
+      "urgency": 2,
+      "flow": "possible_broken_bone",
+      "log_on_enter": "call_prompted",
+      "entry_phrases": ["call_911", "limb_danger_care", "limb_tourniquet"],
+      "metronome": "off",
+      "frame_uplink": false,
+      "locate_materials": true,
+      "overlay": "injury_site",
+      "allowed_say": ["limb_gloves"],
+      "cues": [
+        { "phrase": "limb_danger_care", "material": "towel", "body": "injury_site", "placement": "on", "callout": "Press · Cloth" },
+        { "phrase": "limb_gloves", "material": "gloves", "callout": "Put on · Gloves" }
+      ],
+      "repeating": [
+        { "phrase": "limb_danger_care", "every_seconds": 30 }
+      ],
+      "transitions": [],
+      "citation": "AHA/Red Cross First Aid 2024, severe external bleeding, COR 1 C-LD and COR 1 B-NR, and spinal injury, COR 1 C-EO. The 30 s re-ask, the cloth, and gloves are project proposals, need clinician approval"
+    }
+  ],
+  "phrases": [
+    { "id": "limb_possible", "text": "Possible broken bone. Keep it as found.", "citation": "AHA 2024, 2b C-EO" },
+    { "id": "limb_danger_ask", "text": "Heavy bleeding? Neck or back pain? Limb blue or pale?", "citation": "AHA 2024, 1 C-EO" },
+    { "id": "limb_danger_care", "text": "Press hard on any bleeding, cloth if handy. Keep them still.", "citation": "AHA 2024, 1 C-LD and 1 C-EO. The cloth is a proposal, after ACS Stop the Bleed" },
+    { "id": "limb_tourniquet", "text": "If pressure does not stop it, tighten a tourniquet above the wound.", "citation": "AHA 2024, 1 B-NR" },
+    { "id": "limb_gloves", "text": "Put gloves on only if they're in reach. Don't delay pressure.", "citation": "American Red Cross First Aid/CPR/AED: gloves if available, never delay care for them. Proposal, needs clinician approval" },
+    { "id": "limb_wound", "text": "Cover open wounds with clean cloth.", "citation": "AHA 2024, 2b C-EO. Cloth for a dressing is a proposal" },
+    { "id": "limb_support", "text": "Don't straighten it. Pad under it: towel, pillow.", "citation": "AHA 2024, 2a C-EO, and position found 2b C-EO. Materials are a proposal" },
+    { "id": "limb_seek_care", "text": "They need medical care. Call 911 if unsure or it gets worse.", "citation": "AHA 2024, 1 C-EO" }
+  ]
+}

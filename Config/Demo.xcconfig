@@ -1,0 +1,12 @@
+#include? "Secrets.xcconfig"
+
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited) DEMO_BUILD
+PRODUCT_BUNDLE_IDENTIFIER = com.patriotsbreeze.healthai.simulation
+PRODUCT_NAME = HealthAISim
+MARKETING_VERSION = 1.0
+CURRENT_PROJECT_VERSION = 3
+CODE_SIGN_STYLE = Automatic
+
+// The one prebuilt Gemini voice: both Live sessions speak in it, and tools/render_phrases.py renders
+// the phrase clips in it. Changing it means re-rendering the clips, which a Release build checks.
+GEMINI_VOICE = Kore

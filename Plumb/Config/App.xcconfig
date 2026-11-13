@@ -1,0 +1,9 @@
+// Build settings shared by every configuration.
+// Machine-specific and secret values come from the two optional files below, which are not committed.
+#include? "Local.xcconfig"
+#include? "Secrets.xcconfig"
+
+PRODUCT_BUNDLE_IDENTIFIER = com.patriotsbreeze.plumb
+PRODUCT_NAME = Plumb
+MARKETING_VERSION = 0.1
+CURRENT_PROJECT_VERSION = 1

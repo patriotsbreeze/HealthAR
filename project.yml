@@ -1,0 +1,113 @@
+name: HealthAI
+options:
+  bundleIdPrefix: com.patriotsbreeze.healthai
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    TARGETED_DEVICE_FAMILY: "1"
+packages:
+  RescueCore:
+    path: Packages/RescueCore
+  RescueAudio:
+    path: Packages/RescueAudio
+  RescueVision:
+    path: Packages/RescueVision
+  RescueLive:
+    path: Packages/RescueLive
+targets:
+  HealthAIDemo:
+    type: application
+    platform: iOS
+    configFiles:
+      Debug: Config/Demo.xcconfig
+      Release: Config/Demo.xcconfig
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # XcodeGen's iOS preset would otherwise make this 1,2 here, whatever the project level says.
+        TARGETED_DEVICE_FAMILY: "1"
+    sources:
+      - path: App
+        excludes:
+          - Info.plist
+          - Tests/**
+          - Resources/**
+      - path: clinical
+        type: folder
+        buildPhase: resources
+      - path: contracts
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - package: RescueCore
+      - package: RescueAudio
+      - package: RescueVision
+      - package: RescueLive
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: HealthAI SIM
+        # XcodeGen would otherwise write 1.0 and 1 here, whatever Demo.xcconfig says.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        GeminiAPIKey: $(GEMINI_API_KEY)
+        # The prebuilt voice for both Live sessions, the same one the phrase clips are rendered in.
+        GeminiVoice: $(GEMINI_VOICE)
+        # TestFlight asks for this. The app's only encryption is system TLS through URLSession.
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIBackgroundModes:
+          - audio
+        NSCameraUsageDescription: Simulation only. Finds the manikin and AED, and marks an injury you tap, to place guides on screen.
+        NSMicrophoneUsageDescription: Simulation only. Hears what the rescuer says so the guide can respond.
+        NSLocationWhenInUseUsageDescription: Simulation only. Shows an approximate location on the caller script.
+    scheme:
+      testTargets:
+        - HealthAIDemoTests
+    postCompileScripts:
+      # The clips may be missing from a Debug checkout, so they can't be project references. The audio
+      # controller looks in the bundle root and uses on-device speech for any clip it can't find.
+      # showEnvVars is off on every script here: left on, Xcode prints every build setting into the
+      # transcript, including GEMINI_API_KEY. tools/check_key_not_logged.sh checks this.
+      - name: Copy phrase clips
+        basedOnDependencyAnalysis: false
+        showEnvVars: false
+        script: |
+          set -eu
+          destination="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
+          mkdir -p "$destination"
+          rm -f "$destination"/*.wav
+          for clip in "$SRCROOT"/App/Resources/phrases/*.wav; do
+            if [ -e "$clip" ]; then cp -f "$clip" "$destination/"; fi
+          done
+      # Release only: an archive must carry every clip, current, in GEMINI_VOICE. Debug skips it.
+      - name: Check phrase clips
+        basedOnDependencyAnalysis: false
+        showEnvVars: false
+        script: tools/check_phrase_clips.sh
+    postBuildScripts:
+      - name: Check no emergency number
+        basedOnDependencyAnalysis: false
+        showEnvVars: false
+        script: tools/check_no_emergency_number.sh
+  HealthAIDemoTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: App/Tests
+    dependencies:
+      - target: HealthAIDemo
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.patriotsbreeze.healthai.simulation.tests
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/HealthAISim.app/HealthAISim
+        BUNDLE_LOADER: $(TEST_HOST)

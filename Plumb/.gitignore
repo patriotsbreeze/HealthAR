@@ -1,0 +1,11 @@
+.DS_Store
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj
+xcuserdata/
+Config/Secrets.xcconfig
+Config/Local.xcconfig
+*.trace
+recordings/
+.derived/

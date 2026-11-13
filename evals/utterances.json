@@ -1,0 +1,28 @@
+{
+  "version": "utterances.v1",
+  "purpose": "M3 go/no-go. At least 18 of 20 must produce the expected tool call, with a median near 2.5 s or less from speech end to tool call.",
+  "how_to_run": "Needs a paid Gemini key and a real iPhone. For each row, use the operator panel to force `state`, close the panel, and say `utterance` aloud at normal volume. Many states move on by timeout within 5 to 10 s, so force again if it moves first. Read the tool call from the Voice lane of the Sentinel panel and the timing from the HUD.",
+  "scoring": "A row passes when the tool name and every argument in `expected_args` match. `confidence` and `state_version` are not scored, and `source` is heard throughout. `engine_result` is what the engine does with the correct call, so a call that is rejected can still pass: the model was right to report it. Silence from the model fails the row, and the engine's timeouts must still fire.",
+  "utterances": [
+    { "id": 1, "state": "intake_responsive", "utterance": "He's not responding at all.", "expected_tool": "report_finding", "expected_args": { "kind": "unresponsive", "source": "heard" }, "engine_result": { "moves_to": "intake_breathing" } },
+    { "id": 2, "state": "intake_responsive", "utterance": "No, he's just gasping.", "expected_tool": "report_finding", "expected_args": { "kind": "abnormal_breathing", "source": "heard" }, "engine_result": { "moves_to": "call_911" } },
+    { "id": 3, "state": "intake_responsive", "utterance": "She's not breathing.", "expected_tool": "report_finding", "expected_args": { "kind": "not_breathing", "source": "heard" }, "engine_result": { "moves_to": "call_911" } },
+    { "id": 4, "state": "intake_responsive", "utterance": "Yes, she's talking to me.", "expected_tool": "report_finding", "expected_args": { "kind": "responsive", "source": "heard" }, "engine_result": { "rejected": "cannot_lower_urgency", "plays": "confirm_by_tap" } },
+    { "id": 5, "state": "intake_breathing", "utterance": "He's making a snoring sound.", "expected_tool": "report_finding", "expected_args": { "kind": "abnormal_breathing", "source": "heard" }, "engine_result": { "moves_to": "call_911" } },
+    { "id": 6, "state": "intake_breathing", "utterance": "I can't tell if he's breathing.", "expected_tool": "report_finding", "expected_args": { "kind": "abnormal_breathing", "source": "heard" }, "engine_result": { "moves_to": "call_911" } },
+    { "id": 7, "state": "intake_breathing", "utterance": "Yes, he's breathing fine.", "expected_tool": "report_finding", "expected_args": { "kind": "breathing_normally", "source": "heard" }, "engine_result": { "rejected": "cannot_lower_urgency", "plays": "confirm_by_tap" } },
+    { "id": 8, "state": "intake_breathing", "utterance": "Does gasping count as breathing?", "expected_tool": "say", "expected_args": { "phrase_id": "gasping_not_normal" }, "engine_result": { "plays": "gasping_not_normal" } },
+    { "id": 9, "state": "place_hands", "utterance": "Should I check his pulse first?", "expected_tool": "say", "expected_args": { "phrase_id": "no_pulse_check" }, "engine_result": { "plays": "no_pulse_check" } },
+    { "id": 10, "state": "compressions", "utterance": "Should I check his pulse?", "expected_tool": "say", "expected_args": { "phrase_id": "no_pulse_check" }, "engine_result": { "plays": "no_pulse_check" } },
+    { "id": 11, "state": "compressions", "utterance": "How long do I keep doing this?", "expected_tool": "say", "expected_args": { "phrase_id": "keep_going" }, "engine_result": { "plays": "keep_going" } },
+    { "id": 12, "state": "compressions", "utterance": "He just moved his arm.", "expected_tool": "report_finding", "expected_args": { "kind": "patient_moving", "source": "heard" }, "engine_result": { "rejected": "cannot_lower_urgency" } },
+    { "id": 13, "state": "compressions", "utterance": "The paramedics are here.", "expected_tool": "report_finding", "expected_args": { "kind": "ems_arrived", "source": "heard" }, "engine_result": { "rejected": "cannot_lower_urgency" } },
+    { "id": 14, "state": "compressions", "utterance": "Someone just came over to help.", "expected_tool": "report_resources", "expected_args": { "items": ["second_person"] }, "engine_result": { "adds_resources": ["second_person"], "plays": "assign_helper" } },
+    { "id": 15, "state": "compressions", "utterance": "There's a defibrillator on the wall.", "expected_tool": "report_resources", "expected_args": { "items": ["aed"] }, "engine_result": { "adds_resources": ["aed"], "plays": "aed_spotted" } },
+    { "id": 16, "state": "compressions", "utterance": "He just threw up.", "expected_tool": "log_event", "expected_args": { "kind": "vomiting" }, "engine_result": { "logs_note": "vomiting" } },
+    { "id": 17, "state": "compressions", "utterance": "Hang on, the dispatcher is telling me something.", "expected_tool": "report_finding", "expected_args": { "kind": "dispatcher_speaking", "source": "heard" }, "engine_result": { "holds_model_speech": true } },
+    { "id": 18, "state": "aed_on", "utterance": "The machine is telling us to stand clear.", "expected_tool": "report_finding", "expected_args": { "kind": "aed_prompting", "source": "heard" }, "engine_result": { "holds_model_speech": true, "pauses_audio": true } },
+    { "id": 19, "state": "resource_scan", "utterance": "Where's the AED? Can you find it?", "expected_tool": "locate_object", "expected_args": { "label": "aed" }, "engine_result": { "locates": "aed" } },
+    { "id": 20, "state": "resource_scan", "utterance": "I can see gloves and a towel on the table.", "expected_tool": "report_resources", "expected_args": { "items": ["gloves", "towel"] }, "engine_result": { "adds_resources": ["gloves", "towel"] } }
+  ]
+}

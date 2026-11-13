@@ -1,0 +1,85 @@
+{
+  "version": "triage.v1",
+  "status": "DRAFT",
+  "reviewer": null,
+  "open_states": ["triage", "general_talk", "choking_talk"],
+  "awake_correction_phrases": {
+    "pulse_check": "correct_awake",
+    "dose": "correct_awake",
+    "diagnosis": "correct_diagnosis",
+    "identity": "correct_identity",
+    "discourage_emergency": "correct_awake",
+    "self_transport": "correct_awake",
+    "straighten": "correct_awake",
+    "self_calling": "correct_awake"
+  },
+  "replaced_edges": [
+    { "state": "intake_responsive", "edge": { "on": "human.yes", "to": "triage" } }
+  ],
+  "entries": [
+    { "state": "responsive_patient", "edge": { "on": "human.triage_open", "to": "triage" } }
+  ],
+  "states": [
+    {
+      "id": "triage",
+      "kind": "triage",
+      "urgency": 0,
+      "after_pads": "responsive_patient",
+      "entry_phrases": ["triage_ask"],
+      "metronome": "off",
+      "frame_uplink": false,
+      "allowed_say": ["assign_helper"],
+      "repeating": [
+        { "phrase": "triage_recheck", "every_seconds": 30 }
+      ],
+      "transitions": [
+        { "on": "human.triage_other", "to": "general_talk" },
+        { "on": "model.other_concern", "to": "general_talk", "min_confidence": "medium" },
+        { "on": "model.choking", "to": "choking_talk", "min_confidence": "medium" }
+      ],
+      "citation": "Project design. A person has tapped that the patient is responding. The 30 s re-ask is a project proposal, needs clinician approval"
+    },
+    {
+      "id": "general_talk",
+      "kind": "triage",
+      "urgency": 0,
+      "log_on_enter": "call_prompted",
+      "entry_phrases": ["general_intro"],
+      "metronome": "off",
+      "frame_uplink": false,
+      "allowed_say": ["assign_helper"],
+      "repeating": [
+        { "phrase": "general_intro", "every_seconds": 30 }
+      ],
+      "transitions": [
+        { "on": "human.triage_choking", "to": "choking_talk" },
+        { "on": "model.choking", "to": "choking_talk", "min_confidence": "medium" }
+      ],
+      "citation": "Project design. The dispatcher leads anything with no flow of its own. The 30 s re-ask is a project proposal, needs clinician approval"
+    },
+    {
+      "id": "choking_talk",
+      "kind": "triage",
+      "urgency": 2,
+      "log_on_enter": "call_prompted",
+      "entry_phrases": ["choking_steps", "general_intro"],
+      "metronome": "off",
+      "frame_uplink": false,
+      "allowed_say": [],
+      "repeating": [
+        { "phrase": "choking_steps", "every_seconds": 30 }
+      ],
+      "transitions": [],
+      "citation": "ILCOR First Aid 2025, choking, weak. Its own step, so the steps stay on screen and a tap reaches them offline. The 30 s re-ask is a project proposal, needs clinician approval"
+    }
+  ],
+  "phrases": [
+    { "id": "triage_ask", "text": "Tell me what's happening, or tap below.", "citation": "Project" },
+    { "id": "triage_recheck", "text": "Call 911 if unsure. If they stop responding, tap Not responding now.", "citation": "Project proposal, needs clinician approval. The static card's call prompt and re-check, for a Yes that was a mis-tap" },
+    { "id": "general_intro", "text": "Call 911. Follow the dispatcher. Stay with them.", "citation": "Project" },
+    { "id": "choking_steps", "text": "Can't cough or speak? Call 911. Give back slaps, then abdominal thrusts.", "citation": "ILCOR 2025, weak" },
+    { "id": "correct_diagnosis", "text": "Correction. That is only a possibility. Only a clinician can say.", "citation": "Project safety rule. The app never states a condition as fact" },
+    { "id": "correct_identity", "text": "Correction. I am an AI, not a doctor or nurse.", "citation": "Project safety rule. The app never claims to be a clinician" },
+    { "id": "correct_awake", "text": "Correction. I'm not sure about that. Follow the dispatcher.", "citation": "Project safety rule. A flagged AI line defers to the dispatcher" }
+  ]
+}

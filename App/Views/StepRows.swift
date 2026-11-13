@@ -1,0 +1,234 @@
+import RescueCore
+import SwiftUI
+
+/// Every tap here goes through the same calls as it always has: a step's own buttons wait out the
+/// settle window through `performStep` or `performAnswer`, Start CPR through `performPrimary`, holds
+/// and the way out through `perform`, and leaving CPR through the confirmation first.
+struct AwakeRows: View {
+    let coordinator: AppCoordinator
+    /// A camera step needs the room for something to aim at. These are the tallest rows that can give any.
+    var compact = false
+    let onDispatcher: () -> Void
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    var body: some View {
+        let layout = RescueControls.awakeLayout(coordinator.controls)
+        VStack(spacing: DS.Space.betweenButtons) {
+            if !layout.answers.isEmpty {
+                HStack(spacing: DS.Space.betweenButtons) {
+                    ForEach(layout.answers) { stepButton($0, kind: .answer) }
+                }
+            }
+            ForEach(layout.triage) { control in
+                Button { coordinator.performStep(control.action) } label: {
+                    HStack(spacing: DS.Space.m) {
+                        Text(control.title)
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(DS.Colors.textSecondary)
+                    }
+                }
+                .buttonStyle(CommandButtonStyle(kind: .secondary, height: DS.Height.awake, alignment: .leading))
+                .accessibilityLabel(control.title)
+            }
+            ForEach(pairs(layout.steps), id: \.first?.id) { pair in
+                HStack(spacing: DS.Space.betweenButtons) {
+                    ForEach(pair) { stepButton($0, kind: .primary) }
+                }
+            }
+            ForEach(pairs(layout.holds), id: \.first?.id) { pair in
+                HStack(spacing: DS.Space.betweenButtons) {
+                    ForEach(pair) { control in
+                        HoldButton(
+                            title: control.title, hint: "Hold for 2 seconds.",
+                            minHeight: compact ? DS.Height.camera : DS.Height.awakeHold,
+                            font: compact ? DS.Fonts.buttonSmall : DS.Fonts.buttonCompact
+                        ) {
+                            coordinator.perform(control.action)
+                        }
+                        .fixedSize(horizontal: Self.hugs(control, in: pair), vertical: false)
+                    }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            if typeSize > .large {
+                // Three to a row has no room at a larger text size, so EMS arrived gets its own, as on
+                // the arrest path, and the two standing buttons share the next.
+                ForEach(layout.emsArrived) { control in
+                    HoldButton(title: control.title, hint: "Hold for 2 seconds.", minHeight: DS.Height.camera, font: DS.Fonts.buttonCompact) {
+                        coordinator.perform(control.action)
+                    }
+                }
+                HStack(spacing: DS.Space.betweenButtons) {
+                    DispatcherButton(height: DS.Height.camera, font: DS.Fonts.buttonCompact, action: onDispatcher)
+                    SecondPersonButton(coordinator: coordinator, height: DS.Height.camera, font: DS.Fonts.buttonCompact)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            } else {
+                HStack(spacing: DS.Space.betweenButtons) {
+                    ForEach(layout.emsArrived) { control in
+                        HoldButton(title: control.title, hint: "Hold for 2 seconds.", minHeight: DS.Height.camera, font: DS.Fonts.buttonSmall) {
+                            coordinator.perform(control.action)
+                        }
+                    }
+                    DispatcherButton(height: DS.Height.camera, font: DS.Fonts.buttonSmall, action: onDispatcher)
+                    SecondPersonButton(coordinator: coordinator, height: DS.Height.camera, font: DS.Fonts.buttonSmall)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .rowTypeCap()
+    }
+
+    /// Beside a long hold, like "Child, infant, drowning, or pregnant", a short one takes only the
+    /// width its words need, so the long one wraps to two lines and not four. Same rows, so a camera
+    /// step's band keeps its room.
+    static func hugs(_ control: RescueControl, in pair: [RescueControl]) -> Bool {
+        pair.count == 2 && control.title.count <= longHold && pair.contains { $0.title.count > longHold }
+    }
+
+    static let longHold = 20
+
+    /// A new step puts different buttons here, so a tap aimed at the last step could answer this one.
+    private func stepButton(_ control: RescueControl, kind: CommandButtonStyle.Kind) -> some View {
+        Button(control.title) { coordinator.performStep(control.action) }
+            .buttonStyle(CommandButtonStyle(kind: kind, height: DS.Height.awake))
+            .accessibilityLabel(control.title)
+    }
+}
+
+/// Start CPR and Not responding now. Outside the scroll view and at the bottom of the deck, so it
+/// never scrolls away and never moves: only the rows above change with the step, and they grow upward.
+struct WayOutRow: View {
+    let coordinator: AppCoordinator
+
+    var body: some View {
+        let layout = RescueControls.awakeLayout(coordinator.controls)
+        // Start CPR takes the width its words need and Not responding now the rest, so neither wraps
+        // where one line fits: at full size, then a size down on a small phone, and only past that
+        // on two lines. The row's place and height never change.
+        ViewThatFits(in: .horizontal) {
+            row(layout, font: DS.Fonts.button, lineLimit: 1)
+            row(layout, font: DS.Fonts.buttonTight, lineLimit: 1)
+            row(layout, font: DS.Fonts.button, lineLimit: 2)
+        }
+        .rowTypeCap()
+        .transaction { $0.animation = nil }
+    }
+
+    private func row(_ layout: RescueControls.AwakeLayout, font: DSFont, lineLimit: Int) -> some View {
+        HStack(spacing: DS.Space.betweenButtons) {
+            ForEach(layout.primary) { control in
+                Button(control.title) { coordinator.perform(control.action) }
+                    .buttonStyle(CommandButtonStyle(kind: .critical, height: DS.Height.awakeWayOut, font: font, lineLimit: lineLimit))
+                    .fixedSize(horizontal: !layout.collapse.isEmpty, vertical: false)
+                    .accessibilityLabel(control.title)
+            }
+            ForEach(layout.collapse) { control in
+                Button(control.title) { coordinator.perform(control.action) }
+                    .buttonStyle(CommandButtonStyle(kind: .criticalOutline, height: DS.Height.awakeWayOut, font: font, lineLimit: lineLimit))
+                    .accessibilityLabel(control.title)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+struct ArrestRows: View {
+    let coordinator: AppCoordinator
+    let onStopRequested: (RescueControl) -> Void
+    let onDispatcher: () -> Void
+
+    var body: some View {
+        let controls = coordinator.controls
+        let inCPR = coordinator.definition?.kind == .cpr
+        VStack(spacing: DS.Space.betweenButtons) {
+            // First, where it has always been, so a report that flips the screen lands it in the same place.
+            ForEach(controls.filter { $0.role == .primary }) { control in
+                Button(control.title) { coordinator.performPrimary(control.action) }
+                    .buttonStyle(CommandButtonStyle(kind: .critical, height: DS.Height.arrestPrimary))
+                    .accessibilityLabel(control.title)
+            }
+            let answers = [HumanAction.yes, .no, .unsure].compactMap { answer in
+                controls.first { $0.action == answer }
+            }
+            if !answers.isEmpty {
+                HStack(spacing: DS.Space.betweenButtons) {
+                    ForEach(answers) { control in
+                        Button(control.title) { coordinator.performAnswer(control.action) }
+                            .buttonStyle(CommandButtonStyle(kind: .answer, height: DS.Height.arrest))
+                            .accessibilityLabel(control.title)
+                    }
+                }
+            }
+            ForEach(pairs(controls.filter { $0.role == .step }), id: \.first?.id) { pair in
+                HStack(spacing: DS.Space.betweenButtons) {
+                    ForEach(pair) { control in
+                        Button(control.title) { coordinator.perform(control.action) }
+                            .buttonStyle(CommandButtonStyle(kind: CommandButtonStyle.kind(for: control, inCPR: inCPR), height: DS.Height.arrest))
+                            .accessibilityLabel(control.title)
+                    }
+                }
+            }
+            ForEach(controls.filter { $0.role == .holdStep }) { control in
+                HoldButton(title: control.title, hint: "Hold for 2 seconds.") { coordinator.perform(control.action) }
+            }
+            ForEach(pairs(controls.filter { $0.role == .stopsCPR }), id: \.first?.id) { pair in
+                HStack(spacing: DS.Space.betweenButtons) {
+                    ForEach(pair) { control in
+                        HoldButton(title: control.title, tone: .critical) { onStopRequested(control) }
+                    }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            if !coordinator.isHandoff {
+                HStack(spacing: DS.Space.betweenButtons) {
+                    DispatcherButton(height: DS.Height.arrest, font: DS.Fonts.buttonCompact, action: onDispatcher)
+                    SecondPersonButton(coordinator: coordinator, height: DS.Height.arrest, font: DS.Fonts.buttonCompact)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .rowTypeCap()
+    }
+}
+
+/// Places no call. A teammate's phone plays the dispatcher.
+private struct DispatcherButton: View {
+    let height: CGFloat
+    let font: DSFont
+    let action: () -> Void
+
+    var body: some View {
+        Button("CALL MOCK DISPATCHER", action: action)
+            .buttonStyle(CommandButtonStyle(kind: .quiet, height: height, font: font))
+            .accessibilityLabel("Call mock dispatcher. Places no call.")
+    }
+}
+
+/// Gone once someone is with them, since saying so twice changes nothing.
+private struct SecondPersonButton: View {
+    let coordinator: AppCoordinator
+    let height: CGFloat
+    let font: DSFont
+
+    var body: some View {
+        if !coordinator.state.resources.contains(.secondPerson) {
+            Button(RescueControls.title(for: .secondPerson)) { coordinator.perform(.secondPerson) }
+                .buttonStyle(CommandButtonStyle(kind: .quiet, height: height, font: font))
+                .accessibilityLabel(RescueControls.title(for: .secondPerson))
+        }
+    }
+}
+
+extension View {
+    /// Button labels stop growing at the largest standard size. Past it a word like "responding"
+    /// no longer fits half a row and breaks mid-word. The step above them keeps growing.
+    func rowTypeCap() -> some View { dynamicTypeSize(...DynamicTypeSize.xxxLarge) }
+}
+
+/// A control left without a partner gets the whole row, which makes it easier to hit.
+func pairs(_ controls: [RescueControl]) -> [[RescueControl]] {
+    stride(from: 0, to: controls.count, by: 2).map { Array(controls[$0..<min($0 + 2, controls.count)]) }
+}
