@@ -123,13 +123,15 @@ import Testing
         #expect(session.state.stateID == "intake_breathing")
     }
 
-    /// Not breathing, or only gasping, is the second half of the call to start CPR. A person's tap
-    /// is the human input the call step needs, so it goes there, as a No at the breathing question does.
-    @Test func tappingNotBreathingGoesStraightToTheCall() throws {
+    /// Not breathing, or only gasping, is the second half of the call to start CPR. A person's tap goes
+    /// straight onto the CPR path, as a No at the breathing question does, with the call said on the way
+    /// while the 911 agent places it in the background.
+    @Test func tappingNotBreathingGoesStraightOnWithTheCallSaid() throws {
         var session = Session(engine: try engine())
         session.human(.patientNotBreathing)
-        #expect(session.state.stateID == "call_911")
-        #expect(session.phrases.last == "call_911")
+        #expect(session.state.stateID == "position_patient")
+        #expect(session.phrases == ["calling_911", "roll_flat"])
+        #expect(!session.entries(.callPrompted).isEmpty)
     }
 
     /// Only assess has it: an awake step's patient was already said to be responding.

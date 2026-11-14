@@ -203,8 +203,8 @@ import Testing
         #expect(coordinator.state.stateID == "compressions")
         #expect(coordinator.state.padsOn)
 
-        coordinator.force(stateID: "call_911")
-        #expect(coordinator.state.stateID == "call_911")
+        coordinator.force(stateID: "position_patient")
+        #expect(coordinator.state.stateID == "position_patient")
         #expect(coordinator.state.padsOn)
 
         // With the stage over, real taps follow the real rule.
@@ -239,7 +239,7 @@ import Testing
         fixture.run(seconds: 9.6)
         #expect(fixture.coordinator.state.stateID == "watch_breathing")
         fixture.run(seconds: 0.6)
-        #expect(fixture.coordinator.state.stateID == "call_911")
+        #expect(fixture.coordinator.state.stateID == "position_patient")
     }
 
     private static let flowModule = Data("""

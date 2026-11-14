@@ -87,7 +87,7 @@ import Testing
 
     /// Saying "confirm" presses the ringed button, as a tap would.
     @Test(arguments: [
-        (Finding.unresponsive, "intake_breathing"), (.notBreathing, "call_911"), (.abnormalBreathing, "call_911"),
+        (Finding.unresponsive, "intake_breathing"), (.notBreathing, "position_patient"), (.abnormalBreathing, "position_patient"),
     ])
     func sayingConfirmPressesTheSuggestion(finding: Finding, to target: String) async throws {
         let fixture = try await live()

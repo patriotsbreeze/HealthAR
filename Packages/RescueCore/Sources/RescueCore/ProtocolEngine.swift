@@ -213,9 +213,17 @@ public struct ProtocolEngine: Sendable {
     /// tap is the person answering it. Called always is, and Done only on a step that opens with the
     /// call prompt, since on any other it can land before the prompt was heard. A step's other lines
     /// are required steps of their own, so answering the call doesn't take them.
+    /// Said on the way, never asked for: no step waits on them, and the deck never shows them as the
+    /// instruction. "Calling 911 for you" is said while the 911 agent calls in the background.
+    public static let announcementPhrases: Set<String> = ["calling_911"]
+
     private func keptPhrases(after action: HumanAction, on definition: StateDefinition) -> [String] {
         let keep = bundle.definition.keepQueuedPhrases
-        guard definition.logOnEnter == .callPrompted, action == .called || action == .done else { return keep }
+        guard definition.logOnEnter == .callPrompted, action == .called || action == .done,
+              // A step that only announces the call, as positioning does while the 911 agent calls,
+              // asks nothing of the rescuer about it: Done there answers the step's own line.
+              !definition.entryPhrases.contains(where: Self.announcementPhrases.contains)
+        else { return keep }
         let others = definition.entryPhrases.filter { !keep.contains($0) }
         let answered = action == .called || definition.entryPhrases.first.map(keep.contains) == true
         return answered ? others : keep + others

@@ -15,7 +15,7 @@
     "reassurance": "correct_reassure"
   },
   "lowering_report_phrase": "confirm_by_tap",
-  "keep_queued_phrases": ["call_911"],
+  "keep_queued_phrases": ["call_911", "calling_911"],
   "audio_pause_seconds": 8,
   "model_speech_hold_seconds": 8,
   "dispatcher_mic_hold_seconds": 30,
@@ -32,13 +32,13 @@
       "repeating": [{ "phrase": "ask_responsive", "every_seconds": 10 }],
       "transitions": [
         { "on": "human.no", "to": "intake_breathing" },
-        { "on": "human.unsure", "to": "call_911" },
+        { "on": "human.unsure", "to": "position_patient" },
         { "on": "human.yes", "to": "responsive_patient" },
-        { "on": "human.start_cpr", "to": "compressions", "phrases": ["call_911", "hands_center"], "log": "call_prompted" },
+        { "on": "human.start_cpr", "to": "compressions", "phrases": ["calling_911", "hands_center"], "log": "call_prompted" },
         { "on": "human.not_adult", "to": "special_patient" },
         { "on": "model.unresponsive", "to": "intake_breathing" },
-        { "on": "model.not_breathing", "to": "call_911" },
-        { "on": "model.abnormal_breathing", "to": "call_911", "phrases": ["gasping_not_normal"] }
+        { "on": "model.not_breathing", "to": "position_patient" },
+        { "on": "model.abnormal_breathing", "to": "position_patient", "phrases": ["gasping_not_normal"] }
       ],
       "citation": "AHA 2025 Part 7. The 10 s default is a project proposal, needs clinician approval"
     },
@@ -53,13 +53,13 @@
       "allowed_say": ["gasping_not_normal", "no_pulse_check", "assign_helper"],
       "repeating": [{ "phrase": "ask_breathing", "every_seconds": 10 }],
       "transitions": [
-        { "on": "human.no", "to": "call_911" },
-        { "on": "human.unsure", "to": "call_911" },
+        { "on": "human.no", "to": "position_patient" },
+        { "on": "human.unsure", "to": "position_patient" },
         { "on": "human.yes", "to": "watch_breathing" },
-        { "on": "human.start_cpr", "to": "compressions", "phrases": ["call_911", "hands_center"], "log": "call_prompted" },
+        { "on": "human.start_cpr", "to": "compressions", "phrases": ["calling_911", "hands_center"], "log": "call_prompted" },
         { "on": "human.not_adult", "to": "special_patient" },
-        { "on": "model.not_breathing", "to": "call_911" },
-        { "on": "model.abnormal_breathing", "to": "call_911", "phrases": ["gasping_not_normal"] }
+        { "on": "model.not_breathing", "to": "position_patient" },
+        { "on": "model.abnormal_breathing", "to": "position_patient", "phrases": ["gasping_not_normal"] }
       ],
       "citation": "AHA 2025 Part 7. The 10 s default is a project proposal, needs clinician approval"
     },
@@ -72,12 +72,12 @@
       "metronome": "off",
       "frame_uplink": false,
       "allowed_say": ["gasping_not_normal", "no_pulse_check", "assign_helper"],
-      "timeout": { "seconds": 10, "to": "call_911", "if_breaths_at_least": { "count": 2, "to": "watch_reask" } },
+      "timeout": { "seconds": 10, "to": "position_patient", "if_breaths_at_least": { "count": 2, "to": "watch_reask" } },
       "transitions": [
-        { "on": "human.start_cpr", "to": "compressions", "phrases": ["call_911", "hands_center"], "log": "call_prompted" },
+        { "on": "human.start_cpr", "to": "compressions", "phrases": ["calling_911", "hands_center"], "log": "call_prompted" },
         { "on": "human.patient_awake", "to": "responsive_patient" },
-        { "on": "model.not_breathing", "to": "call_911" },
-        { "on": "model.abnormal_breathing", "to": "call_911", "phrases": ["gasping_not_normal"] }
+        { "on": "model.not_breathing", "to": "position_patient" },
+        { "on": "model.abnormal_breathing", "to": "position_patient", "phrases": ["gasping_not_normal"] }
       ],
       "citation": "Project proposal, needs clinician approval. The breath threshold has no direct guideline source. See docs/research_brief.md, critique finding 1"
     },
@@ -93,12 +93,12 @@
       "repeating": [{ "phrase": "ask_still_breathing", "every_seconds": 10 }],
       "transitions": [
         { "on": "human.yes", "to": "watch_breathing" },
-        { "on": "human.no", "to": "call_911" },
-        { "on": "human.unsure", "to": "call_911" },
-        { "on": "human.start_cpr", "to": "compressions", "phrases": ["call_911", "hands_center"], "log": "call_prompted" },
+        { "on": "human.no", "to": "position_patient" },
+        { "on": "human.unsure", "to": "position_patient" },
+        { "on": "human.start_cpr", "to": "compressions", "phrases": ["calling_911", "hands_center"], "log": "call_prompted" },
         { "on": "human.patient_awake", "to": "responsive_patient" },
-        { "on": "model.not_breathing", "to": "call_911" },
-        { "on": "model.abnormal_breathing", "to": "call_911", "phrases": ["gasping_not_normal"] }
+        { "on": "model.not_breathing", "to": "position_patient" },
+        { "on": "model.abnormal_breathing", "to": "position_patient", "phrases": ["gasping_not_normal"] }
       ],
       "citation": "Project proposal, needs clinician approval. See docs/research_brief.md, critique finding 1"
     },
@@ -116,11 +116,11 @@
       ],
       "transitions": [
         { "on": "human.patient_unresponsive", "to": "intake_breathing" },
-        { "on": "human.start_cpr", "to": "compressions", "phrases": ["call_911", "hands_center"], "log": "call_prompted" },
+        { "on": "human.start_cpr", "to": "compressions", "phrases": ["calling_911", "hands_center"], "log": "call_prompted" },
         { "on": "human.ems_arrived", "to": "handoff" },
         { "on": "model.unresponsive", "to": "intake_breathing" },
-        { "on": "model.not_breathing", "to": "call_911" },
-        { "on": "model.abnormal_breathing", "to": "call_911", "phrases": ["gasping_not_normal"] }
+        { "on": "model.not_breathing", "to": "position_patient" },
+        { "on": "model.abnormal_breathing", "to": "position_patient", "phrases": ["gasping_not_normal"] }
       ],
       "citation": "Project static card, needs clinician approval. The re-ask and its interval are a project proposal with no direct guideline source"
     },
@@ -143,28 +143,12 @@
       "citation": "Project static card. Adult coaching does not apply, so the dispatcher leads. The reminder and its interval are a project proposal, needs clinician approval"
     },
     {
-      "id": "call_911",
+      "id": "position_patient",
       "after_pads": "compressions_aed",
       "kind": "setup",
       "urgency": 3,
       "log_on_enter": "call_prompted",
-      "entry_phrases": ["call_911"],
-      "metronome": "off",
-      "frame_uplink": false,
-      "allowed_say": ["assign_helper"],
-      "repeating": [{ "phrase": "call_911", "every_seconds": 10 }],
-      "transitions": [
-        { "on": "human.called", "to": "position_patient" },
-        { "on": "human.done", "to": "position_patient" },
-        { "on": "human.start_cpr", "to": "compressions", "phrases": ["hands_center"] }
-      ],
-      "citation": "AHA 2025 Part 7, activate EMS"
-    },
-    {
-      "id": "position_patient",
-      "kind": "setup",
-      "urgency": 3,
-      "entry_phrases": ["roll_flat"],
+      "entry_phrases": ["calling_911", "roll_flat"],
       "metronome": "off",
       "frame_uplink": false,
       "allowed_say": [],
@@ -324,7 +308,7 @@
       "frame_uplink": false,
       "allowed_say": [],
       "transitions": [
-        { "on": "human.resume_cpr", "to": "compressions", "phrases": ["call_911", "hands_center"], "log": "call_prompted" }
+        { "on": "human.resume_cpr", "to": "compressions", "phrases": ["calling_911", "hands_center"], "log": "call_prompted" }
       ],
       "citation": "Project handoff card"
     }

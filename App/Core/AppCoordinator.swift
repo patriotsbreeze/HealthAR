@@ -221,6 +221,7 @@ final class AppCoordinator {
     /// The simulated 911 agent's call, played into the log once a rescue. Cancelled on reset.
     @ObservationIgnored private var callerAgentTask: Task<Void, Never>?
     @ObservationIgnored private var callerAgentRan = false
+    private(set) var callerAgentStatus = CallerAgentStatus.idle
     /// What the rescuer said since the log last took it, so it goes in as one line and not word by word.
     @ObservationIgnored private var heardPending = ""
     /// When the read behind the scene lines on screen started, so an older reply can't overwrite them.
@@ -436,15 +437,20 @@ final class AppCoordinator {
 
     /// The step on screen, always from the phrase file. A state with no phrase of its own keeps
     /// showing the last thing said, so the screen is never blank if audio is down.
+    /// The step's own lines, less what's only said on the way, like "Calling 911 for you".
+    private var instructionLines: [String] {
+        (definition?.entryPhrases ?? []).filter { !Self.announcementPhraseIDs.contains($0) }
+    }
+
     var instruction: String {
-        let id = definition?.entryPhrases.first ?? lastPhraseID ?? definition?.allowedSay.first
+        let id = instructionLines.first ?? lastPhraseID ?? definition?.allowedSay.first
         return id.flatMap(engine.bundle.text(forPhrase:)) ?? ""
     }
 
     /// The rest of this step's own lines. They stay up as long as the step, because an open state
     /// has no timer to move it on, and the audio can be down.
     var stepDetail: String? {
-        let lines = definition?.entryPhrases.dropFirst().compactMap(engine.bundle.text(forPhrase:)) ?? []
+        let lines = instructionLines.dropFirst().compactMap(engine.bundle.text(forPhrase:))
         return lines.isEmpty ? nil : lines.joined(separator: " ")
     }
 
@@ -653,6 +659,7 @@ final class AppCoordinator {
         if status != visionStatus { visionStatus = status }
         if let until = handsGuideUntil, now >= until { handsGuideUntil = nil }
         if let until = gripReminderUntil, now >= until { gripReminderUntil = nil }
+        if case let .done(at) = callerAgentStatus, now - at >= Self.callerAgentDoneSeconds { callerAgentStatus = .idle }
         let ghost = showsPulse && cameraLive && metronomeOn && vision.showsGhost
         if ghost != ghostShowsBeat { ghostShowsBeat = ghost }
         let talking = liveConnected && audio.modelAudioPending
@@ -697,6 +704,8 @@ final class AppCoordinator {
         }
         if enters {
             voiceSuggestion = nil
+            // The moment the CPR path begins, so the call shows with the step, not a tick later.
+            startCallerAgentIfDue()
             // Vision ends its guide on every overlay change, so this follows it.
             handsGuideUntil = nil
             if opensHandsGuide(result.effects) { beginHandsGuide(at: now) }
@@ -1273,7 +1282,18 @@ final class AppCoordinator {
     // MARK: - The 911 agent, simulated
 
     static let callerAgentStepSeconds: TimeInterval = 2.5
-    static let callerAgentState = "call_911"
+    /// The CPR path's steps. Entering any of them starts the call once, in the background, so the
+    /// rescuer is never stopped to dial: "Calling 911 for you" is said on the way, not asked for.
+    static let callerAgentStates: Set<String> = ["position_patient", "place_hands", "compressions"]
+    /// How long "911 notified" stays up after the call ends.
+    static let callerAgentDoneSeconds: TimeInterval = 15
+
+    /// The background 911 call, for the pill on screen.
+    enum CallerAgentStatus: Equatable {
+        case idle
+        case calling
+        case done(at: TimeInterval)
+    }
 
     /// A scripted call between an AI agent and a mock dispatcher, built from the caller script, so the
     /// log shows what an agent would say. Nothing is dialed, it's labeled a simulation, and it moves
@@ -1289,13 +1309,14 @@ final class AppCoordinator {
             "Dispatcher: Is anyone helping the patient right now?",
             "Agent: \(done)",
             "Dispatcher: Help is on the way. Stay with them and keep following the app.",
-            "911 agent: call ended. Help dispatched (simulated). Tap Called when you're ready.",
+            "911 agent: call ended. Help dispatched (simulated).",
         ]
     }
 
     private func startCallerAgentIfDue() {
-        guard state.stateID == Self.callerAgentState, !callerAgentRan else { return }
+        guard Self.callerAgentStates.contains(state.stateID), !callerAgentRan else { return }
         callerAgentRan = true
+        callerAgentStatus = .calling
         let lines = Self.callerAgentLines(callerScript)
         let round = assessRound
         callerAgentTask = Task { [weak self] in
@@ -1304,6 +1325,8 @@ final class AppCoordinator {
                 self.appendLog(.call, line)
                 try? await Task.sleep(for: .seconds(Self.callerAgentStepSeconds))
             }
+            guard let self, !Task.isCancelled, round == self.assessRound else { return }
+            self.callerAgentStatus = .done(at: self.clock())
         }
     }
 
@@ -1370,6 +1393,7 @@ final class AppCoordinator {
         lastEmergency = nil
         callerAgentTask?.cancel()
         callerAgentTask = nil
+        callerAgentStatus = .idle
         callerAgentRan = false
         lastQuickAt = -.infinity
         lastLiveSceneAt = -.infinity

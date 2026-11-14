@@ -40,7 +40,7 @@ public struct ScenarioModule: Sendable, Equatable, Codable {
     /// Every awake state gets these, so a module can't leave a collapse with nowhere to go.
     static func injectedEdges(triageLoaded: Bool) -> [StateDefinition.Transition] {
         var edges: [StateDefinition.Transition] = [
-            .init(on: "human.start_cpr", to: "compressions", phrases: ["call_911", "hands_center"], log: .callPrompted, cutsPhrases: true),
+            .init(on: "human.start_cpr", to: "compressions", phrases: ["calling_911", "hands_center"], log: .callPrompted, cutsPhrases: true),
             .init(on: "human.patient_unresponsive", to: breathingQuestion, cutsPhrases: true),
             .init(on: "human.ems_arrived", to: "handoff"),
             // Yes says the patient is awake, not that they're an adult, and the adult flows end in a dose.
@@ -59,7 +59,7 @@ public struct ScenarioModule: Sendable, Equatable, Codable {
     /// gasping, has given the human input the call step needs, as a No at the breathing question would.
     /// Core's edge, not a module's, since a module's tap may never leave the awake states.
     static let assessEdges: [StateDefinition.Transition] = [
-        .init(on: "human.patient_not_breathing", to: "call_911", cutsPhrases: true),
+        .init(on: "human.patient_not_breathing", to: "position_patient", cutsPhrases: true),
     ]
 
     /// On assess the AI's sense that someone is unresponsive or not breathing only suggests: it rings

@@ -10,6 +10,7 @@
     { "id": "ask_still_breathing", "text": "Are they still breathing normally?", "citation": "Project proposal, needs clinician approval. See docs/research_brief.md, critique finding 1" },
     { "id": "confirm_by_tap", "text": "If you are sure, tap yes. If not, we start CPR.", "citation": "Project safety rule. Lowering urgency requires a human" },
     { "id": "call_911", "text": "Call 911 now, on speaker. If someone is with you, have them call.", "citation": "AHA 2025 Part 7, activate EMS" },
+    { "id": "calling_911", "text": "Calling 911 for you.", "citation": "AHA 2025 Part 7, activate EMS. Project design: the 911 agent places the call in the background, simulated in this build, so the rescuer is not stopped to dial" },
     { "id": "roll_flat", "text": "Roll them flat on their back, on a firm surface.", "citation": "AHA 2025 Part 7, firm surface" },
     { "id": "hands_center", "text": "Heel of one hand on the center of the chest. Other hand on top.", "citation": "AHA 2025 Part 7, hand position" },
     { "id": "start_compressions", "text": "Push hard and fast, in time with the beat. Do not stop.", "citation": "AHA 2025 Part 7, compression rate" },
