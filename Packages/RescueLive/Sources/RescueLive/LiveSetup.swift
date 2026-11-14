@@ -50,6 +50,9 @@ public struct LiveSetup: Sendable, Equatable {
         }
     }
 
+    /// How long a sound has to last before the model takes it as someone starting to talk.
+    static let speechPrefixMilliseconds: Double = 400
+
     var jsonValue: JSONValue {
         // Under generationConfig per the API reference, though the WebSocket guide's sample
         // shows responseModalities directly under setup. See the device checks.
@@ -71,6 +74,14 @@ public struct LiveSetup: Sendable, Equatable {
             "sessionResumption": resumeHandle.map { ["handle": .string($0)] } ?? [:],
             "inputAudioTranscription": [:],
             "outputAudioTranscription": [:],
+            // The model stops talking the moment it hears speech start, and by default nearly any sound
+            // counts, so in a busy room chatter, a cough or its own echo cut it off mid-sentence. Low
+            // sensitivity, and speech that has to last 0.4 s, keep it talking through those while a real
+            // question still stops it. Accepted by gemini-3.8-live, which rejects unknown values.
+            "realtimeInputConfig": ["automaticActivityDetection": [
+                "startOfSpeechSensitivity": "START_SENSITIVITY_LOW",
+                "prefixPaddingMs": .number(Self.speechPrefixMilliseconds),
+            ]],
         ]
         if seedsHistory {
             fields["historyConfig"] = ["initialHistoryInClientContent": true]
