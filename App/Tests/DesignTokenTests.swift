@@ -96,10 +96,11 @@ private func contrast(_ a: UInt32, _ b: UInt32) -> Double {
         #expect(DS.Height.camera == 44)
     }
 
+    /// No big Push circle on the camera: the AR is the beat, and the dot is its fallback.
     @Test func theBeatHasItsThreeSizes() {
-        #expect(BeatPulse.standardDiameter == 170)
-        #expect(DS.Pulse.docked == 96)
+        #expect(DS.Pulse.docked == 44)
         #expect(DS.Pulse.sheet == 44)
+        #expect(DS.Pulse.confirmation == 88)
     }
 
     /// The command never shrinks past 0.85 and stays Bold, and nothing anywhere is Heavy or Black.

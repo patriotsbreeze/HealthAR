@@ -155,6 +155,7 @@ final class StagedVision: VisionPort, @unchecked Sendable {
                 BodyZone(kind: .pad(1), shape: .polygon(Self.rect(center: CGPoint(x: 0.42, y: 0.24), half: CGSize(width: 0.09, height: 0.03))), axis: 0, isLocked: true),
                 BodyZone(kind: .pad(2), shape: .polygon(Self.rect(center: CGPoint(x: 0.62, y: 0.35), half: CGSize(width: 0.09, height: 0.03))), axis: 0, isLocked: false),
             ])
+            overlay.outline = Self.patient
         case nil:
             overlay = .empty
         }
@@ -167,7 +168,35 @@ final class StagedVision: VisionPort, @unchecked Sendable {
         let center = CGPoint(x: 0.5, y: 0.3)
         return VisionOverlay(
             ring: .init(center: center, radius: 0.09),
-            zones: [BodyZone(kind: .chest, shape: .polygon(rect(center: center, half: CGSize(width: 0.13, height: 0.05))), axis: 0, isLocked: true)]
+            zones: [BodyZone(kind: .chest, shape: .polygon(rect(center: center, half: CGSize(width: 0.13, height: 0.05))), axis: 0, isLocked: true)],
+            outline: patient
+        )
+    }
+
+    /// The staged patient as pose would outline them: across the screen, head to the left, the chest at
+    /// the ring. The far ankle is only faintly seen, so that shin draws dashed.
+    private static var patient: VisionOverlay.Outline {
+        typealias Limb = VisionOverlay.Outline.Limb
+        let shoulders = (top: CGPoint(x: 0.31, y: 0.235), bottom: CGPoint(x: 0.31, y: 0.365))
+        let hips = (top: CGPoint(x: 0.64, y: 0.255), bottom: CGPoint(x: 0.64, y: 0.345))
+        let elbows = (top: CGPoint(x: 0.47, y: 0.215), bottom: CGPoint(x: 0.47, y: 0.385))
+        let wrists = (top: CGPoint(x: 0.62, y: 0.205), bottom: CGPoint(x: 0.62, y: 0.395))
+        let knees = (top: CGPoint(x: 0.82, y: 0.265), bottom: CGPoint(x: 0.82, y: 0.335))
+        let ankles = (top: CGPoint(x: 0.99, y: 0.27), bottom: CGPoint(x: 0.99, y: 0.33))
+        return VisionOverlay.Outline(
+            torso: [shoulders.top, shoulders.bottom, hips.bottom, hips.top],
+            torsoLocked: true,
+            head: .init(center: CGPoint(x: 0.2, y: 0.3), radius: 0.075, isLocked: true),
+            limbs: [
+                Limb(from: shoulders.top, to: elbows.top, width: 0.065, isLocked: true),
+                Limb(from: shoulders.bottom, to: elbows.bottom, width: 0.065, isLocked: true),
+                Limb(from: elbows.top, to: wrists.top, width: 0.055, isLocked: true),
+                Limb(from: elbows.bottom, to: wrists.bottom, width: 0.055, isLocked: true),
+                Limb(from: hips.top, to: knees.top, width: 0.09, isLocked: true),
+                Limb(from: hips.bottom, to: knees.bottom, width: 0.09, isLocked: true),
+                Limb(from: knees.top, to: ankles.top, width: 0.07, isLocked: false),
+                Limb(from: knees.bottom, to: ankles.bottom, width: 0.07, isLocked: true),
+            ]
         )
     }
 
