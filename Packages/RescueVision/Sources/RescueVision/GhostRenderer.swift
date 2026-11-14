@@ -31,7 +31,6 @@ final class GhostRenderer {
     private let detectedShell = Entity()
     private let chestAnchor = AnchorEntity(world: .zero)
     private let chestEstimate = Entity()
-    private var limbModels: [LimbModel] = []
     /// The head, apart from the body, so it can sit where depth found the real one.
     private let detectedHead = Entity()
     private var patientLoaded = false
@@ -65,7 +64,6 @@ final class GhostRenderer {
         chestAnchor.addChild(chestEstimate)
         arView.scene.addAnchor(chestAnchor)
         detectedAnchor.addChild(detectedHead)
-        buildTrackedBody()
         // A coarse surface disc, not a pin claiming to identify a bone.
         let disc = ModelEntity(
             mesh: .generateCylinder(height: 0.004, radius: 0.045),
@@ -112,6 +110,29 @@ final class GhostRenderer {
         var line = UnlitMaterial(color: Self.patientColor)
         line.faceCulling = .front
         apply(line, to: patientOutline)
+        // A headless body and a head on its own, so the head can go where depth found the real one.
+        // A model without them falls back to the whole template patient.
+        let headFill = Entity(), headShell = Entity()
+        if let body = root.findEntity(named: "TrackedBody"), let bodyOutline = root.findEntity(named: "TrackedBodyOutline"),
+           let head = root.findEntity(named: "TrackedHead"), let headOutline = root.findEntity(named: "TrackedHeadOutline") {
+            detectedFill.addChild(body.clone(recursive: true))
+            detectedShell.addChild(bodyOutline.clone(recursive: true))
+            headFill.addChild(head.clone(recursive: true))
+            headShell.addChild(headOutline.clone(recursive: true))
+            detectedHead.addChild(headFill)
+            detectedHead.addChild(headShell)
+        } else {
+            detectedFill.addChild(patient.clone(recursive: true))
+            detectedShell.addChild(outline.clone(recursive: true))
+        }
+        apply(Self.patientGlow(opacity: 0.048), to: detectedFill)
+        apply(Self.patientGlow(opacity: 0.048), to: headFill)
+        var glow = Self.patientGlow(opacity: 0.48)
+        glow.faceCulling = .front
+        apply(glow, to: detectedShell)
+        apply(glow, to: headShell)
+        patientLoaded = true
+        vision.patientModelDidLoad()
         tone = nil
     }
 
@@ -131,7 +152,6 @@ final class GhostRenderer {
                 detectedModel.transform = target
             }
             placeHead(placement)
-            placeLimbs(placement.limbs)
             detectedAnchor.isEnabled = true
         } else {
             detectedAnchor.isEnabled = false
@@ -168,85 +188,6 @@ final class GhostRenderer {
         // The depth-fitted real body replaces the older rigid ghost-patient shell.
         patientOutline.isEnabled = placement.practice || trackedBody == nil
         patientOutline.components.set(OpacityComponent(opacity: GhostPlacement.outlineOpacity))
-    }
-
-    /// The practice Blender mesh is intentionally untouched. The detected body has no fixed-pose
-    /// arms or legs: rounded torso/head shapes use its proportions, and limbs follow measured joints.
-    private func buildTrackedBody() {
-        let sphere = MeshResource.generateSphere(radius: 1)
-        let cylinder = MeshResource.generateCylinder(height: 1, radius: 1)
-        let fill = Self.patientGlow(opacity: 0.07)
-        var shell = Self.patientGlow(opacity: 0.48)
-        shell.faceCulling = .front
-        func ellipsoid(center: SIMD3<Float>, size: SIMD3<Float>) {
-            let inside = ModelEntity(mesh: sphere, materials: [fill])
-            inside.position = center
-            inside.scale = size
-            detectedFill.addChild(inside)
-            let outside = ModelEntity(mesh: sphere, materials: [shell])
-            outside.position = center
-            outside.scale = size + SIMD3(repeating: 0.012)
-            detectedShell.addChild(outside)
-        }
-        // Model-space values follow patient() in tools/make_ghost_model.py.
-        ellipsoid(center: [-0.1, -0.1, 0], size: [0.31, 0.095, 0.17])
-        ellipsoid(center: [-0.4, -0.1, 0], size: [0.12, 0.09, 0.16])
-        ellipsoid(center: [0.25, -0.1, 0], size: [0.08, 0.05, 0.05])
-        let headFill = ModelEntity(mesh: sphere, materials: [fill])
-        headFill.scale = [0.1, 0.08, 0.075]
-        let headShell = ModelEntity(mesh: sphere, materials: [shell])
-        headShell.scale = [0.112, 0.092, 0.087]
-        detectedHead.addChild(headFill)
-        detectedHead.addChild(headShell)
-        for _ in 0..<8 {
-            let limb = LimbModel(sphere: sphere, cylinder: cylinder, fill: fill, shell: shell)
-            detectedAnchor.addChild(limb.root)
-            limbModels.append(limb)
-        }
-        patientLoaded = true
-        vision.patientModelDidLoad()
-    }
-
-    private func placeLimbs(_ limbs: [TrackedBodyLimb]) {
-        for index in limbModels.indices {
-            guard index < limbs.count else { limbModels[index].root.isEnabled = false; continue }
-            limbModels[index].place(limbs[index])
-        }
-    }
-
-    /// Cached geometry: rotate and resize each segment between its measured endpoints each frame.
-    /// It is deliberately independent of the torso's nonuniform scale and smoothing.
-    @MainActor
-    private struct LimbModel {
-        let root = Entity()
-        let tubes: [ModelEntity]
-        let starts: [ModelEntity]
-        let ends: [ModelEntity]
-
-        init(sphere: MeshResource, cylinder: MeshResource, fill: PhysicallyBasedMaterial, shell: PhysicallyBasedMaterial) {
-            tubes = [ModelEntity(mesh: cylinder, materials: [fill]), ModelEntity(mesh: cylinder, materials: [shell])]
-            starts = [ModelEntity(mesh: sphere, materials: [fill]), ModelEntity(mesh: sphere, materials: [shell])]
-            ends = [ModelEntity(mesh: sphere, materials: [fill]), ModelEntity(mesh: sphere, materials: [shell])]
-            for part in tubes + starts + ends { root.addChild(part) }
-            root.isEnabled = false
-        }
-
-        func place(_ limb: TrackedBodyLimb) {
-            let delta = limb.end - limb.start
-            let length = simd_length(delta)
-            guard length > 0.01 else { root.isEnabled = false; return }
-            root.isEnabled = true
-            for i in 0..<2 {
-                let radius = limb.radius + (i == 0 ? 0 : 0.008)
-                tubes[i].position = (limb.start + limb.end) / 2
-                tubes[i].scale = [radius, length, radius]
-                tubes[i].orientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: delta / length)
-                starts[i].position = limb.start
-                ends[i].position = limb.end
-                starts[i].scale = SIMD3(repeating: radius)
-                ends[i].scale = SIMD3(repeating: radius)
-            }
-        }
     }
 
     /// The head where depth found it, or where the fitted body's own head would be when no face was

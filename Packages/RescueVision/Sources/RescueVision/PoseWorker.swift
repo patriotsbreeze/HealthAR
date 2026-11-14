@@ -254,12 +254,7 @@ final class PoseWorker: Sendable {
             // Never hold a chest marker on an ambiguous or lost patient.
             state.chestEstimate = chest
             // One frame failing the depth fit keeps the last good one, which still ages out on its own.
-            if let fitted {
-                state.patientBody = TimedPatientBody(placement: fitted, capturedAt: record.timestamp)
-            } else if var held = state.patientBody {
-                held.placement.limbs = []
-                state.patientBody = held
-            }
+            if let fitted { state.patientBody = TimedPatientBody(placement: fitted, capturedAt: record.timestamp) }
         }
     }
 

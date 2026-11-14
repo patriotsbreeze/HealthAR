@@ -56,16 +56,6 @@ public struct PatientBodyPlacement: Sendable, Equatable {
     /// Centre of the real head in the world, from depth at the face. Nil when no head was seen, and
     /// the template head stands in.
     public var head: SIMD3<Float>? = nil
-    /// Independently measured limbs of this person; missing endpoints produce no segment.
-    public var limbs: [TrackedBodyLimb] = []
-}
-
-public struct TrackedBodyLimb: Sendable, Equatable {
-    public var from: BodyJoint
-    public var to: BodyJoint
-    public var start: SIMD3<Float>
-    public var end: SIMD3<Float>
-    public var radius: Float
 }
 
 struct TimedPatientBody: Sendable {
@@ -132,30 +122,7 @@ enum PatientModelFit {
         ))
         var placement = PatientBodyPlacement(transform: transform, chest: chest + normal * 0.008, normal: normal, lying: lying)
         placement.head = head(of: person, depth: depth, camera: camera, shoulders: shoulders, scale: sy)
-        placement.limbs = limbs(of: person, depth: depth, camera: camera, scale: sy)
         return placement
-    }
-
-    /// The same limb radii as the Blender patient, driven by this observation's actual endpoints.
-    static func limbs(of person: DetectedPerson, depth: BodyDepth, camera: CameraPose, scale: Float) -> [TrackedBodyLimb] {
-        let chains: [(BodyJoint, BodyJoint, Float, ClosedRange<Float>)] = [
-            (.leftShoulder, .leftElbow, 0.047, 0.08...0.65),
-            (.leftElbow, .leftWrist, 0.037, 0.07...0.6),
-            (.rightShoulder, .rightElbow, 0.047, 0.08...0.65),
-            (.rightElbow, .rightWrist, 0.037, 0.07...0.6),
-            (.leftHip, .leftKnee, 0.075, 0.12...0.8),
-            (.leftKnee, .leftAnkle, 0.05, 0.12...0.8),
-            (.rightHip, .rightKnee, 0.075, 0.12...0.8),
-            (.rightKnee, .rightAnkle, 0.05, 0.12...0.8),
-        ]
-        return chains.compactMap { from, to, radius, lengths in
-            guard let a = person.joint(from), let b = person.joint(to),
-                  a.confidence >= 0.3, b.confidence >= 0.3,
-                  let start = depth.worldPoint(a.position, camera: camera),
-                  let end = depth.worldPoint(b.position, camera: camera),
-                  lengths.contains(simd_distance(start, end)) else { return nil }
-            return TrackedBodyLimb(from: from, to: to, start: start, end: end, radius: radius * min(1.5, max(0.6, scale)))
-        }
     }
 
     /// Depth at the face is its surface, so the centre sits a head's half-depth further from the camera.
