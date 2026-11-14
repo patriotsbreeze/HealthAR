@@ -368,7 +368,6 @@ struct AEDGuideView: View {
         ZStack {
             backdrop.ignoresSafeArea()
             VStack(spacing: 0) {
-                SimulationStrip()
                 Spacer(minLength: DS.Space.l)
                 panel
                     .padding(.horizontal, DS.Space.deckInset)

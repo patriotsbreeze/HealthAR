@@ -1,11 +1,12 @@
 import SwiftUI
 import UIKit
 
-/// "Drone preview": a quick fly-through of the real rooms to the AED, played from recorded frames.
-/// Shown only where the drone file has a flight for that AED from that start.
+/// "Drone preview": a continuous fly-through of the real rooms to the AED. Plays the recorded video
+/// flight when `drone_video.json` has a whole one from this start, else the older frame slideshow,
+/// else nothing.
 struct DronePreviewButton: View {
     static let title = "Drone preview"
-    static let hint = "Plays a fly-through of the building from here to the AED, from the survey's own pictures."
+    static let hint = "Plays a fly-through of the building from here to the AED."
 
     let building: BuildingBrief
     let aedID: String
@@ -13,25 +14,41 @@ struct DronePreviewButton: View {
     var start: String?
     let lengthM: Double?
     var drone: DroneData? = DroneData.bundled
+    var video: DroneVideo? = DroneVideo.bundled
     @State private var flying = false
 
-    private var flight: [DroneData.Frame]? {
-        guard let drone, drone.building == building.id, let from = start ?? drone.entrancePano else { return nil }
+    private var from: String? { start ?? drone?.entrancePano }
+
+    private var videoFlight: [DroneVideo.Segment]? {
+        guard let video, video.building == building.id, let from else { return nil }
+        return video.flight(to: aedID, from: from)
+    }
+
+    private var frames: [DroneData.Frame]? {
+        guard let drone, drone.building == building.id, let from else { return nil }
         return drone.flight(to: aedID, from: from)
     }
 
     var body: some View {
-        if let flight, let drone, let target = drone.targets[aedID] {
-            Button(Self.title, systemImage: "airplane") { flying = true }
-                .buttonStyle(CommandButtonStyle(kind: .secondary, height: DS.Height.awake))
-                .accessibilityHint(Self.hint)
-                .fullScreenCover(isPresented: $flying) {
-                    DronePlayer(
-                        frames: flight,
-                        arrival: DroneData.arrival(target, aed: building.aeds.first { $0.id == aedID }, lengthM: lengthM)
-                    )
-                }
+        if let videoFlight {
+            button.fullScreenCover(isPresented: $flying) {
+                let length = lengthM ?? videoFlight.reduce(0) { $0 + $1.lengthM }
+                DroneVideoView(flight: videoFlight, arrivalText: DroneVideo.arrival(text: video?.targets[aedID]?.text ?? "", lengthM: length))
+            }
+        } else if let frames, let drone, let target = drone.targets[aedID] {
+            button.fullScreenCover(isPresented: $flying) {
+                DronePlayer(
+                    frames: frames,
+                    arrival: DroneData.arrival(target, aed: building.aeds.first { $0.id == aedID }, lengthM: lengthM)
+                )
+            }
         }
+    }
+
+    private var button: some View {
+        Button(Self.title, systemImage: "airplane") { flying = true }
+            .buttonStyle(CommandButtonStyle(kind: .secondary, height: DS.Height.awake))
+            .accessibilityHint(Self.hint)
     }
 }
 
@@ -59,7 +76,6 @@ private struct DronePlayer: View {
                 .transition(.opacity)
                 .ignoresSafeArea()
             VStack(spacing: 0) {
-                SimulationStrip()
                 Spacer()
                 panel
                     .padding(.horizontal, DS.Space.deckInset)

@@ -1,0 +1,172 @@
+import Foundation
+
+/// `drone_video.json`, schema `drone_video.v1`: for each AED, one short clip per scan spot flying to
+/// the next spot, and a final push-in on the AED. Each clip ends on the pose the next one starts from,
+/// so a chain played back to back is one continuous flight. Git-ignored with its clips, which are
+/// copied in renamed `dronevid-<aed>-<file>.mp4` so the bundle root holds them all.
+struct DroneVideo: Sendable, Equatable {
+    static let schema = "drone_video.v1"
+    static let resource = "drone_video"
+    /// The walk on the arrival card, in metres a second.
+    static let walkingPace = 1.4
+
+    struct Clip: Sendable, Equatable {
+        var pano: String
+        var next: String?
+        var room: String
+        var floor: String
+        var lengthM: Double
+        var clip: String?
+        var finalClip: String?
+        var durationS: Double
+    }
+
+    struct Target: Sendable, Equatable {
+        var text: String
+        var clips: [String: Clip]
+    }
+
+    /// One piece of the flight, in play order.
+    struct Segment: Sendable, Equatable {
+        var pano: String
+        var file: String
+        var durationS: Double
+        var lengthM: Double
+        var room: String
+        var floor: String
+        var isFinal: Bool
+    }
+
+    var building: String
+    var targets: [String: Target]
+
+    /// Read raw: the keys are ids, which a snake-case decoder would rewrite.
+    static func decode(_ data: Data) -> DroneVideo? {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              root["schema"] as? String == schema,
+              let building = root["building"] as? String,
+              let targetsJSON = root["targets"] as? [String: Any]
+        else { return nil }
+        var targets: [String: Target] = [:]
+        for (aed, value) in targetsJSON {
+            guard let target = value as? [String: Any], let clipsJSON = target["clips"] as? [String: Any] else { continue }
+            var clips: [String: Clip] = [:]
+            for (pano, body) in clipsJSON {
+                guard let clip = body as? [String: Any] else { continue }
+                func text(_ key: String) -> String? { (clip[key] as? String).flatMap { $0.isEmpty ? nil : $0 } }
+                func number(_ key: String) -> Double { (clip[key] as? NSNumber)?.doubleValue ?? 0 }
+                clips[pano] = Clip(
+                    pano: pano, next: text("next"), room: text("room") ?? "", floor: text("floor") ?? "",
+                    lengthM: max(0, number("length_m")), clip: text("clip"), finalClip: text("final_clip"),
+                    durationS: max(0, number("duration_s"))
+                )
+            }
+            guard !clips.isEmpty else { continue }
+            targets[aed] = Target(text: target["text"] as? String ?? "", clips: clips)
+        }
+        return targets.isEmpty ? nil : DroneVideo(building: building, targets: targets)
+    }
+
+    static func load(bundle: Bundle = .main) -> DroneVideo? {
+        bundle.url(forResource: resource, withExtension: "json")
+            .flatMap { try? Data(contentsOf: $0) }
+            .flatMap(decode)
+    }
+
+    nonisolated static let bundled = DroneVideo.load()
+
+    /// Each hop's clip from `start`, then the AED's final clip. Only a whole flight counts: a loop, a
+    /// missing entry or a missing file means no flight, so the button stays hidden rather than stopping
+    /// short of the AED.
+    func flight(to aed: String, from start: String, hasFile: (String) -> Bool = { DroneVideo.url($0) != nil }) -> [Segment]? {
+        guard let clips = targets[aed]?.clips else { return nil }
+        var segments: [Segment] = []
+        var seen: Set<String> = []
+        var here = start
+        while let entry = clips[here], seen.insert(here).inserted {
+            if let next = entry.next {
+                guard let file = entry.clip, hasFile(file) else { return nil }
+                segments.append(Segment(pano: here, file: file, durationS: entry.durationS, lengthM: entry.lengthM,
+                                        room: entry.room, floor: entry.floor, isFinal: false))
+                here = next
+            } else {
+                guard let file = entry.finalClip, hasFile(file) else { return nil }
+                segments.append(Segment(pano: here, file: file, durationS: entry.durationS, lengthM: 0,
+                                        room: entry.room, floor: entry.floor, isFinal: true))
+                return segments
+            }
+        }
+        return nil
+    }
+
+    /// "dronevid/staged_1/abc.mp4" is "dronevid-staged_1-abc.mp4" in the bundle.
+    static func resourceName(_ path: String) -> (name: String, ext: String) {
+        let ns = path as NSString
+        let ext = ns.pathExtension.isEmpty ? "mp4" : ns.pathExtension
+        return (ns.deletingPathExtension.split(separator: "/").joined(separator: "-"), ext)
+    }
+
+    static func url(_ path: String, bundle: Bundle = .main) -> URL? {
+        let resource = resourceName(path)
+        return bundle.url(forResource: resource.name, withExtension: resource.ext)
+    }
+
+    /// Metres left at `time` seconds into the flight: every hop not yet flown, and the unflown share of
+    /// the current one. `starts` are each segment's start time, as the composition actually laid them out.
+    static func remaining(at time: Double, segments: [Segment], starts: [Double], durations: [Double]) -> Double {
+        guard !segments.isEmpty, starts.count == segments.count, durations.count == segments.count else { return 0 }
+        var left = 0.0
+        for (index, segment) in segments.enumerated() {
+            let start = starts[index]
+            let duration = durations[index]
+            if time <= start {
+                left += segment.lengthM
+            } else if time < start + duration, duration > 0 {
+                left += segment.lengthM * (1 - (time - start) / duration)
+            }
+        }
+        return max(0, left)
+    }
+
+    /// The segment playing at `time`.
+    static func index(at time: Double, starts: [Double]) -> Int {
+        starts.lastIndex { $0 <= time } ?? 0
+    }
+
+    /// Back-to-back start times from durations.
+    static func starts(_ durations: [Double]) -> [Double] {
+        var cursor = 0.0
+        return durations.map { duration in
+            defer { cursor += duration }
+            return cursor
+        }
+    }
+
+    /// "Hallway · Floor 1", or the floor alone when the room has no name.
+    static func caption(_ segment: Segment) -> String {
+        let room = BuildingWording.clean(segment.room)
+        let floor = BuildingWording.clean(segment.floor)
+        switch (room.isEmpty, floor.isEmpty) {
+        case (false, false): return "\(room) · \(floor)"
+        case (false, true): return room
+        case (true, false): return floor
+        case (true, true): return "En route"
+        }
+    }
+
+    /// "AED · by the water fountains · 51 m · about 40 s walk"
+    static func arrival(text: String, lengthM: Double) -> String {
+        var place = BuildingWording.clean(text)
+        if place.lowercased().hasPrefix("aed ") { place = String(place.dropFirst(4)) }
+        let metres = Int(lengthM.rounded())
+        let seconds = Int((lengthM / walkingPace / 5).rounded()) * 5
+        var parts = ["AED"]
+        if !place.isEmpty { parts.append(place) }
+        if metres > 0 {
+            parts.append("\(metres) m")
+            // A no-break space keeps "25 s" together on a narrow card.
+            parts.append("about \(max(seconds, 5))\u{00A0}s walk")
+        }
+        return parts.joined(separator: " · ")
+    }
+}
