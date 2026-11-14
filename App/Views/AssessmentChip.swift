@@ -251,12 +251,13 @@ private struct LogRow: View {
                 .frame(width: 11)
             VStack(alignment: .leading, spacing: 1) {
                 Text(entry.text)
-                    .font(entry.kind == .tool ? .system(size: 10, weight: .regular, design: .monospaced) : nil)
+                    // An explicit size: nil here would reset it to body size, and the log would balloon.
+                    .font(entry.kind == .tool ? .system(size: 10, weight: .regular, design: .monospaced) : .system(size: 11))
                     .lineLimit(oneLine ? 1 : 2)
                     .foregroundStyle(entry.kind == .alert ? DS.Colors.critical : [.saw, .call].contains(entry.kind) ? DS.Colors.textPrimary : DS.Colors.textSecondary)
                     .fontWeight(entry.kind == .alert ? .semibold : nil)
                 if !oneLine, let detail = entry.detail {
-                    Text(detail).foregroundStyle(DS.Colors.textTertiary).lineLimit(1)
+                    Text(detail).font(.system(size: 10)).foregroundStyle(DS.Colors.textTertiary).lineLimit(1)
                 }
             }
             .font(.system(size: 11))

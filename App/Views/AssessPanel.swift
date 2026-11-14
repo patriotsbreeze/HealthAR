@@ -9,67 +9,95 @@ struct AssessPanel: View {
     @State private var tapping = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// The panel never takes more than this share of the screen, so the camera keeps the rest.
+    static let maxScreenShare: CGFloat = 0.25
+    /// On screen only. The spoken line, a recorded clip, says the longer version.
+    static let shortInstruction = "Aim at them. Say what happened."
+    /// More would push the buttons up into the camera. The newest are first.
+    static let maxNotes = 2
+    /// The whole screen's height, from the main screen, for the cap.
+    var screenHeight: CGFloat = 0
+
     var body: some View {
-        VStack(alignment: .leading, spacing: DS.Space.m) {
-            status
-            Text(coordinator.instruction)
-                .dsFont(DS.Fonts.commandCompact)
-                .foregroundStyle(DS.Colors.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityAddTraits(.isHeader)
-            thinking
-            controls
-            if tapping { tapRow.transition(.opacity) }
+        // Each layout drops the least needed part first, so Start CPR and the dispatcher always fit.
+        // Hugs its content, and only drops parts when that would go past the cap.
+        CappedHeight(cap: screenHeight > 0 ? screenHeight * Self.maxScreenShare : .infinity) {
+            ViewThatFits(in: .vertical) {
+                layout(showsNotes: true, showsLine: true)
+                layout(showsNotes: true, showsLine: false)
+                layout(showsNotes: false, showsLine: false)
+            }
+            .padding(.horizontal, DS.Space.m)
+            .padding(.vertical, DS.Space.s + 2)
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
         }
-        .padding(DS.Space.deckPadding)
-        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-        .glassSurface(RoundedRectangle(cornerRadius: DS.Glass.deckRadius, style: .continuous), tint: DS.Glass.deckTint)
+        // The glass runs down into the home indicator's strip, as the deck's does, so no gap shows under it.
+        .background {
+            let shape = ConcentricRectangle(uniformTopCorners: .fixed(DS.Glass.deckRadius), uniformBottomCorners: .concentric(minimum: .fixed(DS.Glass.deckRadius)))
+            Color.clear
+                .glassSurface(shape, tint: DS.Glass.deckTint)
+                .shadow(color: .black.opacity(0.35), radius: 24, y: 12)
+                .padding(.bottom, DS.Space.deckInset)
+                .ignoresSafeArea(.container, edges: .bottom)
+        }
         .padding(.horizontal, DS.Space.deckInset)
-        .padding(.bottom, DS.Space.xs)
         .animation(reduceMotion ? nil : DS.Motion.alert, value: coordinator.assessment)
         .animation(reduceMotion ? nil : DS.Motion.alert, value: tapping)
     }
 
+    private func layout(showsNotes: Bool, showsLine: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
+                Text(Self.shortInstruction)
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(DS.Colors.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 0)
+                status
+            }
+            if showsNotes { thinking(showsLine: showsLine) }
+            controls
+            if tapping { tapRow.transition(.opacity) }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
     private var status: some View {
-        HStack(spacing: DS.Space.s) {
+        HStack(spacing: 4) {
             Circle()
                 .fill(coordinator.liveConnected ? DS.Colors.ok : DS.Colors.textTertiary)
-                .frame(width: 8, height: 8)
+                .frame(width: 5, height: 5)
                 .accessibilityHidden(true)
-            Text(coordinator.assessStatus)
-                .dsFont(DS.Fonts.label)
-                .foregroundStyle(DS.Colors.textSecondary)
+            Text(coordinator.liveConnected ? (coordinator.cameraLive ? "Live" : "Listening") : "Offline")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(DS.Colors.textTertiary)
+                .lineLimit(1)
         }
+        .fixedSize()
         .accessibilityElement(children: .combine)
+        .accessibilityLabel(coordinator.assessStatus)
     }
 
     /// What the AI has reported, in fixed words, and its last sentence apart from them.
-    private var thinking: some View {
-        VStack(alignment: .leading, spacing: DS.Space.s) {
-            Text("WHAT THE AI THINKS")
-                .dsFont(DS.Fonts.badge)
-                .foregroundStyle(DS.Colors.textTertiary)
-                .accessibilityAddTraits(.isHeader)
-            let notes = coordinator.assessment
+    private func thinking(showsLine: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            let notes = coordinator.assessment.prefix(Self.maxNotes)
             if notes.isEmpty {
                 Text(coordinator.liveConnected ? "Nothing clear yet." : "Nothing yet.")
-                    .dsFont(DS.Fonts.body)
+                    .font(.system(size: 13))
                     .foregroundStyle(DS.Colors.textSecondary)
             } else {
-                VStack(alignment: .leading, spacing: DS.Space.xs) {
-                    ForEach(notes) { NoteRow(note: $0) }
-                }
+                ForEach(Array(notes)) { NoteRow(note: $0) }
             }
-            if let line = coordinator.lastAISentence {
+            if showsLine, let line = coordinator.lastAISentence {
                 Text("AI: \u{201C}\(line)\u{201D}")
-                    .dsFont(DS.Fonts.caption)
+                    .font(.system(size: 12))
                     .foregroundStyle(DS.Colors.textSecondary)
-                    .lineLimit(3)
+                    .lineLimit(1)
                     .accessibilityLabel("The AI said: \(line)")
             }
-            Text("Possibilities only. Not a diagnosis.")
-                .dsFont(DS.Fonts.badge)
-                .foregroundStyle(DS.Colors.textTertiary)
         }
     }
 
@@ -123,21 +151,21 @@ struct AssessPanel: View {
         .accessibilityLabel("Call mock dispatcher. Places no call.")
     }
 
+    /// An icon, so it shares the row with Start CPR and the dispatcher instead of taking its own.
     private var tapInstead: some View {
         Button { tapping.toggle() } label: {
-            HStack(spacing: 4) {
-                Text(tapping ? "Hide" : "Tap instead")
+            HStack(spacing: 3) {
+                Image(systemName: "hand.tap")
+                    .font(.system(size: 15, weight: .semibold))
                 Image(systemName: tapping ? "chevron.down" : "chevron.up")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 10, weight: .semibold))
             }
-            .dsFont(DS.Fonts.label)
             .foregroundStyle(DS.Colors.textSecondary)
-            .lineLimit(1)
-            .fixedSize()
-            .frame(minHeight: DS.Height.camera)
+            .frame(minWidth: DS.Height.camera, minHeight: DS.Height.camera)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(tapping ? "Hide tap choices" : "Tap instead")
         .accessibilityHint("Say what's happening with a tap instead of talking")
     }
 
@@ -168,20 +196,41 @@ private struct NoteRow: View {
     let note: AssessmentNote
 
     var body: some View {
-        HStack(spacing: DS.Space.s) {
+        HStack(spacing: 6) {
             Image(systemName: note.source == .seen ? "eye" : "ear")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(DS.Colors.textSecondary)
-                .frame(width: 18)
+                .frame(width: 14)
                 .accessibilityHidden(true)
             Text(note.label)
-                .dsFont(DS.Fonts.prompt)
+                .font(.system(size: 14, weight: .semibold))
+                .lineLimit(1)
                 .foregroundStyle(note.isUrgent ? DS.Colors.critical : DS.Colors.textPrimary)
             Text(note.certainty)
-                .dsFont(DS.Fonts.caption)
+                .font(.system(size: 12))
                 .foregroundStyle(DS.Colors.textSecondary)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(note.label), \(note.certainty), \(note.source == .seen ? "seen" : "heard")")
+    }
+}
+
+/// Offers its child no more height than the cap, and takes only what the child uses, so a short
+/// panel stays short and a tall one is held to the cap.
+private struct CappedHeight: Layout {
+    let cap: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let child = subviews.first else { return .zero }
+        let size = child.sizeThatFits(capped(proposal))
+        return CGSize(width: size.width, height: min(size.height, cap))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(width: bounds.width, height: bounds.height))
+    }
+
+    private func capped(_ proposal: ProposedViewSize) -> ProposedViewSize {
+        ProposedViewSize(width: proposal.width, height: min(proposal.height ?? cap, cap))
     }
 }

@@ -16,6 +16,8 @@ struct MainScreen: View {
     @State private var pendingStop: RescueControl?
     @State private var freeArea = CGRect.zero
     @State private var guideHeight: CGFloat = 0
+    /// The whole screen's height, for the assess panel's cap.
+    @State private var screenHeight: CGFloat = 0
 
     var body: some View {
         ZStack {
@@ -45,7 +47,7 @@ struct MainScreen: View {
                 }
                 // Sized first, so the band gets what's left, and never less than its least.
                 if coordinator.isAssessing {
-                    AssessPanel(coordinator: coordinator) { present(.dispatcher) }
+                    AssessPanel(coordinator: coordinator, onDispatcher: { present(.dispatcher) }, screenHeight: screenHeight)
                         .layoutPriority(1)
                 } else {
                     CommandDeck(coordinator: coordinator, onStopRequested: { pendingStop = $0 })
@@ -78,6 +80,7 @@ struct MainScreen: View {
                 }
             }
         }
+        .onGeometryChange(for: CGFloat.self, of: \.size.height) { screenHeight = $0 }
         // Past this the step alone would fill the screen and push the way out off it.
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .sensoryFeedback(DS.Haptics.compressions, trigger: coordinator.state.stateID) { _, new in new == "compressions" }
