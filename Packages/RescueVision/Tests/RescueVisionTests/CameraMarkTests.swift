@@ -598,13 +598,13 @@ private final class Rescue {
         #expect(rescue.session.overlay().aedArrow == nil, "\(rescue.state.stateID)")
     }
     rescue.tap(.no)
-    for _ in 0..<300 where rescue.state.stateID != "call_911" {
+    for _ in 0..<300 where rescue.state.stateID != "position_patient" {
         rescue.tick()
         if visited.last != rescue.state.stateID { visited.append(rescue.state.stateID) }
         await step(rescue.session)
         #expect(rescue.session.overlay().aedArrow == nil, "\(rescue.state.stateID)")
     }
-    #expect(rescue.state.stateID == "call_911", "\(visited)")
+    #expect(rescue.state.stateID == "position_patient", "\(visited)")
     for _ in 0..<3 where rescue.state.stateID != "compressions" {
         rescue.tap(.done)
         if visited.last != rescue.state.stateID { visited.append(rescue.state.stateID) }

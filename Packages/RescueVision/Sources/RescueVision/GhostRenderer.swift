@@ -27,19 +27,70 @@ final class GhostRenderer {
     /// Separate from the practice/animated ghost: tracks the currently observed real patient.
     private let detectedAnchor = AnchorEntity(world: .zero)
     private let detectedModel = Entity()
-    private let detectedFill = Entity()
-    private let detectedShell = Entity()
     private let chestAnchor = AnchorEntity(world: .zero)
     private let chestEstimate = Entity()
-    /// The head, apart from the body, so it can sit where depth found the real one.
+    private var limbs = TrackedLimbs()
+    /// The torso, head, neck and limbs blended into one surface.
+    private var skin: BodySkin?
+    private weak var arView: ARView?
+    /// Where the head is, apart from the body, so it can sit where depth found the real one.
     private let detectedHead = Entity()
     private var patientLoaded = false
-    /// The real legs, placed on their own rather than carried by the torso's transform.
-    private let detectedLegs = TrackedLegs()
-    private var skinnedModels: [ModelEntity] = []
+    private var stats = BodyLog()
+    private var alignmentFrame = 0
+
+    /// One console line a second about the tracked 3D body, for watching it on a device.
+    private struct BodyLog {
+        var start = CACurrentMediaTime(), last = CACurrentMediaTime()
+        var frames = 0, shown = 0, measured = 0, drawn = 0, worstFrame = 0.0, placementChanges = 0
+        var worstBuild = 0.0, vertices = 0
+        /// Screen distance from each limb end to its 2D joint dot, and how many ends had inferred depth.
+        var offsets: [Double] = [], ends = 0, inferred = 0
+
+        mutating func alignment(_ placement: PatientBodyPlacement, view: ARView, bodies: [VisionOverlay.DetectedBody]) {
+            let size = view.bounds.size
+            guard size.width > 0, let body = bodies.max(by: { $0.joints.count < $1.joints.count }) else { return }
+            for limb in placement.limbs {
+                ends += 1
+                if limb.inferredDepth { inferred += 1 }
+                guard let dot = body.joints[limb.to], let drawn = view.project(limb.end) else { continue }
+                offsets.append(hypot(drawn.x - dot.x * size.width, drawn.y - dot.y * size.height))
+            }
+        }
+        var lastPlacement: PatientBodyPlacement?
+
+        var cell: Float = 0
+
+        mutating func frame(_ placement: PatientBodyPlacement?, drawn limbs: Int, buildMs: Double, vertices skin: Int, cell grid: Float) {
+            let now = CACurrentMediaTime()
+            worstFrame = max(worstFrame, now - last)
+            last = now
+            frames += 1
+            if let placement {
+                shown += 1
+                measured += placement.limbs.count
+                drawn += limbs
+                if placement != lastPlacement { placementChanges += 1 }
+                worstBuild = max(worstBuild, buildMs)
+                vertices = skin
+                cell = grid
+            }
+            lastPlacement = placement
+            guard now - start >= 1 else { return }
+            let f = Double(max(frames, 1)), s = Double(max(shown, 1))
+            let sorted = offsets.sorted()
+            let median = sorted.isEmpty ? 0 : sorted[sorted.count / 2], worstOffset = sorted.last ?? 0
+            let thermal = ["nominal", "fair", "serious", "critical"][min(ProcessInfo.processInfo.thermalState.rawValue, 3)]
+            print(String(format: "[Body3D] fps %.0f worst %.0fms | thermal %@ | body shown %d%% | new fits/s %d | limbs measured %.1f drawn %.1f | skin %.0fms %d verts %.1fcm grid | limb-to-dot median %.0fpt worst %.0fpt | inferred depth %d/%d",
+                         f / (now - start), worstFrame * 1000, thermal, Int(Double(shown) / f * 100), placementChanges,
+                         Double(measured) / s, Double(drawn) / s, worstBuild, vertices, cell * 100, median, worstOffset, inferred, ends))
+            self = BodyLog(start: now, last: now, lastPlacement: lastPlacement)
+        }
+    }
 
     init(arView: ARView, vision: VisionSession) {
         self.vision = vision
+        self.arView = arView
         anchor.isEnabled = false
         anchor.addChild(model)
         model.addChild(rescuer)
@@ -61,13 +112,11 @@ final class GhostRenderer {
         arView.scene.addAnchor(handsAnchor)
         detectedAnchor.isEnabled = false
         detectedAnchor.addChild(detectedModel)
-        detectedModel.addChild(detectedFill)
-        detectedModel.addChild(detectedShell)
         chestAnchor.isEnabled = false
         chestAnchor.addChild(chestEstimate)
         arView.scene.addAnchor(chestAnchor)
         detectedAnchor.addChild(detectedHead)
-        detectedAnchor.addChild(detectedLegs.root)
+        buildTrackedBody()
         // A coarse surface disc, not a pin claiming to identify a bone.
         let disc = ModelEntity(
             mesh: .generateCylinder(height: 0.004, radius: 0.045),
@@ -80,7 +129,6 @@ final class GhostRenderer {
         }
         Task {
             await load()
-            await loadTrackedRig()
             await loadHands()
         }
     }
@@ -100,20 +148,9 @@ final class GhostRenderer {
               let upper = root.findEntity(named: "RescuerUpper"),
               let lower = root.findEntity(named: "RescuerLower"),
               let patient = root.findEntity(named: "Patient"),
-              let outline = root.findEntity(named: "PatientOutline"),
-              let trackedBody = root.findEntity(named: "TrackedBody"),
-              let trackedBodyOutline = root.findEntity(named: "TrackedBodyOutline"),
-              let trackedHead = root.findEntity(named: "TrackedHead"),
-              let trackedHeadOutline = root.findEntity(named: "TrackedHeadOutline")
+              let outline = root.findEntity(named: "PatientOutline")
         else { return }
-        let headFill = Entity(), headShell = Entity()
-        detectedHead.addChild(headFill)
-        detectedHead.addChild(headShell)
-        for (part, parent) in [
-            (upper, rescuer), (lower, rescuer), (patient, patientFill), (outline, patientOutline),
-            (trackedBody, detectedFill), (trackedBodyOutline, detectedShell),
-            (trackedHead, headFill), (trackedHeadOutline, headShell),
-        ] {
+        for (part, parent) in [(upper, rescuer), (lower, rescuer), (patient, patientFill), (outline, patientOutline)] {
             let world = part.transformMatrix(relativeTo: nil)
             part.removeFromParent()
             part.transform = Transform(matrix: world)
@@ -126,60 +163,7 @@ final class GhostRenderer {
         var line = UnlitMaterial(color: Self.patientColor)
         line.faceCulling = .front
         apply(line, to: patientOutline)
-        let fill = Self.patientGlow(opacity: 0.048)
-        var glow = Self.patientGlow(opacity: 0.48)
-        glow.faceCulling = .front
-        apply(fill, to: detectedFill)
-        apply(glow, to: detectedShell)
-        apply(fill, to: headFill)
-        apply(glow, to: headShell)
-        detectedLegs.build(fill: fill, shell: glow)
-        patientLoaded = true
-        vision.patientModelDidLoad()
         tone = nil
-    }
-
-    private func loadTrackedRig() async {
-        guard let url = Bundle.module.url(forResource: "TrackedPatient", withExtension: "usdz"),
-              let root = try? await Entity(contentsOf: url),
-              let body = root.findEntity(named: "Body"), let shell = root.findEntity(named: "Shell") else { return }
-        var models: [ModelEntity] = []
-        visit(root) { entity in
-            if let model = entity as? ModelEntity, !model.jointNames.isEmpty { models.append(model) }
-        }
-        guard !models.isEmpty, models.allSatisfy({ $0.jointNames.allSatisfy { TrackedPatientRig.canonicalName($0) != nil } }) else { return }
-        root.stopAllAnimations(recursive: true)
-        apply(Self.patientGlow(opacity: 0.048), to: body)
-        var glow = Self.patientGlow(opacity: 0.48)
-        glow.faceCulling = .front
-        apply(glow, to: shell)
-        detectedModel.addChild(root)
-        detectedFill.isEnabled = false
-        detectedShell.isEnabled = false
-        // The skinned body carries its own legs, driven by the same joints.
-        detectedLegs.root.isEnabled = false
-        skinnedModels = models
-        vision.patientRigDidLoad()
-    }
-
-    private func poseTrackedMesh(_ placement: PatientBodyPlacement) {
-        guard !skinnedModels.isEmpty else { return }
-        let pose = TrackedPatientRig.localPose(worldPoints: placement.rigJoints, modelToWorld: detectedModel.transform.matrix)
-        for model in skinnedModels {
-            let previous = model.jointTransforms
-            model.jointTransforms = model.jointNames.enumerated().map { index, name in
-                if let key = TrackedPatientRig.canonicalName(name), let matrix = pose[key] { return Transform(matrix: matrix) }
-                return index < previous.count ? previous[index] : Transform()
-            }
-        }
-    }
-
-    /// Blender's Y-up conversion lives on the asset root, above these mesh groups.
-    /// Cloning a child without it turns the body's sideways axis into its vertical axis.
-    private func cloneInModelSpace(_ entity: Entity) -> Entity {
-        let clone = entity.clone(recursive: true)
-        clone.transform = Transform(matrix: entity.transformMatrix(relativeTo: nil))
-        return clone
     }
 
     private func refresh() {
@@ -188,15 +172,26 @@ final class GhostRenderer {
             // Eases toward each new fit so frame-to-frame depth noise doesn't shake the body, but
             // snaps straight there when it first shows.
             let target = Transform(matrix: placement.transform)
-            let ease: Float = detectedAnchor.isEnabled ? Self.bodyEasing : 1
-            detectedModel.transform = Self.eased(detectedModel.transform, toward: target, by: ease)
-            poseTrackedMesh(placement)
+            if detectedAnchor.isEnabled {
+                var eased = detectedModel.transform
+                eased.translation = simd_mix(eased.translation, target.translation, SIMD3(repeating: Self.bodyEasing))
+                eased.scale = simd_mix(eased.scale, target.scale, SIMD3(repeating: Self.bodyEasing))
+                eased.rotation = simd_slerp(eased.rotation, target.rotation, Self.bodyEasing)
+                detectedModel.transform = eased
+            } else {
+                detectedModel.transform = target
+            }
             placeHead(placement)
-            detectedLegs.update(placement, scale: target.scale.y, easing: ease)
+            skin?.submit(skinPieces(placement))
+            alignmentFrame += 1
+            if alignmentFrame % 6 == 0, let arView { stats.alignment(placement, view: arView, bodies: vision.overlay().bodies) }
             detectedAnchor.isEnabled = true
         } else {
             detectedAnchor.isEnabled = false
+            limbs.reset()
+            skin?.clear()
         }
+        stats.frame(patientLoaded ? trackedBody : nil, drawn: limbs.drawn, buildMs: skin?.lastBuildMs ?? 0, vertices: skin?.lastVertices ?? 0, cell: skin?.cell ?? 0)
         let surface = vision.chestSurfacePlacement()
         if let surface {
             chestAnchor.isEnabled = true
@@ -235,10 +230,48 @@ final class GhostRenderer {
         patientOutline.components.set(OpacityComponent(opacity: GhostPlacement.outlineOpacity))
     }
 
+    /// The practice Blender mesh is intentionally untouched. The detected body has no fixed-pose arms or
+    /// legs: its torso and head use the Blender proportions, its limbs follow measured joints, and all of
+    /// it is blended into one skin.
+    private func buildTrackedBody() {
+        let fill = Self.patientGlow(opacity: 0.07)
+        var shell = Self.patientGlow(opacity: 0.48)
+        shell.faceCulling = .front
+        // The group's depth goes down first, so only the skin's nearest surface draws and the outline
+        // shell shows round the silhouette alone.
+        let skin = BodySkin(fill: fill, shell: shell, group: ModelSortGroup(depthPass: .prePass))
+        detectedAnchor.addChild(skin.root)
+        self.skin = skin
+        patientLoaded = true
+        vision.patientModelDidLoad()
+        vision.patientRigDidLoad()
+    }
+
+    /// Everything the skin is made of this frame, in world metres: the eased torso, the head, the neck
+    /// joining them, and the measured limbs.
+    private func skinPieces(_ placement: PatientBodyPlacement) -> [BodyPiece] {
+        let model = detectedModel.transform.matrix
+        var pieces: [BodyPiece] = [.torso(TorsoLoft(model: model))]
+        let head = detectedHead.position
+        let size = detectedHead.scale.x
+        pieces.append(.ellipsoid(center: head, axes: simd_float3x3(detectedHead.orientation), radii: Self.headRadii * size))
+        let neckBase = model * SIMD4(TorsoProfile.neckBase, 1)
+        let neck = SIMD3(neckBase.x, neckBase.y, neckBase.z)
+        // A head found far off the shoulders isn't joined on with a stretched neck.
+        if simd_distance(neck, head) < 0.35 {
+            pieces.append(.cone(from: neck, to: head, r1: 0.05 * size, r2: 0.045 * size))
+        }
+        pieces += limbs.update(placement.limbs, camera: arView?.cameraTransform.translation, now: CACurrentMediaTime())
+        return pieces
+    }
+
+    /// The template head's half sizes, from HEAD_SIZE in tools/make_ghost_model.py.
+    private static let headRadii = SIMD3<Float>(0.1, 0.08, 0.075)
+
     /// The head where depth found it, or where the fitted body's own head would be when no face was
     /// seen. It turns and sizes with the body, but isn't stretched by the torso's own length and width.
     private func placeHead(_ placement: PatientBodyPlacement) {
-        guard !detectedHead.children.isEmpty else { return }
+        guard patientLoaded else { return }
         let template = placement.transform * SIMD4(PatientModelFit.headCenter, 1)
         let target = placement.head ?? SIMD3(template.x, template.y, template.z)
         let body = detectedModel.transform
@@ -290,14 +323,6 @@ final class GhostRenderer {
         return material
     }
 
-    private static func eased(_ from: Transform, toward to: Transform, by t: Float) -> Transform {
-        var eased = from
-        eased.translation = simd_mix(from.translation, to.translation, SIMD3(repeating: t))
-        eased.scale = simd_mix(from.scale, to.scale, SIMD3(repeating: t))
-        eased.rotation = simd_slerp(from.rotation, to.rotation, t)
-        return eased
-    }
-
     private static let patientColor = UIColor(white: 0.92, alpha: 1)
     /// The share of the way to the latest fit the tracked body moves each rendered frame.
     private static let bodyEasing: Float = 0.2
@@ -319,70 +344,6 @@ extension PhysicallyBasedMaterial {
         material.blending = .transparent(opacity: .init(floatLiteral: HandsPlacement.opacity))
         material.faceCulling = .back
         return material
-    }
-}
-
-/// Thighs and shins as glowing tubes between the hips, knees and ankles, with a ball at each knee
-/// and ankle so the bends stay round. A joint that wasn't seen hangs from the one above it along the
-/// template leg, so a half-seen leg still reads as a leg.
-@MainActor
-private final class TrackedLegs {
-    let root = Entity()
-    private struct Piece { let fill: ModelEntity; let shell: ModelEntity }
-    private var bones: [BodyJoint: Piece] = [:]
-    private var balls: [BodyJoint: Piece] = [:]
-    private var points: [BodyJoint: SIMD3<Float>] = [:]
-
-    /// Bone from its parent joint to this one, and its radius in template metres, from patient().
-    private static let bones: [(joint: BodyJoint, parent: BodyJoint, radius: Float)] = [
-        (.leftKnee, .leftHip, 0.075), (.leftAnkle, .leftKnee, 0.05),
-        (.rightKnee, .rightHip, 0.075), (.rightAnkle, .rightKnee, 0.05),
-    ]
-    private static let shellGrowth: Float = 0.015
-
-    func build(fill: any Material, shell: any Material) {
-        let tube = MeshResource.generateCylinder(height: 1, radius: 1)
-        let ball = MeshResource.generateSphere(radius: 1)
-        for bone in Self.bones {
-            bones[bone.joint] = add(tube, fill: fill, shell: shell)
-            balls[bone.joint] = add(ball, fill: fill, shell: shell)
-        }
-    }
-
-    private func add(_ mesh: MeshResource, fill: any Material, shell: any Material) -> Piece {
-        let piece = Piece(fill: ModelEntity(mesh: mesh, materials: [fill]), shell: ModelEntity(mesh: mesh, materials: [shell]))
-        root.addChild(piece.fill)
-        root.addChild(piece.shell)
-        return piece
-    }
-
-    func update(_ placement: PatientBodyPlacement, scale: Float, easing: Float) {
-        let template = PatientModelFit.templateLegs
-        var targets: [BodyJoint: SIMD3<Float>] = [:]
-        for hip in [BodyJoint.leftHip, .rightHip] {
-            targets[hip] = placement.legs[hip] ?? (placement.transform * SIMD4(template[hip]!, 1)).xyz
-        }
-        for bone in Self.bones {
-            let parent = targets[bone.parent]!
-            targets[bone.joint] = placement.legs[bone.joint]
-                ?? parent + (placement.transform * SIMD4(template[bone.joint]! - template[bone.parent]!, 0)).xyz
-        }
-        for (joint, target) in targets {
-            points[joint] = points[joint].map { simd_mix($0, target, SIMD3(repeating: easing)) } ?? target
-        }
-        for bone in Self.bones {
-            guard let a = points[bone.parent], let b = points[bone.joint],
-                  let tube = bones[bone.joint], let ball = balls[bone.joint] else { continue }
-            let radius = bone.radius * scale
-            let length = max(simd_distance(a, b), 0.001)
-            let orientation = simd_quatf(from: [0, 1, 0], to: (b - a) / length)
-            for (entity, r) in [(tube.fill, radius), (tube.shell, radius + Self.shellGrowth)] {
-                entity.transform = Transform(scale: [r, length, r], rotation: orientation, translation: (a + b) / 2)
-            }
-            for (entity, r) in [(ball.fill, radius), (ball.shell, radius + Self.shellGrowth)] {
-                entity.transform = Transform(scale: SIMD3(repeating: r), rotation: orientation, translation: b)
-            }
-        }
     }
 }
 #endif

@@ -316,7 +316,7 @@ private func intoTriage(_ fixture: Fixture) async throws {
         holdTheMainActor()
         try await fixture.settleInbox()
         #expect(coordinator.modelCalls.count == 1)
-        #expect(coordinator.state.stateID == "call_911")
+        #expect(coordinator.state.stateID == "position_patient")
     }
 
     @Test func aLateConnectFromTheOldSessionCantSayLive() async throws {

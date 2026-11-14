@@ -48,6 +48,8 @@ extension AppCoordinator {
 
     /// The call line. Nothing a step points at on the camera goes ahead of it.
     nonisolated static let callPhraseID = "call_911"
+    /// Said on the way, never the step's instruction: the call happens in the background.
+    nonisolated static let announcementPhraseIDs = ProtocolEngine.announcementPhrases
 
     /// The first line after any "Possible X." one, unless a cue on this step points at a later line:
     /// then that one leads, so the nouns said big are the ones the marks light up, as on limb_splint,
@@ -55,6 +57,7 @@ extension AppCoordinator {
     private var deckCommandPhraseID: String? {
         guard let definition, !definition.entryPhrases.isEmpty else { return nil }
         let lines = Array(definition.entryPhrases.dropFirst(leadingPossibleIDs.count))
+            .filter { !Self.announcementPhraseIDs.contains($0) }
         if let index = lines.firstIndex(where: { line in definition.cues.contains { $0.phrase == line } }),
            !lines[..<index].contains(Self.callPhraseID) {
             return lines[index]

@@ -49,6 +49,6 @@ import Testing
         #expect(coordinator.state.stateID == "intake_breathing")
         #expect(!coordinator.state.breathingAskedAwake)
         coordinator.performAnswer(.no)
-        #expect(coordinator.state.stateID == "call_911")
+        #expect(coordinator.state.stateID == "position_patient")
     }
 }

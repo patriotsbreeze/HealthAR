@@ -188,3 +188,76 @@ private func fixture() -> (camera: CameraPose, depth: BodyDepth, person: Detecte
     let length = simd_length(fit.transform.columns.0.xyz) * (PatientModelFit.shouldersX - PatientModelFit.hipsX)
     #expect(abs(length - 0.58) < 0.05, "full torso length, not shortened by the bad hips")
 }
+
+private func spreadBody() -> (camera: CameraPose, depth: BodyDepth, person: DetectedPerson) {
+    var f = fixture()
+    let points: [BodyJoint: SIMD3<Float>] = [
+        .leftElbow: [-0.5, 0, -0.25], .leftWrist: [-0.75, 0, -0.25],
+        .rightElbow: [0.5, 0, -0.25], .rightWrist: [0.75, 0, -0.25],
+        .leftKnee: [-0.4, 0, 0.65], .leftAnkle: [-0.65, 0, 1.05],
+        .rightKnee: [0.4, 0, 0.65], .rightAnkle: [0.65, 0, 1.05],
+    ]
+    for (name, point) in points {
+        guard case let .inFront(image) = f.camera.project(point) else { fatalError("fixture behind camera") }
+        f.person.extras[name] = .init(position: image, confidence: 0.9)
+    }
+    return f
+}
+
+@Test func spreadArmsAndLegsUseMeasuredEndpointsInsteadOfTheTemplatePose() throws {
+    let f = spreadBody()
+    let placement = try #require(PatientModelFit.fit(person: f.person, depth: f.depth, camera: f.camera))
+    #expect(placement.limbs.count == 8)
+    let arm = try #require(placement.limbs.first { $0.from == .leftElbow && $0.to == .leftWrist })
+    #expect(simd_distance(arm.start, [-0.5, 0, -0.25]) < 0.0001)
+    #expect(simd_distance(arm.end, [-0.75, 0, -0.25]) < 0.0001)
+    let leg = try #require(placement.limbs.first { $0.from == .rightKnee && $0.to == .rightAnkle })
+    #expect(simd_distance(leg.end, [0.65, 0, 1.05]) < 0.0001)
+}
+
+@Test func bendingAnArmMovesItsGeometryWithoutRescalingTheTorso() throws {
+    var f = spreadBody()
+    let before = try #require(PatientModelFit.fit(person: f.person, depth: f.depth, camera: f.camera))
+    let bent = SIMD3<Float>(-0.35, 0, -0.05)
+    guard case let .inFront(image) = f.camera.project(bent) else { Issue.record("fixture behind camera"); return }
+    f.person.extras[.leftElbow] = .init(position: image, confidence: 0.9)
+    let after = try #require(PatientModelFit.fit(person: f.person, depth: f.depth, camera: f.camera))
+    #expect(after.transform == before.transform)
+    let upper = try #require(after.limbs.first { $0.from == .leftShoulder && $0.to == .leftElbow })
+    let lower = try #require(after.limbs.first { $0.from == .leftElbow && $0.to == .leftWrist })
+    #expect(simd_distance(upper.end, bent) < 0.0001)
+    #expect(upper.end == lower.start)
+}
+
+@Test func hiddenWristsAndImpossibleLimbLengthsNeverProduceAFixedPoseFallback() throws {
+    var f = spreadBody()
+    f.person.extras[.leftWrist]?.confidence = 0.1
+    let hidden = try #require(PatientModelFit.fit(person: f.person, depth: f.depth, camera: f.camera))
+    #expect(hidden.limbs.count == 7)
+    #expect(!hidden.limbs.contains { $0.to == .leftWrist })
+    #expect(hidden.limbs.contains { $0.to == .leftElbow })
+    guard case let .inFront(far) = f.camera.project(SIMD3<Float>(1, 0, -0.25)) else { Issue.record("fixture behind camera"); return }
+    f.person.extras[.leftWrist] = .init(position: far, confidence: 0.9)
+    let impossible = try #require(PatientModelFit.fit(person: f.person, depth: f.depth, camera: f.camera))
+    #expect(!impossible.limbs.contains { $0.to == .leftWrist })
+}
+
+@Test func aWristReadingOnTheWallBehindKeepsTheArmAtTheElbowsDepth() throws {
+    var f = spreadBody()
+    let wrist = try #require(f.person.extras[.leftWrist]).position
+    let cx = Int(wrist.x * Double(f.depth.width)), cy = Int(wrist.y * Double(f.depth.height))
+    for y in (cy - 2)...(cy + 2) {
+        for x in (cx - 2)...(cx + 2) { f.depth.metres[y * f.depth.width + x] = 3.2 }
+    }
+    let placement = try #require(PatientModelFit.fit(person: f.person, depth: f.depth, camera: f.camera))
+    let arm = try #require(placement.limbs.first { $0.from == .leftElbow && $0.to == .leftWrist })
+    #expect(simd_distance(arm.end, [-0.75, 0, -0.25]) < 0.0001)
+}
+
+@Test func anAnkleGuessedOutsideThePictureIsNotDrawn() throws {
+    var f = spreadBody()
+    f.person.extras[.leftAnkle] = .init(position: [0.5, 1.04], confidence: 0.6)
+    let placement = try #require(PatientModelFit.fit(person: f.person, depth: f.depth, camera: f.camera))
+    #expect(!placement.limbs.contains { $0.to == .leftAnkle })
+    #expect(placement.limbs.contains { $0.to == .leftKnee })
+}

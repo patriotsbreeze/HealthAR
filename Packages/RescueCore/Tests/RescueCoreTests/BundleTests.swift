@@ -141,7 +141,7 @@ import Testing
     /// The setup steps wait for a tap and say their line again every 10 s. Start CPR is always one tap.
     @Test func setupStepsWaitAndRepeatTheirLine() throws {
         let definition = try loadBundle().definition
-        for (id, line) in [("call_911", "call_911"), ("position_patient", "roll_flat"), ("place_hands", "hands_center")] {
+        for (id, line) in [("position_patient", "roll_flat"), ("place_hands", "hands_center")] {
             let state = try #require(definition.states.first { $0.id == id })
             #expect(state.timeout == nil, "\(id)")
             #expect(state.repeating.map(\.phrase) == [line], "\(id)")

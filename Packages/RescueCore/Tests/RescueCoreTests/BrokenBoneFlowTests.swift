@@ -129,7 +129,7 @@ private let dangerPhrases = ["call_911", "limb_danger_care", "limb_tourniquet"]
         #expect(session.entries(.answer).last?.detail == "danger_signs=\(action.rawValue)")
         #expect(session.entries(.answer).last?.source == .bystander)
         #expect(session.entries(.callPrompted).count == 1)
-        #expect(session.effects.contains(.dropQueuedPhrases(keeping: ["call_911"])))
+        #expect(session.effects.contains(.dropQueuedPhrases(keeping: ["call_911", "calling_911"])))
     }
 
     @Test(arguments: limbSteps)

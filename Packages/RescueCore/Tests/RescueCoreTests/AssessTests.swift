@@ -41,7 +41,6 @@ import Testing
         (Finding.chestPain, "chest_call"), (.otherHeartSigns, "chest_call"),
         (.limbInjury, "limb_start"), (.heavyBleeding, "limb_danger"), (.limbDiscolored, "limb_danger"), (.neckBackInjury, "limb_danger"),
         (.choking, "choking_talk"), (.otherConcern, "general_talk"),
-        (.unresponsive, "intake_breathing"), (.notBreathing, "intake_breathing"), (.abnormalBreathing, "intake_breathing"),
     ])
     func aSureReportRoutes(finding: Finding, to target: String) throws {
         var session = Session(engine: try engine())
@@ -58,11 +57,26 @@ import Testing
         #expect(session.entries(.observation).last?.detail == "\(finding.rawValue),seen,low")
     }
 
-    /// A collapse needs no confidence threshold, as on every awake step.
-    @Test func aLowCollapseReportStillGoesToTheBreathingQuestion() throws {
-        var session = Session(engine: try engine())
-        report(.unresponsive, .low, in: &session)
-        #expect(session.state.stateID == "intake_breathing")
+    /// On assess the AI's sense of a collapse only suggests: it is noted, the button is ringed, and a
+    /// person taps or says "confirm". However sure it is, it moves nothing.
+    @Test(arguments: [Finding.unresponsive, .notBreathing, .abnormalBreathing])
+    func aCollapseReportOnAssessOnlySuggests(finding: Finding) throws {
+        for confidence in [Confidence.low, .medium, .high] {
+            var session = Session(engine: try engine())
+            report(finding, confidence, in: &session)
+            #expect(session.state.stateID == "assess", "\(finding) \(confidence)")
+            #expect(!session.effects.contains(.cutPhrases))
+        }
+    }
+
+    /// The person's own taps still go straight on from assess.
+    @Test func aTapStillMovesOnFromAssess() throws {
+        var unresponsive = Session(engine: try engine())
+        unresponsive.human(.patientUnresponsive)
+        #expect(unresponsive.state.stateID == "intake_breathing")
+        var cpr = Session(engine: try engine())
+        cpr.human(.startCpr)
+        #expect(cpr.state.stateID == "compressions")
     }
 
     /// "They're fine" can never take the rescue anywhere, and only a person's tap says they're awake.
@@ -109,13 +123,15 @@ import Testing
         #expect(session.state.stateID == "intake_breathing")
     }
 
-    /// Not breathing, or only gasping, is the second half of the call to start CPR. A person's tap
-    /// is the human input the call step needs, so it goes there, as a No at the breathing question does.
-    @Test func tappingNotBreathingGoesStraightToTheCall() throws {
+    /// Not breathing, or only gasping, is the second half of the call to start CPR. A person's tap goes
+    /// straight onto the CPR path, as a No at the breathing question does, with the call said on the way
+    /// while the 911 agent places it in the background.
+    @Test func tappingNotBreathingGoesStraightOnWithTheCallSaid() throws {
         var session = Session(engine: try engine())
         session.human(.patientNotBreathing)
-        #expect(session.state.stateID == "call_911")
-        #expect(session.phrases.last == "call_911")
+        #expect(session.state.stateID == "position_patient")
+        #expect(session.phrases == ["calling_911", "roll_flat"])
+        #expect(!session.entries(.callPrompted).isEmpty)
     }
 
     /// Only assess has it: an awake step's patient was already said to be responding.

@@ -47,7 +47,7 @@ struct MainScreen: View {
                 }
                 // Sized first, so the band gets what's left, and never less than its least.
                 if coordinator.isAssessing {
-                    AssessPanel(coordinator: coordinator, onDispatcher: { present(.dispatcher) }, screenHeight: screenHeight)
+                    AssessPanel(coordinator: coordinator, screenHeight: screenHeight)
                         .layoutPriority(1)
                 } else {
                     CommandDeck(coordinator: coordinator, onStopRequested: { pendingStop = $0 })
@@ -149,9 +149,11 @@ struct MainScreen: View {
                     .allowsHitTesting(false)
                     .transition(.opacity)
             }
-            if showsVoice || showsAssessment {
+            if showsVoice || showsAssessment || showsCallerAgent {
                 // Top-leading is the one corner nothing else in the band uses. A tap goes through the
-                // orb; the read beside it opens on one.
+                // orb; the read beside it opens on one. The 911 call sits under them, so the two stack
+                // rather than overlap while the rescuer gets on with CPR.
+                VStack(alignment: .leading, spacing: DS.Space.xs) {
                 HStack(alignment: .top, spacing: DS.Space.xs) {
                     if showsVoice {
                         ListeningBubble(mode: coordinator.aiTalking ? .talking : .listening)
@@ -170,6 +172,11 @@ struct MainScreen: View {
                         .padding(.top, showsVoice ? (DS.Listening.frame - DS.Height.control) / 2 : 0)
                         .transition(.opacity)
                     }
+                }
+                if showsCallerAgent {
+                    CallerAgentPill(status: coordinator.callerAgentStatus) { present(.dispatcher) }
+                        .transition(.opacity)
+                }
                 }
                 .padding(DS.Space.m)
                 // Out to the right edge, but clear of whatever holds the other corner: the beat's dot, or the
@@ -217,6 +224,8 @@ struct MainScreen: View {
     private var showsVoice: Bool { coordinator.aiTalking || coordinator.aiListening }
 
     /// A read only with the AI up, since one from a session that's gone would be about another scene.
+    private var showsCallerAgent: Bool { coordinator.callerAgentStatus != .idle }
+
     private var assessmentTrailingClearance: CGFloat {
         if coordinator.showsGripReminder { return GripReminderCard.size + DS.Space.m }
         if coordinator.showsBeatPulse { return DS.Pulse.docked + DS.Pulse.dockedInset }

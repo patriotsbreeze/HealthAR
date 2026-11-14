@@ -6,7 +6,6 @@ import SwiftUI
 /// CPR and the dispatcher never wait on it, and a tap can always say what it hasn't worked out.
 struct AssessPanel: View {
     let coordinator: AppCoordinator
-    let onDispatcher: () -> Void
     @State private var tapping = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -107,10 +106,10 @@ struct AssessPanel: View {
     /// Tap instead goes under them.
     private var controls: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: DS.Space.s) {
+            HStack(spacing: 6) {
                 startCPR
                 dispatcher
-                Spacer(minLength: DS.Space.s)
+                Spacer(minLength: 0)
                 tapInstead
             }
             VStack(alignment: .leading, spacing: DS.Space.xs) {
@@ -130,7 +129,7 @@ struct AssessPanel: View {
                 .foregroundStyle(DS.Colors.textPrimary)
                 .lineLimit(1)
                 .fixedSize()
-                .padding(.horizontal, DS.Space.m)
+                .padding(.horizontal, 11)
                 .frame(minHeight: DS.Height.camera)
                 .background(DS.Colors.criticalFill, in: Capsule(style: .continuous))
                 .suggested(suggestion == .startCpr, Capsule(style: .continuous))
@@ -140,20 +139,20 @@ struct AssessPanel: View {
     }
 
     private var dispatcher: some View {
-        Button(action: onDispatcher) {
-            Label("911 script", systemImage: "phone.fill")
+        Button { coordinator.spawnCallerAgent() } label: {
+            Label("Spawn 911 agent", systemImage: "phone.fill")
                 .dsFont(DS.Fonts.buttonCompact)
                 .foregroundStyle(DS.Colors.textPrimary)
                 .lineLimit(1)
                 .fixedSize()
-                .padding(.horizontal, DS.Space.m)
+                .padding(.horizontal, 11)
                 .frame(minHeight: DS.Height.camera)
                 .background(DS.Glass.fill, in: Capsule(style: .continuous))
                 .overlay(Capsule(style: .continuous).strokeBorder(DS.Glass.edge, lineWidth: 1))
                 .suggested(suggestion == .callForHelp, Capsule(style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("911 script: what to tell the dispatcher. Places no call.")
+        .accessibilityLabel("Spawn 911 agent. A simulated call in the log. Places no call.")
         .accessibilityHint(suggestion == .callForHelp ? "The AI suggests this" : "")
     }
 
@@ -207,10 +206,7 @@ struct AssessPanel: View {
 
     /// The button the scene read points to, at medium or high confidence. It only ever highlights
     /// one of the fixed buttons, which stay where they are; nothing happens until a person taps.
-    private var suggestion: SituationAssessment.Suggestion? {
-        guard let read = coordinator.sceneRead, read.confidence != .low else { return nil }
-        return read.suggests
-    }
+    private var suggestion: SituationAssessment.Suggestion? { coordinator.assessSuggestion }
 
     private func suggestionLine(_ suggestion: SituationAssessment.Suggestion) -> some View {
         let reason = coordinator.sceneRead?.sees ?? coordinator.sceneRead?.headline
@@ -220,6 +216,10 @@ struct AssessPanel: View {
                 .foregroundStyle(Self.suggestColor)
             Text("AI suggests \(suggestion.buttonTitle)").font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(DS.Colors.textPrimary)
+            if suggestion.confirmAction != nil {
+                Text("· say \u{201C}confirm\u{201D} or tap").font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Self.suggestColor)
+            }
             if let reason {
                 Text("· \(reason)").font(.system(size: 12))
                     .foregroundStyle(DS.Colors.textSecondary)
@@ -282,7 +282,7 @@ private extension SituationAssessment.Suggestion {
         case .notResponding: "Not responding"
         case .notBreathing: "Not breathing"
         case .awake: "Awake and talking"
-        case .callForHelp: "911 script"
+        case .callForHelp: "Spawn 911 agent"
         }
     }
 

@@ -144,6 +144,15 @@
       "text": "Call 911 now, on speaker. If someone is with you, have them call.",
       "voice": "Kore"
     },
+    "calling_911": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 1.965,
+      "sha256": "454ee269c02546412a3b4ac3dfbf77868d12e5c591e0009ded5b8e959663dec3",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Calling 911 for you.",
+      "voice": "Kore"
+    },
     "chest_possible": {
       "engine": "gemini",
       "model": "gemini-3.8-flash-tts",

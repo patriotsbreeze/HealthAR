@@ -185,7 +185,7 @@ private func mergedEngine() throws -> ProtocolEngine {
                 #expect(transition?.cutsPhrases == collapses.contains(key), "\(state.id) \(key)")
             }
             let startCPR = state.transition(on: "human.start_cpr")
-            #expect(startCPR?.phrases == ["call_911", "hands_center"])
+            #expect(startCPR?.phrases == ["calling_911", "hands_center"])
             #expect(startCPR?.log == .callPrompted)
         }
     }
@@ -237,7 +237,7 @@ private func mergedEngine() throws -> ProtocolEngine {
         tapped.human(.startCpr)
         #expect(tapped.state.stateID == "compressions")
         #expect(tapped.effects.contains(.cutPhrases))
-        #expect(tapped.phrases == ["call_911", "hands_center", "start_compressions"])
+        #expect(tapped.phrases == ["calling_911", "hands_center", "start_compressions"])
 
         var heard = Session(engine: engine)
         heard.human(.yes)
@@ -317,7 +317,7 @@ private func mergedEngine() throws -> ProtocolEngine {
         #expect(session.state.stateID == "intake_breathing", "only the rescuer moves it on")
         #expect(session.allPhrases.filter { $0 == "ask_breathing" }.count >= 3, "asked, and asked again every 10 s")
         session.human(.no)
-        #expect(session.state.stateID == "call_911")
+        #expect(session.state.stateID == "position_patient")
 
         // The setup steps wait for a tap, and Start CPR is one.
         session.human(.startCpr)
@@ -434,7 +434,7 @@ private func mergedEngine() throws -> ProtocolEngine {
         session.human(.startCpr)
         session.human(.patientMoving)
         session.advance(10)
-        #expect(session.state.stateID == "call_911")
+        #expect(session.state.stateID == "position_patient")
         #expect(session.state.cprStarted)
         #expect(!session.state.padsOn)
     }
@@ -573,7 +573,7 @@ private func mergedEngine() throws -> ProtocolEngine {
     /// pads latched, the beat on, EMS recorded as arrived, or nowhere left to go.
     @Test(arguments: [
         "aed_analyze", "aed_on", "pads", "compressions", "compressions_aed", "resource_scan", "handoff",
-        "special_patient", "responsive_patient", "call_911", "position_patient", "place_hands",
+        "special_patient", "responsive_patient", "position_patient", "place_hands",
         "watch_breathing", "watch_reask", "intake_responsive",
     ])
     func aModelEdgeCantLandThere(target: String) throws {
@@ -619,7 +619,7 @@ private func mergedEngine() throws -> ProtocolEngine {
     /// injected edges are the only way out, and every other test here shows they still load.
     @Test(arguments: [
         "aed_analyze", "aed_on", "pads", "compressions", "compressions_aed", "resource_scan", "handoff",
-        "special_patient", "responsive_patient", "call_911", "position_patient", "place_hands",
+        "special_patient", "responsive_patient", "position_patient", "place_hands",
         "watch_breathing", "watch_reask", "intake_responsive", "intake_breathing",
     ])
     func anAuthoredTapCantLeaveTheAwakeStates(target: String) throws {
@@ -880,7 +880,7 @@ private func mergedEngine() throws -> ProtocolEngine {
     }
 
     @Test func anAwakeStateCantTimeOutIntoCPR() throws {
-        try expectRefused("timeout into the arrest path") { changeState(1, in: &$0) { $0["timeout"] = ["seconds": 10, "to": "call_911"] } }
+        try expectRefused("timeout into the arrest path") { changeState(1, in: &$0) { $0["timeout"] = ["seconds": 10, "to": "position_patient"] } }
     }
 
     @Test func aRedirectThatLowersUrgencyIsRefused() throws {
@@ -896,7 +896,7 @@ private func mergedEngine() throws -> ProtocolEngine {
     }
 
     @Test func aModelEdgeOutOfAnArrestStateIsRefused() throws {
-        for id in ["intake_responsive", "watch_breathing", "call_911", "compressions", "aed_analyze"] {
+        for id in ["intake_responsive", "watch_breathing", "position_patient", "compressions", "aed_analyze"] {
             try expectRefused("arrest_path_locked") { $0["entries"] = [graft(id, "model.chest_pain", to: "demo_call")] }
         }
     }

@@ -86,7 +86,7 @@ struct StatusRail: View {
             HStack(spacing: DS.Space.s) {
                 ElapsedPill(coordinator: coordinator)
                     .modifier(OperatorGesture(action: onOperator))
-                AgentsPill(action: onAgents)
+                AgentsStrip(coordinator: coordinator, action: onAgents)
                 if coordinator.operatorUsed { OperatorBadge() }
                 Spacer(minLength: 0)
                 OverflowMenu(coordinator: coordinator, showsHUD: $showsHUD, onDispatcher: onDispatcher, onSentinel: onSentinel)
@@ -119,29 +119,100 @@ private struct ElapsedPill: View {
     }
 }
 
-/// Opens the agents sheet, so anyone watching can see what each part is doing.
-private struct AgentsPill: View {
+/// The AI agents as one team in a single capsule: each a fixed icon in a fixed place, lit when running,
+/// faded when off, pulsing when busy, with the busy one's word in a slot that's always there, so the
+/// capsule never moves. A tap still opens the agents sheet for the detail.
+private struct AgentsStrip: View {
+    let coordinator: AppCoordinator
     let action: () -> Void
+
+    enum Activity: Equatable { case off, running, busy }
+
+    struct Slot: Identifiable, Equatable {
+        var id: String { name }
+        var symbol: String
+        var name: String
+        var status: String
+        var activity: Activity
+    }
+
+    static let iconWidth: CGFloat = 22
+    /// Room for the busy agent's word, kept even when nothing is busy, so the capsule never resizes.
+    static let busyWidth: CGFloat = 58
 
     var body: some View {
         Button(action: action) {
-            Pill {
-                Image(systemName: "square.stack.3d.up.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(DS.Colors.textSecondary)
-                Text("Agents")
-                    .dsFont(DS.Fonts.label)
-                    .foregroundStyle(DS.Colors.textPrimary)
-                    .lineLimit(1)
+            // Vision's statuses change without telling anyone, so it looks again twice a second.
+            TimelineView(.periodic(from: .now, by: 0.5)) { _ in
+                let slots = Self.slots(coordinator)
+                let busy = slots.first { $0.activity == .busy }
+                // One capsule for the whole team, so it reads as the AI agents and not as settings.
+                HStack(spacing: 0) {
+                    HStack(spacing: 2) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 8, weight: .bold))
+                        Text("AGENTS")
+                            .font(.system(size: 9, weight: .bold))
+                            .tracking(0.5)
+                    }
+                    .foregroundStyle(DS.Assessment.tint)
+                    .padding(.trailing, 6)
+                    ForEach(slots) { icon($0) }
+                    Text(busy?.status.lowercased() ?? "")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(DS.Assessment.tint)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(width: Self.busyWidth, alignment: .leading)
+                        .padding(.leading, 3)
+                        .contentTransition(.opacity)
+                        .animation(DS.Motion.alert, value: busy?.status)
+                }
+                .padding(.leading, 10)
+                .frame(height: 30)
+                .glassSurface(Capsule(style: .continuous))
             }
-            // The pill is short, but the tap target isn't.
             .frame(minHeight: DS.Height.control)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Agents")
-        .accessibilityHint("Shows what each part of the app is doing")
-        .dynamicTypeSize(...DynamicTypeSize.xLarge)
+        .accessibilityLabel("AI agents: " + Self.slots(coordinator).map { "\($0.name), \($0.status)" }.joined(separator: "; "))
+        .accessibilityHint("Shows what each agent is doing")
+    }
+
+    /// Lit when running, faded when off, and pulsing in the AI's blue when busy.
+    private func icon(_ slot: Slot) -> some View {
+        Image(systemName: slot.symbol)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(slot.activity == .busy ? DS.Assessment.tint : slot.activity == .running ? DS.Colors.textPrimary : DS.Colors.textTertiary)
+            .opacity(slot.activity == .off ? 0.4 : 1)
+            .symbolEffect(.pulse, isActive: slot.activity == .busy)
+            .frame(width: Self.iconWidth)
+            .animation(DS.Motion.alert, value: slot.activity)
+    }
+
+    /// The same five, always, in this order.
+    static func slots(_ c: AppCoordinator) -> [Slot] {
+        let live = c.liveConnected
+        let voice: (String, Activity) = !live ? ("Offline", .off) : c.aiTalking ? ("Talking", .busy) : c.aiListening ? ("Listening", .running) : ("Connected", .running)
+        let scene: (String, Activity) = c.assessing ? ("Looking", .busy) : c.sceneRead != nil ? ("Watching", .running) : ("Off", .off)
+        let aed: (String, Activity)
+        if !c.aedFinderAvailable {
+            aed = ("Off", .off)
+        } else {
+            switch c.vision.aedStatus {
+            case .locating: aed = ("Searching", .busy)
+            case .located: aed = ("AED found", .running)
+            default: aed = ("Standing by", .running)
+            }
+        }
+        return [
+            Slot(symbol: "mic.fill", name: "Voice guide", status: voice.0, activity: voice.1),
+            Slot(symbol: "checkmark.shield.fill", name: "Safety checker", status: live ? "Checking" : "Off", activity: live ? .running : .off),
+            Slot(symbol: "eye.fill", name: "Scene reader", status: scene.0, activity: scene.1),
+            Slot(symbol: "bolt.heart.fill", name: "AED finder", status: aed.0, activity: aed.1),
+            Slot(symbol: "phone.fill", name: "911 agent", status: c.callerAgentStatus == .calling ? "Calling" : "Ready", activity: c.callerAgentStatus == .calling ? .busy : .off),
+        ]
     }
 }
 
