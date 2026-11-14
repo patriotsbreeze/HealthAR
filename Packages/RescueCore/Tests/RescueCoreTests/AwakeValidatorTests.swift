@@ -242,6 +242,7 @@ private let probeMustClear = [
 
 /// The corrections and every awake line the modules ship but the dose.
 private let shippedAwakeLines = [
+    "Point the camera at what's happening, and tell me what's going on.",
     "Correction. That is only a possibility. Only a clinician can say.",
     "Correction. I am an AI, not a doctor or nurse.",
     "Correction. I'm not sure about that. Follow the dispatcher.",

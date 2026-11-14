@@ -355,7 +355,8 @@ import Testing
         #expect(open.isSuperset(of: ["triage", "general_talk", "choking_talk", "chest_wait", "limb_wait", "limb_danger"]))
         let fixture = try Fixture(bundle: bundle)
         fixture.coordinator.beginRescue()
-        for state in bundle.definition.states where state.kind.isAwake {
+        // Assess only ever opens a rescue, so nothing walks to it. `AssessTests` checks its voice.
+        for state in bundle.definition.states where state.kind.isAwake && state.id != ScenarioModule.assessState {
             fixture.coordinator.force(stateID: state.id)
             #expect(fixture.coordinator.state.stateID == state.id)
             #expect(fixture.audio.lastPolicy?.modelSpeechOpen == open.contains(state.id), "\(state.id)")
@@ -383,7 +384,8 @@ import Testing
 
     @Test func everyControlDoesWhatTheBundleSays() throws {
         let bundle = try mergedBundle()
-        for state in bundle.definition.states where state.kind.isAwake {
+        // Assess has its own panel, which `AssessTests` drives.
+        for state in bundle.definition.states where state.kind.isAwake && state.id != ScenarioModule.assessState {
             let controls = try {
                 let fixture = try begun()
                 fixture.coordinator.force(stateID: state.id)
@@ -410,7 +412,8 @@ import Testing
         let bundle = try mergedBundle()
         let engine = ProtocolEngine(bundle: bundle)
         for from in bundle.definition.states {
-            for to in bundle.definition.states where to.id != from.id {
+            // Only a restart gets back to where a rescue opens.
+            for to in bundle.definition.states where to.id != from.id && to.id != ScenarioModule.assessState {
                 #expect(OperatorForce.path(engine: engine, from: from.id, to: to.id) != nil, "\(from.id) to \(to.id)")
             }
         }

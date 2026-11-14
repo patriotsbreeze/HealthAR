@@ -38,7 +38,8 @@ final class AppCoordinator {
     private static let pinMessageSeconds: TimeInterval = 3
     private static let aiQuietSeconds: TimeInterval = 4
     private static let cutFollowsSpeechSeconds: TimeInterval = 1
-    private static let kickFollowsPhrase = "triage_ask"
+    /// The line on each step that asks what's going on, after which the AI gets its cue to speak.
+    private static let kickFollowsPhrase = [ScenarioModule.assessState: "assess_intro", ScenarioModule.triageState: "triage_ask"]
     private static let maxVoiceRows = 40
     private static let maxTranscriptCharacters = 400
 
@@ -397,6 +398,24 @@ final class AppCoordinator {
     var aiListening: Bool { liveConnected && micProblem == nil && !state.callActive && !micClosedForDispatcher }
 
     var isHandoff: Bool { definition?.logOnEnter == .emsArrived }
+
+    // MARK: - Assessing
+
+    /// The opening step when there's an AI: all camera, and the AI works out what's going on.
+    var isAssessing: Bool { state.stateID == ScenarioModule.assessState }
+
+    /// What the AI has reported since assess opened, from the log, so it's only what the gate let through.
+    var assessment: [AssessmentNote] { AssessmentNote.notes(from: log.entries) }
+
+    /// The AI's latest sentence, which the person has already heard. Shown apart from the notes, since
+    /// it's the AI's own words and the notes are fixed ones.
+    var lastAISentence: String? { AssessmentNote.lastSentence(of: saidTranscript) }
+
+    var assessStatus: String {
+        if liveConnected { return cameraLive ? "Watching and listening" : "Listening. The camera is off." }
+        if live == nil || lastDisconnect != nil { return "AI offline. Tap below to say what's happening." }
+        return "Connecting to the AI"
+    }
 
     var secondsUntilTimeout: TimeInterval? {
         guard let timeout = definition?.timeout, !engine.timersWait(for: state) else { return nil }
@@ -791,7 +810,7 @@ final class AppCoordinator {
             if audioHealth == .voiceFailed { audioHealth = .ok }
             // The seeded line isn't something the protocol said, so the model isn't told it was.
             if id != Self.seededPhraseID, id != Self.seededAwakePhraseID { dispatch(.phrasePlayed(id)) }
-            if id == Self.kickFollowsPhrase, state.stateID == ScenarioModule.triageState {
+            if Self.kickFollowsPhrase[state.stateID] == id {
                 kickPhraseDone = true
                 kickIfDue()
             }
@@ -1076,7 +1095,7 @@ final class AppCoordinator {
     /// client content can interrupt a turn.
     private func kickIfDue() {
         guard !kickSent, kickPhraseDone, liveConnected, gate.modelAudioOpen, !personSpeaking, quietSince == nil,
-              !state.modelTurnActive, state.stateID == ScenarioModule.triageState
+              !state.modelTurnActive, Self.kickFollowsPhrase[state.stateID] != nil
         else { return }
         kickSent = true
         gate.send(.kick)

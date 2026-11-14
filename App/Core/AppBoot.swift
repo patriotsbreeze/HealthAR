@@ -79,7 +79,9 @@ enum AppBoot {
         #endif
 
         return .ready(AppCoordinator(
-            engine: ProtocolEngine(bundle: protocolBundle),
+            // With an AI to look and listen, the rescue opens on assess. With none it opens on the
+            // arrest path's first question, since nothing could do the assessing.
+            engine: ProtocolEngine(bundle: key == nil ? protocolBundle : protocolBundle.startingWithAssessment()),
             audio: RescueAudioController(phraseTexts: texts, bundle: bundle),
             vision: vision,
             gate: gate,

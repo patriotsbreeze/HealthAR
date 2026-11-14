@@ -2,7 +2,7 @@
   "version": "triage.v1",
   "status": "DRAFT",
   "reviewer": null,
-  "open_states": ["triage", "general_talk", "choking_talk"],
+  "open_states": ["assess", "triage", "general_talk", "choking_talk"],
   "awake_correction_phrases": {
     "pulse_check": "correct_awake",
     "dose": "correct_awake",
@@ -20,6 +20,23 @@
     { "state": "responsive_patient", "edge": { "on": "human.triage_open", "to": "triage" } }
   ],
   "states": [
+    {
+      "id": "assess",
+      "kind": "triage",
+      "urgency": 0,
+      "after_pads": "responsive_patient",
+      "entry_phrases": ["assess_intro"],
+      "metronome": "off",
+      "frame_uplink": true,
+      "allowed_say": ["assign_helper"],
+      "timeout": { "seconds": 20, "to": "intake_responsive" },
+      "transitions": [
+        { "on": "human.patient_awake", "to": "triage" },
+        { "on": "model.other_concern", "to": "general_talk", "min_confidence": "medium" },
+        { "on": "model.choking", "to": "choking_talk", "min_confidence": "medium" }
+      ],
+      "citation": "Project design. The AI looks and listens before anything is assumed, and with no route in 20 s the arrest path's first question asks. Needs clinician approval"
+    },
     {
       "id": "triage",
       "kind": "triage",
@@ -74,6 +91,7 @@
     }
   ],
   "phrases": [
+    { "id": "assess_intro", "text": "Point the camera at what's happening, and tell me what's going on.", "citation": "Project" },
     { "id": "triage_ask", "text": "Tell me what's happening, or tap below.", "citation": "Project" },
     { "id": "triage_recheck", "text": "Call 911 if unsure. If they stop responding, tap Not responding now.", "citation": "Project proposal, needs clinician approval. The static card's call prompt and re-check, for a Yes that was a mis-tap" },
     { "id": "general_intro", "text": "Call 911. Follow the dispatcher. Stay with them.", "citation": "Project" },

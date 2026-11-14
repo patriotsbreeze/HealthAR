@@ -127,11 +127,21 @@ public enum BundleValidator {
         for state in owned {
             let phrases = state.entryPhrases + state.allowedSay + state.repeating.map(\.phrase) + (state.timeout?.phrases ?? [])
             if let missing = phrases.first(where: { !phraseIDs.contains($0) }) { return "dangling phrase \(missing): \(state.id)" }
+            // Nobody has said the patient is awake, so silence here has to reach the arrest path, and soon.
+            if state.id == ScenarioModule.assessState {
+                guard let timeout = state.timeout, timeout.to == ScenarioModule.assessFallback, timeout.ifBreathsAtLeast == nil else {
+                    return "assess must time out to \(ScenarioModule.assessFallback): \(state.id)"
+                }
+                guard timeout.seconds <= ScenarioModule.maxAssessSeconds else {
+                    return "assess waits over \(Int(ScenarioModule.maxAssessSeconds)) s: \(state.id)"
+                }
+            }
 
             for target in [state.timeout?.to, state.timeout?.ifBreathsAtLeast?.to].compactMap({ $0 }) {
                 guard let to = states[target] else { return "dangling timeout to \(target): \(state.id)" }
                 if let reason = refusal(from: state, to: to, in: states) { return "\(reason.rawValue): timeout \(state.id) to \(target)" }
                 for landing in landings(of: to, in: states) {
+                    if state.id == ScenarioModule.assessState, landing.id == ScenarioModule.assessFallback { continue }
                     guard !landing.kind.isArrestPath else { return "timeout into the arrest path: \(state.id) to \(landing.id)" }
                     guard landing.kind.isAwake else { return "timeout onto a card: \(state.id) to \(landing.id)" }
                     guard !isHumanOnly(landing) else { return "timeout into a human-only state: \(state.id) to \(landing.id)" }
@@ -284,9 +294,10 @@ public enum BundleValidator {
         state.id == ScenarioModule.breathingQuestion || (state.kind.isAwake && !isHumanOnly(state))
     }
 
-    /// Only a tap gets here. A report or a silence must never choose triage or a dose.
+    /// Only a tap gets here. A report or a silence must never choose triage or a dose. Assess is only
+    /// ever the first step, so nothing may lead back to it.
     private static func isHumanOnly(_ state: StateDefinition) -> Bool {
-        state.id == ScenarioModule.triageState || state.logOnEnter == .aspirinAdvised
+        state.id == ScenarioModule.triageState || state.id == ScenarioModule.assessState || state.logOnEnter == .aspirinAdvised
     }
 
     /// Never `uniqueKeysWithValues`, because this can run on data that hasn't passed yet.
