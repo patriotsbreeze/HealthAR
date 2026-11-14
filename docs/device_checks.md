@@ -18,7 +18,7 @@ Fill in each blank. A check with no entry has not been done. Never test against 
 
 | # | Check | Pass bar | Result | Notes |
 |---|---|---|---|---|
-| 1 | App installs and opens on the iPhone | Shows banner, name HealthAI SIM, and the SIM icon | ____ | |
+| 1 | App installs and opens on the iPhone | Shows banner, name HealthAI SIM, and the medical alert icon | ____ | |
 | 2 | Non-LiDAR iPhone, if one can be found | Runs with no depth, and the ring still works | ____ | |
 
 ## M1: offline protocol, metronome, call behaviour
