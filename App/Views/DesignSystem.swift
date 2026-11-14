@@ -237,12 +237,6 @@ extension DS {
         static let dockedInset: CGFloat = 12
     }
 
-    enum Listening {
-        static let orb: CGFloat = 56
-        /// The glow reaches out to this, and it's the bubble's whole height.
-        static let frame: CGFloat = 88
-    }
-
     /// No bounce anywhere. Motion explains a change, or it doesn't happen.
     enum Motion {
         static let stepIn = Animation.smooth(duration: 0.30, extraBounce: 0)

@@ -79,7 +79,6 @@ struct Pill<Content: View>: View {
 struct StatusRail: View {
     let coordinator: AppCoordinator
     @Binding var showsHUD: Bool
-    let onAgents: () -> Void
     let onSentinel: () -> Void
 
     var body: some View {
@@ -88,7 +87,6 @@ struct StatusRail: View {
             HStack(spacing: DS.Space.s) {
                 ElapsedPill(coordinator: coordinator)
                 LinkPill(coordinator: coordinator)
-                AgentsPill(action: onAgents)
                 Spacer(minLength: 0)
                 OverflowMenu(showsHUD: $showsHUD, onSentinel: onSentinel)
             }
@@ -143,32 +141,6 @@ private struct LinkPill: View {
     private var dot: Color {
         if coordinator.liveConnected { return DS.Colors.ok }
         return coordinator.liveSwapping ? DS.Colors.caution : DS.Colors.textTertiary
-    }
-}
-
-/// Opens the agents sheet, so anyone watching can see what each part is doing.
-private struct AgentsPill: View {
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Pill {
-                Image(systemName: "square.stack.3d.up.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(DS.Colors.textSecondary)
-                Text("Agents")
-                    .dsFont(DS.Fonts.label)
-                    .foregroundStyle(DS.Colors.textPrimary)
-                    .lineLimit(1)
-            }
-            // The pill is short, but the tap target isn't.
-            .frame(minHeight: DS.Height.control)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Agents")
-        .accessibilityHint("Shows what each part of the app is doing")
-        .dynamicTypeSize(...DynamicTypeSize.xLarge)
     }
 }
 

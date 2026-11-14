@@ -102,8 +102,6 @@ final class AppCoordinator {
     /// One mode's session has stopped and the next isn't up, so nothing is hearing for now.
     private(set) var liveSwapping = false
     private(set) var aiQuiet = false
-    /// The AI's voice is coming out of the speaker right now.
-    private(set) var aiTalking = false
     private(set) var lastDisconnect: String?
     private(set) var audioHealth = AudioHealth.starting
     private(set) var micProblem: String?
@@ -383,12 +381,6 @@ final class AppCoordinator {
 
     var micClosedForDispatcher: Bool { state.dispatcherHeardUntil != nil }
 
-    /// The AED finder needs a key to ask with and a camera to look through.
-    var aedFinderAvailable: Bool { canLocate && showsCamera }
-
-    /// The AI is up and the mic is open to it, so anything said now is heard.
-    var aiListening: Bool { liveConnected && micProblem == nil && !state.callActive && !micClosedForDispatcher }
-
     var isHandoff: Bool { definition?.logOnEnter == .emsArrived }
 
     var secondsUntilTimeout: TimeInterval? {
@@ -538,8 +530,6 @@ final class AppCoordinator {
         let status = vision.status
         if status != visionStatus { visionStatus = status }
         if let until = handsGuideUntil, now >= until { handsGuideUntil = nil }
-        let talking = liveConnected && audio.modelAudioPending
-        if talking != aiTalking { aiTalking = talking }
         retryLocate(at: now)
         watchAIVoice(at: now)
     }
@@ -1098,8 +1088,6 @@ final class AppCoordinator {
     }
 
     private func noteModelVoice() {
-        // Its first audio just played, so this shows without waiting for the next tick.
-        if liveConnected { aiTalking = true }
         quietSince = nil
         awaitingAnswer = false
         if aiQuiet { aiQuiet = false }

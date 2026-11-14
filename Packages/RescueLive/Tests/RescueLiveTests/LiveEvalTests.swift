@@ -325,7 +325,6 @@ private struct EvalContext: Sendable {
     func transport(mode: LiveMode, log: FrameLog) -> GeminiLiveTransport {
         var configuration = GeminiLiveConfiguration(apiKey: key, toolContract: contracts[mode] ?? Data())
         configuration.systemInstruction = mode == .awake ? SystemPrompt.awake(pack: bundle.knowledgePack, appLines: bundle.awakeLines) : SystemPrompt.text
-        if let short = ProcessInfo.processInfo.environment["HEALTHAI_EVAL_SHORT_PROMPT"] { configuration.systemInstruction = short }
         configuration.voiceName = EvalEnv.voice
         return GeminiLiveTransport(configuration: configuration) { request in
             RecordingSocket(inner: URLSessionLiveSocket(session: evalSession, request: request), log: log)
@@ -1337,14 +1336,12 @@ private func reportedFindings(in run: EvalRun) -> [String] {
             var run: EvalRun
         }
         let line = try EvalSpeech.pcm("Can you tell me everything I should be watching out for while we wait?")
-        // The app ends a turn itself, so HEALTHAI_EVAL_DELIVERY=app_path times what a phone sees.
-        let delivery = ProcessInfo.processInfo.environment["HEALTHAI_EVAL_DELIVERY"].flatMap(SpeechDelivery.init(rawValue:)) ?? .silence
         var samples: [Sample] = []
         for index in 1...3 {
             let run = try LiveRun(context: context, state: "chest_wait", label: "turn_timing_\(index)")
             try await connected(run)
             await run.sleep(0.3)
-            await run.speak(line, delivery: delivery)
+            await run.speak(line)
             await run.settle(cap: 30)
             let times = await run.turnTimes()
             let result = await run.finish()

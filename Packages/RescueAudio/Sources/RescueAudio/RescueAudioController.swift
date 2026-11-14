@@ -192,9 +192,6 @@ public final class RescueAudioController: @unchecked Sendable {
         }
     }
 
-    /// Any thread. The model's voice has audio queued that hasn't played yet, so it's talking now.
-    public var modelAudioPending: Bool { core.modelRing.pending > 0 }
-
     public func flushModelAudio() {
         modelGeneration.add(1, ordering: .acquiringAndReleasing)
         core.modelRing.flush()
