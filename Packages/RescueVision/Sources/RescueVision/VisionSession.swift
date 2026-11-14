@@ -513,6 +513,27 @@ public final class VisionSession: Sendable {
         }
     }
 
+    /// The sternum ring, and which way the rescuer's hand has to slide to reach it, on place_hands,
+    /// the hands guide, and compressions. Hand detection runs only while this can show.
+    private func handGuide(at now: TimeInterval) -> VisionOverlay.HandGuide? {
+        let mapping: DisplayMapping? = state.withLock { state in
+            guard state.arActive, state.showsChestEstimate(at: now), !state.ghostPractice,
+                  let camera = state.ledger.latest, camera.tracking == .normal,
+                  (0...VisionOverlay.maxCameraAge).contains(now - camera.timestamp) else { return nil }
+            return state.mapping
+        }
+        pose.setWantsHands(mapping != nil)
+        guard let mapping, let chest = pose.chestEstimate,
+              (0...VisionOverlay.handGuideHold).contains(now - chest.capturedAt) else { return nil }
+        var guide = VisionOverlay.HandGuide(target: mapping.ring(for: chest.target))
+        if let seen = pose.hands, (0...VisionOverlay.maxHandAge).contains(now - seen.capturedAt),
+           let hand = HandPlacementGuide.nearest(seen.hands, to: chest.target, imageAspect: mapping.imageAspect) {
+            guide.hand = mapping.viewPoint(fromImage: hand.heel)
+            guide.guidance = HandPlacementGuide.guide(hand: hand.heel, target: chest.target, torso: chest.torso, imageAspect: mapping.imageAspect)
+        }
+        return guide
+    }
+
     /// The 3D surface marker works independently of the Blender asset and body fit.
     public func chestSurfacePlacement() -> ChestSurfacePlacement? {
         let now = clock()
@@ -577,6 +598,7 @@ public final class VisionSession: Sendable {
         if overlay.sternumEstimate != nil {
             overlay.chestEstimateLabel = "Estimated sternum region - Not anatomically verified"
         }
+        overlay.handGuide = handGuide(at: now)
         overlay.handsIn3D = chestSurfacePlacement() != nil || handsPlacement() != nil
         return overlay
     }

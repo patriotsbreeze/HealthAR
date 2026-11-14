@@ -56,6 +56,9 @@ public struct PatientBodyPlacement: Sendable, Equatable {
     /// Centre of the real head in the world, from depth at the face. Nil when no head was seen, and
     /// the template head stands in.
     public var head: SIMD3<Float>? = nil
+    /// Hips, and whichever knees and ankles were seen with depth behind them, in the world. A leg
+    /// joint left out falls back to the template's, hung from the joint above it.
+    public var legs: [BodyJoint: SIMD3<Float>] = [:]
 }
 
 struct TimedPatientBody: Sendable {
@@ -74,6 +77,18 @@ enum PatientModelFit {
     static let headHalfDepth: Float = 0.08
     /// The nearest and farthest a head centre may sit from the middle of the shoulders.
     static let headReach: ClosedRange<Float> = 0.1...0.45
+    /// Template leg joints in model space, from patient() in the same script: +z is the right side.
+    public static let templateLegs: [BodyJoint: SIMD3<Float>] = [
+        .leftHip: [-0.42, -0.1, -0.1], .leftKnee: [-0.84, -0.12, -0.12], .leftAnkle: [-1.25, -0.15, -0.13],
+        .rightHip: [-0.42, -0.1, 0.1], .rightKnee: [-0.84, -0.12, 0.12], .rightAnkle: [-1.25, -0.15, 0.13],
+    ]
+    /// Each seen leg joint, the joint it hangs from, and how far apart in metres the two may be.
+    /// `depth` is the leg's half-thickness there, since the camera sees its surface, not its middle.
+    static let legBones: [(joint: BodyJoint, parent: BodyJoint, reach: ClosedRange<Float>, depth: Float)] = [
+        (.leftKnee, .leftHip, 0.2...0.7, 0.06), (.leftAnkle, .leftKnee, 0.2...0.65, 0.045),
+        (.rightKnee, .rightHip, 0.2...0.7, 0.06), (.rightAnkle, .rightKnee, 0.2...0.65, 0.045),
+    ]
+    static let hipDepth: Float = 0.075
 
     /// - Parameter requireLying: When false, any single person's torso is fitted, in whatever pose,
     ///   and the result is marked as not lying so no chest estimate shows on it.
@@ -115,7 +130,22 @@ enum PatientModelFit {
         ))
         var placement = PatientBodyPlacement(transform: transform, chest: chest + normal * 0.008, normal: normal, lying: lying)
         placement.head = head(of: person, depth: depth, camera: camera, shoulders: shoulders, scale: sy)
+        placement.legs = legs(of: person, depth: depth, camera: camera, hips: [.leftHip: lh, .rightHip: rh])
         return placement
+    }
+
+    /// Knees and ankles from depth, each kept only when it sits a leg bone's length from the joint above.
+    static func legs(of person: DetectedPerson, depth: BodyDepth, camera: CameraPose, hips: [BodyJoint: SIMD3<Float>]) -> [BodyJoint: SIMD3<Float>] {
+        let inward = { (surface: SIMD3<Float>, by: Float) in surface + simd_normalize(surface - camera.position) * by }
+        var found = hips.mapValues { inward($0, hipDepth) }
+        for bone in legBones {
+            guard let parent = found[bone.parent], let joint = person.extras[bone.joint], joint.confidence >= 0.3,
+                  let surface = depth.worldPoint(joint.position, camera: camera) else { continue }
+            let point = inward(surface, bone.depth)
+            guard bone.reach.contains(simd_distance(point, parent)) else { continue }
+            found[bone.joint] = point
+        }
+        return found
     }
 
     /// Depth at the face is its surface, so the centre sits a head's half-depth further from the camera.

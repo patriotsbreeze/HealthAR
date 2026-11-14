@@ -48,13 +48,21 @@ private func process(_ session: VisionSession, depth: BodyDepth? = nil) async th
     #expect(session.overlay().sternumEstimate == nil)
 }
 
-@Test func sternumRegionRejectsInferredHipsAndAmbiguousPatients() async throws {
+@Test func sternumRegionAcceptsHipsEstimatedFromTheHeadAndShoulders() async throws {
     var inferred = subject
     inferred.torsoEstimated = true
+    let clock = TestClock()
+    let session = makeChestSession(clock, people: [inferred])
+    session.apply(.overlay(.chestCenter))
+    try await process(session)
+    #expect(session.overlay().sternumEstimate != nil, "a lying body seen from above rarely shows confident hips")
+}
+
+@Test func sternumRegionRejectsFaintStandingAndAmbiguousPatients() async throws {
     var faint = subject
     faint.leftShoulder.confidence = 0.2
     let standing = person(center: [0.5, 0.55], axisDegrees: 90, aspect: 4.0 / 3)
-    for people in [[inferred], [faint], [standing], [subject, subject]] {
+    for people in [[faint], [standing], [subject, subject]] {
         let clock = TestClock()
         let session = makeChestSession(clock, people: people)
         session.apply(.overlay(.chestCenter))

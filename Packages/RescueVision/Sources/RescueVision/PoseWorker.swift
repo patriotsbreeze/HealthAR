@@ -150,6 +150,9 @@ final class PoseWorker: Sendable {
         var jointPose: TimedPose?
         var patientBody: TimedPatientBody?
         var chestEstimate: TimedChestEstimate?
+        /// Hands are looked for only while the hand placement guide is up, since it costs a second request.
+        var wantsHands = false
+        var hands: TimedHands?
         var lastNoTargetReason: NoTargetReason?
         var smoother = JointSmoother()
         var lastBone: LimbBone?
@@ -163,9 +166,11 @@ final class PoseWorker: Sendable {
 
     private let state = Mutex(State())
     private let detect: PoseFrameDetector
+    private let detectHands: HandFrameDetector
     private let selector = PatientSelector()
 
-    init(detect: @escaping PoseDetector, detectFrame: PoseFrameDetector? = nil) {
+    init(detect: @escaping PoseDetector, detectFrame: PoseFrameDetector? = nil, detectHands: HandFrameDetector? = nil) {
+        self.detectHands = detectHands ?? { frame, rotation in await VisionHandDetector().detect(frame, rotation: rotation) }
         self.detect = detectFrame ?? { frame, rotation in
             let people = await detect(frame, rotation)
             return PoseDetection(people: people, joints: people.flatMap(\.visibleJoints), skeletons: people.map { DetectedSkeleton(person: $0) })
@@ -175,6 +180,15 @@ final class PoseWorker: Sendable {
     var jointPose: TimedPose? { state.withLock { $0.jointPose } }
 
     var chestEstimate: TimedChestEstimate? { state.withLock { $0.chestEstimate } }
+
+    var hands: TimedHands? { state.withLock { $0.hands } }
+
+    func setWantsHands(_ wants: Bool) {
+        state.withLock { state in
+            state.wantsHands = wants
+            if !wants { state.hands = nil }
+        }
+    }
 
     var patientBody: TimedPatientBody? { state.withLock { $0.patientBody } }
 
@@ -195,6 +209,7 @@ final class PoseWorker: Sendable {
             state.jointPose = nil
             state.patientBody = nil
             state.chestEstimate = nil
+            state.hands = nil
             state.lastNoTargetReason = nil
             state.smoother.reset()
             state.lastBone = nil
@@ -207,6 +222,7 @@ final class PoseWorker: Sendable {
         let generation = state.withLock { $0.generation }
         let detection = await detect(frame, .right)
         publishJoints(detection, record: record, generation: generation, depth: frame.bodyDepth)
+        await findHands(frame, rotation: .right, record: record, generation: generation)
         let people = detection.people
         let gravity = record.tracking == .notAvailable ? nil : record.pose.gravityInImage
         return CompressionSignal.sample(people: people, gravity: gravity, imageAspect: record.pose.imageAspect)
@@ -216,6 +232,7 @@ final class PoseWorker: Sendable {
         let (rotation, generation) = state.withLock { ($0.scan.current, $0.generation) }
         let detection = await detect(frame, rotation)
         publishJoints(detection, record: record, generation: generation, depth: frame.bodyDepth)
+        await findHands(frame, rotation: rotation, record: record, generation: generation)
         let people = detection.people
         state.withLock { state in
             guard state.generation == generation else { return }
@@ -229,6 +246,15 @@ final class PoseWorker: Sendable {
             case .rescuer:
                 break
             }
+        }
+    }
+
+    private func findHands(_ frame: CapturedFrame, rotation: CaptureRotation, record: FrameRecord, generation: UInt64) async {
+        guard state.withLock({ $0.wantsHands }) else { return }
+        let hands = await detectHands(frame, rotation)
+        state.withLock { state in
+            guard state.generation == generation, state.wantsHands else { return }
+            state.hands = TimedHands(hands: hands, capturedAt: record.timestamp)
         }
     }
 
@@ -251,8 +277,9 @@ final class PoseWorker: Sendable {
         state.withLock { state in
             guard state.generation == generation else { return }
             state.jointPose = TimedPose(regions: BodyRegions(), joints: detection.joints, skeletons: detection.skeletons, frameID: record.id, capturedAt: record.timestamp)
-            // Never hold a chest marker on an ambiguous or lost patient.
-            state.chestEstimate = chest
+            // Never hold a chest marker on an ambiguous patient. One lost for a moment, as hands
+            // cover the chest, keeps the last estimate, which still ages out where it's read.
+            if chest != nil || sel == .none(.multipleCandidates) { state.chestEstimate = chest }
             // One frame failing the depth fit keeps the last good one, which still ages out on its own.
             if let fitted { state.patientBody = TimedPatientBody(placement: fitted, capturedAt: record.timestamp) }
         }
