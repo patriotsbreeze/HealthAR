@@ -47,7 +47,7 @@ struct MainScreen: View {
                 }
                 // Sized first, so the band gets what's left, and never less than its least.
                 if coordinator.isAssessing {
-                    AssessPanel(coordinator: coordinator, onDispatcher: { present(.dispatcher) }, screenHeight: screenHeight)
+                    AssessPanel(coordinator: coordinator, screenHeight: screenHeight)
                         .layoutPriority(1)
                 } else {
                     CommandDeck(coordinator: coordinator, onStopRequested: { pendingStop = $0 })

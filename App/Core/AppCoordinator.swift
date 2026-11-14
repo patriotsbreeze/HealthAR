@@ -209,6 +209,8 @@ final class AppCoordinator {
     /// The simulated 911 agent's call, played into the log once a rescue. Cancelled on reset.
     @ObservationIgnored private var callerAgentTask: Task<Void, Never>?
     @ObservationIgnored private var callerAgentRan = false
+    /// The simulated 911 agent's call is playing into the log now.
+    private(set) var callerAgentActive = false
     /// What the rescuer said since the log last took it, so it goes in as one line and not word by word.
     @ObservationIgnored private var heardPending = ""
     /// When the read behind the scene lines on screen started, so an older reply can't overwrite them.
@@ -1280,7 +1282,15 @@ final class AppCoordinator {
 
     private func startCallerAgentIfDue() {
         guard state.stateID == Self.callerAgentState, !callerAgentRan else { return }
+        spawnCallerAgent()
+    }
+
+    /// Starts the simulated 911 agent's call now, from the Spawn 911 agent button or the call step.
+    /// One at a time; it moves no step, and nothing is dialed.
+    func spawnCallerAgent() {
+        guard !callerAgentActive else { return }
         callerAgentRan = true
+        callerAgentActive = true
         let lines = Self.callerAgentLines(callerScript)
         let round = assessRound
         callerAgentTask = Task { [weak self] in
@@ -1289,6 +1299,7 @@ final class AppCoordinator {
                 self.appendLog(.call, line)
                 try? await Task.sleep(for: .seconds(Self.callerAgentStepSeconds))
             }
+            if let self, round == self.assessRound { self.callerAgentActive = false }
         }
     }
 
@@ -1333,6 +1344,7 @@ final class AppCoordinator {
         callerAgentTask?.cancel()
         callerAgentTask = nil
         callerAgentRan = false
+        callerAgentActive = false
         lastQuickAt = -.infinity
         lastLiveSceneAt = -.infinity
         assessmentSource = nil

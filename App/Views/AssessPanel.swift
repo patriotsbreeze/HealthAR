@@ -5,7 +5,6 @@ import SwiftUI
 /// CPR and the dispatcher never wait on it, and a tap can always say what it hasn't worked out.
 struct AssessPanel: View {
     let coordinator: AppCoordinator
-    let onDispatcher: () -> Void
     @State private var tapping = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -105,10 +104,10 @@ struct AssessPanel: View {
     /// Tap instead goes under them.
     private var controls: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: DS.Space.s) {
+            HStack(spacing: 6) {
                 startCPR
                 dispatcher
-                Spacer(minLength: DS.Space.s)
+                Spacer(minLength: 0)
                 tapInstead
             }
             VStack(alignment: .leading, spacing: DS.Space.xs) {
@@ -128,7 +127,7 @@ struct AssessPanel: View {
                 .foregroundStyle(DS.Colors.textPrimary)
                 .lineLimit(1)
                 .fixedSize()
-                .padding(.horizontal, DS.Space.m)
+                .padding(.horizontal, 11)
                 .frame(minHeight: DS.Height.camera)
                 .background(DS.Colors.criticalFill, in: Capsule(style: .continuous))
         }
@@ -136,19 +135,19 @@ struct AssessPanel: View {
     }
 
     private var dispatcher: some View {
-        Button(action: onDispatcher) {
-            Label("Mock 911", systemImage: "phone.fill")
+        Button { coordinator.spawnCallerAgent() } label: {
+            Label("Spawn 911 agent", systemImage: "phone.fill")
                 .dsFont(DS.Fonts.buttonCompact)
                 .foregroundStyle(DS.Colors.textPrimary)
                 .lineLimit(1)
                 .fixedSize()
-                .padding(.horizontal, DS.Space.m)
+                .padding(.horizontal, 11)
                 .frame(minHeight: DS.Height.camera)
                 .background(DS.Glass.fill, in: Capsule(style: .continuous))
                 .overlay(Capsule(style: .continuous).strokeBorder(DS.Glass.edge, lineWidth: 1))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Call mock dispatcher. Places no call.")
+        .accessibilityLabel("Spawn 911 agent. A simulated call in the log. Places no call.")
     }
 
     /// An icon, so it shares the row with Start CPR and the dispatcher instead of taking its own.

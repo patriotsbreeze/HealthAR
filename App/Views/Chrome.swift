@@ -86,7 +86,7 @@ struct StatusRail: View {
             HStack(spacing: DS.Space.s) {
                 ElapsedPill(coordinator: coordinator)
                     .modifier(OperatorGesture(action: onOperator))
-                AgentsPill(action: onAgents)
+                AgentsStrip(coordinator: coordinator, action: onAgents)
                 if coordinator.operatorUsed { OperatorBadge() }
                 Spacer(minLength: 0)
                 OverflowMenu(coordinator: coordinator, showsHUD: $showsHUD, onDispatcher: onDispatcher, onSentinel: onSentinel)
@@ -119,29 +119,90 @@ private struct ElapsedPill: View {
     }
 }
 
-/// Opens the agents sheet, so anyone watching can see what each part is doing.
-private struct AgentsPill: View {
+/// Every agent that's working right now, one small chip each, in place of a button that hid them.
+/// A tap still opens the agents sheet for the detail.
+private struct AgentsStrip: View {
+    let coordinator: AppCoordinator
     let action: () -> Void
+
+    struct Working: Identifiable, Equatable {
+        var id: String { name }
+        var symbol: String
+        var name: String
+        var status: String
+        /// Doing something this moment, rather than standing by.
+        var busy: Bool
+    }
 
     var body: some View {
         Button(action: action) {
-            Pill {
-                Image(systemName: "square.stack.3d.up.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(DS.Colors.textSecondary)
-                Text("Agents")
-                    .dsFont(DS.Fonts.label)
-                    .foregroundStyle(DS.Colors.textPrimary)
-                    .lineLimit(1)
+            // Vision's statuses change without telling anyone, so it looks again twice a second.
+            TimelineView(.periodic(from: .now, by: 0.5)) { _ in
+                let working = Self.working(coordinator)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 4) {
+                        if working.isEmpty {
+                            chip(Working(symbol: "square.stack.3d.up.fill", name: "Agents", status: "Agents", busy: true))
+                        }
+                        ForEach(working) { chip($0) }
+                    }
+                }
+                .scrollDisabled(true)
+                .animation(DS.Motion.alert, value: working)
             }
-            // The pill is short, but the tap target isn't.
             .frame(minHeight: DS.Height.control)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Agents")
+        .accessibilityLabel("Agents: " + Self.working(coordinator).map { "\($0.name), \($0.status)" }.joined(separator: "; "))
         .accessibilityHint("Shows what each part of the app is doing")
         .dynamicTypeSize(...DynamicTypeSize.xLarge)
+    }
+
+    private func chip(_ agent: Working) -> some View {
+        HStack(spacing: 3) {
+            Circle()
+                .fill(agent.busy ? DS.Assessment.tint : DS.Colors.ok)
+                .frame(width: 5, height: 5)
+            Image(systemName: agent.symbol)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(DS.Colors.textSecondary)
+            // Only a busy agent spells out what it's doing, so five fit beside the clock.
+            if agent.busy {
+                Text(agent.status)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(DS.Colors.textPrimary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 7)
+        .frame(minHeight: 24)
+        .glassSurface(Capsule(style: .continuous))
+        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+    }
+
+    /// Only the ones running now, so the strip says what's working, not what exists.
+    static func working(_ c: AppCoordinator) -> [Working] {
+        var all: [Working] = []
+        if c.liveConnected {
+            let voice = c.aiTalking ? "Talking" : c.aiListening ? "Listening" : "On"
+            all.append(Working(symbol: "waveform", name: "Voice guide", status: voice, busy: c.aiTalking))
+            all.append(Working(symbol: "checkmark.shield", name: "Safety checker", status: "Checking", busy: false))
+        }
+        if c.assessing || c.sceneRead != nil {
+            all.append(Working(symbol: "eye", name: "Scene reader", status: c.assessing ? "Looking" : "Watching", busy: c.assessing))
+        }
+        if c.aedFinderAvailable {
+            switch c.vision.aedStatus {
+            case .locating: all.append(Working(symbol: "viewfinder", name: "AED finder", status: "Searching", busy: true))
+            case .located: all.append(Working(symbol: "viewfinder", name: "AED finder", status: "AED found", busy: false))
+            default: break
+            }
+        }
+        if c.callerAgentActive {
+            all.append(Working(symbol: "phone.fill", name: "911 agent", status: "On call", busy: true))
+        }
+        return all
     }
 }
 
