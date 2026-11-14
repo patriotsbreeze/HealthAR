@@ -43,6 +43,7 @@ struct DispatcherSheet: View {
                             }
                         }
                     }
+                    BuildingBriefSection(coordinator: coordinator)
                     field("Situation") {
                         Text(script.situation).dsFont(DS.Fonts.prompt)
                     }
