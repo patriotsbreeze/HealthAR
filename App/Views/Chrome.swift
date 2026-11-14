@@ -119,90 +119,95 @@ private struct ElapsedPill: View {
     }
 }
 
-/// Every agent that's working right now, one small chip each, in place of a button that hid them.
-/// A tap still opens the agents sheet for the detail.
+/// Every agent, one fixed slot each in a fixed order, so the row never moves: only the dot changes,
+/// grey when it's off, green when it's running, blue when it's busy this moment. The words are in
+/// the agents sheet, which a tap still opens, and in VoiceOver.
 private struct AgentsStrip: View {
     let coordinator: AppCoordinator
     let action: () -> Void
 
-    struct Working: Identifiable, Equatable {
+    enum Activity: Equatable { case off, running, busy }
+
+    struct Slot: Identifiable, Equatable {
         var id: String { name }
         var symbol: String
+        /// A word or two under the icon, so which agent it is never needs guessing.
+        var tag: String
         var name: String
         var status: String
-        /// Doing something this moment, rather than standing by.
-        var busy: Bool
+        var activity: Activity
     }
+
+    static let slotWidth: CGFloat = 40
 
     var body: some View {
         Button(action: action) {
             // Vision's statuses change without telling anyone, so it looks again twice a second.
             TimelineView(.periodic(from: .now, by: 0.5)) { _ in
-                let working = Self.working(coordinator)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 4) {
-                        if working.isEmpty {
-                            chip(Working(symbol: "square.stack.3d.up.fill", name: "Agents", status: "Agents", busy: true))
-                        }
-                        ForEach(working) { chip($0) }
-                    }
+                HStack(spacing: 4) {
+                    ForEach(Self.slots(coordinator)) { slot($0) }
                 }
-                .scrollDisabled(true)
-                .animation(DS.Motion.alert, value: working)
             }
             .frame(minHeight: DS.Height.control)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Agents: " + Self.working(coordinator).map { "\($0.name), \($0.status)" }.joined(separator: "; "))
+        .accessibilityLabel("Agents: " + Self.slots(coordinator).map { "\($0.name), \($0.status)" }.joined(separator: "; "))
         .accessibilityHint("Shows what each part of the app is doing")
-        .dynamicTypeSize(...DynamicTypeSize.xLarge)
     }
 
-    private func chip(_ agent: Working) -> some View {
-        HStack(spacing: 3) {
-            Circle()
-                .fill(agent.busy ? DS.Assessment.tint : DS.Colors.ok)
-                .frame(width: 5, height: 5)
-            Image(systemName: agent.symbol)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(DS.Colors.textSecondary)
-            // Only a busy agent spells out what it's doing, so five fit beside the clock.
-            if agent.busy {
-                Text(agent.status)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(DS.Colors.textPrimary)
-                    .lineLimit(1)
+    private func slot(_ slot: Slot) -> some View {
+        VStack(spacing: 1) {
+            Image(systemName: slot.symbol)
+                .font(.system(size: 12, weight: .semibold))
+            Text(slot.tag)
+                .font(.system(size: 8, weight: .bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .foregroundStyle(slot.activity == .off ? DS.Colors.textTertiary : DS.Colors.textPrimary)
+        .frame(width: Self.slotWidth, height: 34)
+        .glassSurface(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(alignment: .topTrailing) {
+                Circle()
+                    .fill(color(slot.activity))
+                    .frame(width: 6, height: 6)
+                    .offset(x: -4, y: 4)
             }
-        }
-        .padding(.horizontal, 7)
-        .frame(minHeight: 24)
-        .glassSurface(Capsule(style: .continuous))
-        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            .opacity(slot.activity == .off ? 0.55 : 1)
+            .animation(DS.Motion.alert, value: slot.activity)
     }
 
-    /// Only the ones running now, so the strip says what's working, not what exists.
-    static func working(_ c: AppCoordinator) -> [Working] {
-        var all: [Working] = []
-        if c.liveConnected {
-            let voice = c.aiTalking ? "Talking" : c.aiListening ? "Listening" : "On"
-            all.append(Working(symbol: "waveform", name: "Voice guide", status: voice, busy: c.aiTalking))
-            all.append(Working(symbol: "checkmark.shield", name: "Safety checker", status: "Checking", busy: false))
+    private func color(_ activity: Activity) -> Color {
+        switch activity {
+        case .off: DS.Colors.textTertiary
+        case .running: DS.Colors.ok
+        case .busy: DS.Assessment.tint
         }
-        if c.assessing || c.sceneRead != nil {
-            all.append(Working(symbol: "eye", name: "Scene reader", status: c.assessing ? "Looking" : "Watching", busy: c.assessing))
-        }
-        if c.aedFinderAvailable {
+    }
+
+    /// The same five, always, in this order.
+    static func slots(_ c: AppCoordinator) -> [Slot] {
+        let live = c.liveConnected
+        let voice: (String, Activity) = !live ? ("Offline", .off) : c.aiTalking ? ("Talking", .busy) : c.aiListening ? ("Listening", .running) : ("Connected", .running)
+        let scene: (String, Activity) = c.assessing ? ("Looking", .busy) : c.sceneRead != nil ? ("Watching", .running) : ("Off", .off)
+        let aed: (String, Activity)
+        if !c.aedFinderAvailable {
+            aed = ("Off", .off)
+        } else {
             switch c.vision.aedStatus {
-            case .locating: all.append(Working(symbol: "viewfinder", name: "AED finder", status: "Searching", busy: true))
-            case .located: all.append(Working(symbol: "viewfinder", name: "AED finder", status: "AED found", busy: false))
-            default: break
+            case .locating: aed = ("Searching", .busy)
+            case .located: aed = ("AED found", .running)
+            default: aed = ("Standing by", .running)
             }
         }
-        if c.callerAgentActive {
-            all.append(Working(symbol: "phone.fill", name: "911 agent", status: "On call", busy: true))
-        }
-        return all
+        return [
+            Slot(symbol: "mic.fill", tag: "VOICE", name: "Voice guide", status: voice.0, activity: voice.1),
+            Slot(symbol: "checkmark.shield.fill", tag: "SAFETY", name: "Safety checker", status: live ? "Checking" : "Off", activity: live ? .running : .off),
+            Slot(symbol: "eye.fill", tag: "SCENE", name: "Scene reader", status: scene.0, activity: scene.1),
+            Slot(symbol: "bolt.heart.fill", tag: "AED", name: "AED finder", status: aed.0, activity: aed.1),
+            Slot(symbol: "phone.fill", tag: "911", name: "911 agent", status: c.callerAgentActive ? "On call" : "Ready", activity: c.callerAgentActive ? .busy : .off),
+        ]
     }
 }
 
