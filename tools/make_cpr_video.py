@@ -11,6 +11,11 @@ It opens on the grip, since that's the point:
 2. Its fingers curl down and lace while the lower hand's lift off the chest, by about 1.3 s.
 3. A beat on the finished grip, then compressions: 5 cm deep at 110 a minute.
 
+With --clip it writes only the first 2 seconds, the grip, uncaptioned at 480 x 480, for the app's
+corner reminder as CPR starts, and a still of the finished grip beside it for Reduce Motion:
+
+    blender -b --python tools/make_cpr_video.py -- GripReminder.mp4 --clip
+
 Captions follow AHA 2025 adult BLS wording loosely and are DRAFT until a clinician signs them,
 like every line in the app. The hands are built here from the same pieces as tools/make_ghost_model.py,
 but jointed, so the fingers can move.
@@ -37,6 +42,9 @@ CAPTIONS = [
     (66, 240, "Push hard and fast: 2 inches deep, 100 to 120 a minute"),
 ]
 LAST_FRAME = 240
+# The reminder: the top hand comes down and laces in by frame 40, then the grip holds to the loop.
+CLIP = "--clip" in sys.argv
+CLIP_FRAMES = 60
 
 
 # --- Jointed hands -------------------------------------------------------------------------------
@@ -245,9 +253,9 @@ def main():
     g.clear_scene()
     scene = bpy.context.scene
     scene.render.engine = "BLENDER_EEVEE"
-    scene.render.resolution_x = scene.render.resolution_y = 1080
+    scene.render.resolution_x = scene.render.resolution_y = 480 if CLIP else 1080
     scene.render.fps = FPS
-    scene.frame_start, scene.frame_end = 0, LAST_FRAME
+    scene.frame_start, scene.frame_end = 0, (CLIP_FRAMES - 1 if CLIP else LAST_FRAME)
     scene.view_settings.view_transform = "Standard"
     scene.eevee.taa_render_samples = 24
 
@@ -334,13 +342,16 @@ def main():
     bpy.context.collection.objects.link(camera)
     scene.camera = camera
     tilt = math.radians(12)
-    for frame, height in ((0, 0.34), (60, 0.35), (LAST_FRAME, 0.4)):
+    # A corner card is small, so the clip sits closer in on the hands.
+    heights = ((0, 0.32), (LAST_FRAME, 0.32)) if CLIP else ((0, 0.34), (60, 0.35), (LAST_FRAME, 0.4))
+    for frame, height in heights:
         # Model +z is toward the rescuer; the camera sits back that way by its tilt and looks at the grip.
-        camera.location = Vector(g.blender((0, height, -0.03 + height * math.tan(tilt))))
+        camera.location = Vector(g.blender((0, height, (-0.01 if CLIP else -0.03) + height * math.tan(tilt))))
         camera.rotation_euler = (tilt, 0, 0)
         camera.keyframe_insert("location", frame=frame)
         camera.keyframe_insert("rotation_euler", frame=frame)
-    caption_cards(camera)
+    if not CLIP:
+        caption_cards(camera)
 
     bpy.ops.object.light_add(type="SUN", location=(0.5, 0.5, 2), rotation=(0.6, 0.3, 0.4))
     bpy.context.active_object.data.energy = 2.2
@@ -357,6 +368,13 @@ def main():
             scene.render.filepath = os.path.join(os.path.dirname(OUT), f"cpr_frame_{frame:03d}.png")
             bpy.ops.render.render(write_still=True)
         return
+
+    if CLIP:
+        # The finished grip as a still, for Reduce Motion.
+        scene.frame_set(CLIP_FRAMES - 1)
+        scene.render.filepath = OUT.replace(".mp4", ".png")
+        bpy.ops.render.render(write_still=True)
+        scene.frame_set(0)
 
     scene.render.image_settings.media_type = "VIDEO" if hasattr(scene.render.image_settings, "media_type") else scene.render.image_settings.file_format
     scene.render.image_settings.file_format = "FFMPEG"

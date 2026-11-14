@@ -59,6 +59,50 @@ import Testing
         #expect(coordinator.showsBeatPulse)
     }
 
+    @Test func theGripReminderShowsForTheFirstSecondsOfCompressions() throws {
+        let fixture = try Fixture(arSupported: true, cameraAllowed: true)
+        let coordinator = fixture.coordinator
+        coordinator.beginRescue()
+        #expect(!coordinator.showsGripReminder, "not before CPR is near")
+        coordinator.perform(.startCpr)
+        #expect(coordinator.showsGripReminder)
+        fixture.run(seconds: AppCoordinator.gripReminderSeconds - 1)
+        #expect(coordinator.showsGripReminder)
+        fixture.run(seconds: 1.2)
+        #expect(!coordinator.showsGripReminder, "a reminder, not a fixture")
+    }
+
+    @Test func theGripReminderNeedsNoCamera() throws {
+        let fixture = try Fixture()
+        let coordinator = fixture.coordinator
+        coordinator.beginRescue()
+        coordinator.perform(.startCpr)
+        #expect(coordinator.showsGripReminder)
+    }
+
+    @Test func theGripReminderShowsWhereTheHandsArePlaced() throws {
+        let fixture = try Fixture(arSupported: true, cameraAllowed: true)
+        let coordinator = fixture.coordinator
+        coordinator.beginRescue()
+        coordinator.force(stateID: "place_hands")
+        #expect(coordinator.overlayTarget == .chestCenter)
+        #expect(coordinator.showsGripReminder)
+    }
+
+    @Test func restartingClearsTheGripReminder() throws {
+        let fixture = try Fixture()
+        let coordinator = fixture.coordinator
+        coordinator.beginRescue()
+        coordinator.perform(.startCpr)
+        coordinator.restartRescue()
+        #expect(coordinator.gripReminderUntil == nil)
+    }
+
+    @Test func theGripReminderShipsWithTheApp() {
+        #expect(GripReminder.video != nil)
+        #expect(GripReminder.still != nil)
+    }
+
     @Test func thePracticePatientIsOfferedInCompressionsWithTheCameraUp() throws {
         let fixture = try Fixture(arSupported: true, cameraAllowed: true)
         let coordinator = fixture.coordinator

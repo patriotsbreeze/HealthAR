@@ -136,6 +136,16 @@ struct MainScreen: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                     .allowsHitTesting(false)
             }
+            if coordinator.showsGripReminder {
+                // Top-trailing, under the beat's dot when it shows, clear of the read in the top-leading corner.
+                let below = coordinator.showsBeatPulse ? DS.Pulse.docked + DS.Pulse.dockedInset : 0
+                GripReminderCard()
+                    .padding(.top, DS.Space.m + below)
+                    .padding(.trailing, DS.Space.m)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
             if showsVoice || showsAssessment {
                 // Top-leading is the one corner nothing else in the band uses. A tap goes through the
                 // orb; the read beside it opens on one.
