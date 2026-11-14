@@ -99,7 +99,7 @@ struct PhotoLocateRows: View {
             }
             .buttonStyle(CommandButtonStyle(kind: .primary, height: DS.Height.awake))
             .disabled(!confirmed)
-            DronePreviewButton(building: building, aedID: aedID, start: pano.id, lengthM: route.lengthM)
+            DroneFromHereButton(building: building, aedID: aedID, pano: pano.id, locator: locate.locator)
         case let .done(.fallback(message)):
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .dsFont(DS.Fonts.label)

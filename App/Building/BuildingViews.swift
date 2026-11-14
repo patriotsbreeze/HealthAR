@@ -58,7 +58,8 @@ struct BuildingBriefSection: View {
                     }
                     Button(BuildingWording.readAloudTitle) {
                         if let text = BuildingWording.spoken(building, confirmed: store.isConfirmed(run: coordinator.state.startedAt)) {
-                            coordinator.readAloud(text)
+                            // The app's own voice, with the on-device read-aloud as the fallback.
+                            BuildingVoice.shared.speak(text) { coordinator.readAloud(text) }
                         }
                     }
                     .buttonStyle(CommandButtonStyle(kind: .secondary, height: DS.Height.awake))
@@ -69,6 +70,12 @@ struct BuildingBriefSection: View {
             .foregroundStyle(DS.Colors.textPrimary)
             .fixedSize(horizontal: false, vertical: true)
             .task { BuildingLocator.shared.refresh() }
+            // Rendered once the building is confirmed, so Read building aloud plays at once.
+            .task(id: confirmed) {
+                if let building, let text = BuildingWording.spoken(building, confirmed: confirmed) {
+                    BuildingVoice.shared.prefetch(text)
+                }
+            }
             .fullScreenCover(item: $guiding) { target in
                 AEDGuideView(target: target, coordinator: coordinator)
             }

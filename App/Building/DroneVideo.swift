@@ -19,6 +19,9 @@ struct DroneVideo: Sendable, Equatable {
         var clip: String?
         var finalClip: String?
         var durationS: Double
+        /// A takeoff dive from above the building into this spot, played first when the flight starts here.
+        var introClip: String? = nil
+        var introDurationS: Double = 0
     }
 
     struct Target: Sendable, Equatable {
@@ -35,6 +38,7 @@ struct DroneVideo: Sendable, Equatable {
         var room: String
         var floor: String
         var isFinal: Bool
+        var isIntro = false
     }
 
     var building: String
@@ -58,7 +62,8 @@ struct DroneVideo: Sendable, Equatable {
                 clips[pano] = Clip(
                     pano: pano, next: text("next"), room: text("room") ?? "", floor: text("floor") ?? "",
                     lengthM: max(0, number("length_m")), clip: text("clip"), finalClip: text("final_clip"),
-                    durationS: max(0, number("duration_s"))
+                    durationS: max(0, number("duration_s")),
+                    introClip: text("intro_clip"), introDurationS: max(0, number("intro_duration_s"))
                 )
             }
             guard !clips.isEmpty else { continue }
@@ -83,6 +88,11 @@ struct DroneVideo: Sendable, Equatable {
         var segments: [Segment] = []
         var seen: Set<String> = []
         var here = start
+        // The takeoff covers no ground, so the countdown starts once the first hop does.
+        if let intro = clips[start]?.introClip, hasFile(intro) {
+            segments.append(Segment(pano: start, file: intro, durationS: clips[start]?.introDurationS ?? 0, lengthM: 0,
+                                    room: "", floor: "", isFinal: false, isIntro: true))
+        }
         while let entry = clips[here], seen.insert(here).inserted {
             if let next = entry.next {
                 guard let file = entry.clip, hasFile(file) else { return nil }
@@ -98,6 +108,33 @@ struct DroneVideo: Sendable, Equatable {
         }
         return nil
     }
+
+    /// Where to fly from for someone standing at `pano`: that spot when it has a whole flight, else the
+    /// closest spot that does: same area of the survey first, then the most similar walk to the AED.
+    /// `nearest` says it isn't their own spot, so the screen can say so.
+    func start(for pano: String, aed: String, locator: LocatorData?, hasFile: (String) -> Bool = { DroneVideo.url($0) != nil }) -> (pano: String, nearest: Bool)? {
+        if flight(to: aed, from: pano, hasFile: hasFile) != nil { return (pano, false) }
+        guard let clips = targets[aed]?.clips else { return nil }
+        let area = locator?.areas.first { $0.panos.contains { $0.id == pano } }?.id
+        let areaOf: [String: String] = Dictionary(
+            (locator?.areas ?? []).flatMap { area in area.panos.map { ($0.id, area.id) } },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let mine = locator?.routes[aed]?[pano]?.lengthM
+        func walk(_ id: String) -> Double? { locator?.routes[aed]?[id]?.lengthM }
+        let candidates = clips.keys.filter { flight(to: aed, from: $0, hasFile: hasFile) != nil }
+        let best = candidates.min { a, b in
+            let rank = { (id: String) -> (Int, Double, String) in
+                let sameArea = area != nil && areaOf[id] == area ? 0 : 1
+                let gap = mine.flatMap { m in walk(id).map { abs($0 - m) } } ?? .infinity
+                return (sameArea, gap, id)
+            }
+            return rank(a) < rank(b)
+        }
+        return best.map { ($0, true) }
+    }
+
+    static let nearestNote = "Starting from the nearest recorded spot"
 
     /// "dronevid/staged_1/abc.mp4" is "dronevid-staged_1-abc.mp4" in the bundle.
     static func resourceName(_ path: String) -> (name: String, ext: String) {
@@ -144,6 +181,7 @@ struct DroneVideo: Sendable, Equatable {
 
     /// "Hallway · Floor 1", or the floor alone when the room has no name.
     static func caption(_ segment: Segment) -> String {
+        if segment.isIntro { return "Takeoff" }
         let room = BuildingWording.clean(segment.room)
         let floor = BuildingWording.clean(segment.floor)
         switch (room.isEmpty, floor.isEmpty) {

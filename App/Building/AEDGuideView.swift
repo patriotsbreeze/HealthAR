@@ -370,8 +370,6 @@ struct AEDGuideView: View {
             VStack(spacing: 0) {
                 Spacer(minLength: DS.Space.l)
                 panel
-                    .padding(.horizontal, DS.Space.deckInset)
-                    .padding(.bottom, DS.Glass.deckGap)
             }
         }
         .background(DS.Colors.canvas)
@@ -399,9 +397,7 @@ struct AEDGuideView: View {
 
     @ViewBuilder private var panel: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
-            Text(target.name)
-                .dsFont(DS.Fonts.label)
-                .foregroundStyle(target.aed.isFromScan ? DS.Colors.textSecondary : DS.Colors.caution)
+            StatusDot(text: target.fromPhoto ? "Guide · from your photo" : "Guide · from the entrance", color: DS.Colors.ok)
             if let blocked {
                 Text(blocked).dsFont(DS.Fonts.prompt)
                 doneButton(kind: .primary)
@@ -413,9 +409,7 @@ struct AEDGuideView: View {
             }
         }
         .foregroundStyle(DS.Colors.textPrimary)
-        .padding(DS.Space.deckPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glassSurface(RoundedRectangle(cornerRadius: DS.Glass.deckRadius, style: .continuous), tint: DS.Glass.deckTint)
+        .buildingDeck()
     }
 
     /// Why there's nothing to draw on. Never a prompt: a camera prompt is onboarding's alone.
@@ -441,7 +435,7 @@ struct AEDGuideView: View {
                 let facing = heading.map { Compass.isFacing(bearing: bearing, heading: $0) } ?? false
                 CompassArrow(rotation: heading.map { Compass.rotation(bearing: bearing, heading: $0) }, facing: facing)
                 Button(AEDGuideWording.here, action: guide.iAmHere)
-                    .buttonStyle(CommandButtonStyle(kind: .primary, height: DS.Height.arrest))
+                    .buttonStyle(DeckCapsuleButtonStyle(prominent: true))
                     // No reading at all can't be waited out, so it doesn't hold the button.
                     .disabled(heading != nil && !facing)
                     .accessibilityHint("Sets where the way is drawn from. Face along the arrow first.")
@@ -452,7 +446,7 @@ struct AEDGuideView: View {
                 .frame(maxWidth: .infinity, minHeight: DS.Height.control)
         } else {
             Button(AEDGuideWording.here, action: guide.iAmHere)
-                .buttonStyle(CommandButtonStyle(kind: .primary, height: DS.Height.arrest))
+                .buttonStyle(DeckCapsuleButtonStyle(prominent: true))
                 .accessibilityHint("Sets where the way is drawn from. Stand in the doorway facing in first.")
         }
         doneButton(kind: .quiet)
@@ -460,7 +454,7 @@ struct AEDGuideView: View {
 
     private func doneButton(kind: CommandButtonStyle.Kind) -> some View {
         Button(AEDGuideWording.done) { dismiss() }
-            .buttonStyle(CommandButtonStyle(kind: kind, height: DS.Height.control))
+            .buttonStyle(DeckCapsuleButtonStyle(prominent: kind == .primary))
     }
 }
 
@@ -508,14 +502,14 @@ private struct GuideHUD: View {
                 }
                 if guide.canMark {
                     Button(AEDGuideWording.markHere) { guide.markHere() }
-                        .buttonStyle(CommandButtonStyle(kind: .secondary, height: DS.Height.control, font: DS.Fonts.buttonCompact))
+                        .buttonStyle(DeckCapsuleButtonStyle())
                         .accessibilityHint(AEDGuideWording.markHint)
                 }
                 HStack(spacing: DS.Space.betweenButtons) {
                     Button(AEDGuideWording.recalibrate, action: guide.recalibrate)
-                        .buttonStyle(CommandButtonStyle(kind: .secondary, height: DS.Height.awake, font: DS.Fonts.buttonCompact))
+                        .buttonStyle(DeckCapsuleButtonStyle())
                     Button(AEDGuideWording.done, action: done)
-                        .buttonStyle(CommandButtonStyle(kind: .primary, height: DS.Height.awake, font: DS.Fonts.buttonCompact))
+                        .buttonStyle(DeckCapsuleButtonStyle(prominent: true))
                 }
                 .padding(.top, DS.Space.xs)
             }

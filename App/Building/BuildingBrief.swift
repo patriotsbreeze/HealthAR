@@ -293,7 +293,7 @@ enum BuildingWording {
     static let chosenByHand = "Simulation: chosen by hand"
     static let noMatch = "No building plan matches your approximate location. Choose one to try it."
     static let readAloudTitle = "Read building aloud"
-    static let readAloudHint = "Enabled once you confirm the building. An on-device voice reads it."
+    static let readAloudHint = "Enabled once you confirm the building. The app's voice reads it."
     static let handoffTitle = "Building (from a survey, not this rescue's log)"
 
     static let guideTitle = "Guide me to the AED (AR)"
