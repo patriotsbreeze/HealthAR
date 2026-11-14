@@ -190,3 +190,23 @@ private func spreadBody() -> (camera: CameraPose, depth: BodyDepth, person: Dete
     let impossible = try #require(PatientModelFit.fit(person: f.person, depth: f.depth, camera: f.camera))
     #expect(!impossible.limbs.contains { $0.to == .leftWrist })
 }
+
+@Test func aWristReadingOnTheWallBehindKeepsTheArmAtTheElbowsDepth() throws {
+    var f = spreadBody()
+    let wrist = try #require(f.person.extras[.leftWrist]).position
+    let cx = Int(wrist.x * Double(f.depth.width)), cy = Int(wrist.y * Double(f.depth.height))
+    for y in (cy - 2)...(cy + 2) {
+        for x in (cx - 2)...(cx + 2) { f.depth.metres[y * f.depth.width + x] = 3.2 }
+    }
+    let placement = try #require(PatientModelFit.fit(person: f.person, depth: f.depth, camera: f.camera))
+    let arm = try #require(placement.limbs.first { $0.from == .leftElbow && $0.to == .leftWrist })
+    #expect(simd_distance(arm.end, [-0.75, 0, -0.25]) < 0.0001)
+}
+
+@Test func anAnkleGuessedOutsideThePictureIsNotDrawn() throws {
+    var f = spreadBody()
+    f.person.extras[.leftAnkle] = .init(position: [0.5, 1.04], confidence: 0.6)
+    let placement = try #require(PatientModelFit.fit(person: f.person, depth: f.depth, camera: f.camera))
+    #expect(!placement.limbs.contains { $0.to == .leftAnkle })
+    #expect(placement.limbs.contains { $0.to == .leftKnee })
+}

@@ -32,6 +32,11 @@ struct BodyDepth: Sendable {
 
     func worldPoint(_ point: SIMD2<Double>, camera: CameraPose) -> SIMD3<Float>? {
         guard let z = sample(point) else { return nil }
+        return Self.worldPoint(point, z: z, camera: camera)
+    }
+
+    /// The point on the camera ray through `point` that is `z` metres in front of the camera.
+    static func worldPoint(_ point: SIMD2<Double>, z: Float, camera: CameraPose) -> SIMD3<Float>? {
         let cameraPoint = SIMD4<Float>(
             (Float(point.x * camera.imageResolution.x) - camera.intrinsics.columns.2.x) * z / camera.intrinsics.columns.0.x,
             -(Float(point.y * camera.imageResolution.y) - camera.intrinsics.columns.2.y) * z / camera.intrinsics.columns.1.y,
@@ -66,6 +71,8 @@ public struct TrackedBodyLimb: Sendable, Equatable {
     public var start: SIMD3<Float>
     public var end: SIMD3<Float>
     public var radius: Float
+    /// The far joint's distance from the camera was taken from the near joint, not read at the joint.
+    public var inferredDepth = false
 }
 
 struct TimedPatientBody: Sendable {
@@ -148,14 +155,52 @@ enum PatientModelFit {
             (.rightHip, .rightKnee, 0.075, 0.12...0.8),
             (.rightKnee, .rightAnkle, 0.05, 0.12...0.8),
         ]
+        // Camera depth of each joint placed so far. Shoulders and hips need their own reading; an elbow,
+        // wrist, knee or ankle is thin, and its reading often lands on the floor or wall behind it.
+        var placed: [BodyJoint: (point: SIMD3<Float>, z: Float)] = [:]
         return chains.compactMap { from, to, radius, lengths in
             guard let a = person.joint(from), let b = person.joint(to),
                   a.confidence >= 0.3, b.confidence >= 0.3,
-                  let start = depth.worldPoint(a.position, camera: camera),
-                  let end = depth.worldPoint(b.position, camera: camera),
-                  lengths.contains(simd_distance(start, end)) else { return nil }
-            return TrackedBodyLimb(from: from, to: to, start: start, end: end, radius: radius * min(1.5, max(0.6, scale)))
+                  Self.inFrame(a.position), Self.inFrame(b.position) else { return nil }
+            let start: (point: SIMD3<Float>, z: Float)
+            if let known = placed[from] {
+                start = known
+            } else if let z = depth.sample(a.position), let point = BodyDepth.worldPoint(a.position, z: z, camera: camera) {
+                start = (point, z)
+            } else {
+                return nil
+            }
+            placed[from] = start
+            guard let end = limbEnd(b.position, after: start, lengths: lengths, depth: depth, camera: camera) else { return nil }
+            placed[to] = (end.point, end.z)
+            return TrackedBodyLimb(from: from, to: to, start: start.point, end: end.point,
+                                   radius: radius * min(1.5, max(0.6, scale)), inferredDepth: end.inferred)
         }
+    }
+
+    /// A joint the pose model placed outside the picture is a guess at where it would be, not a sighting.
+    static func inFrame(_ point: SIMD2<Double>) -> Bool {
+        (0.01...0.99).contains(point.x) && (0.01...0.99).contains(point.y)
+    }
+
+    /// How far a limb's far joint may sit from its near one along the camera's view before the reading
+    /// is taken to be the background rather than the limb.
+    static let limbDepthStep: Float = 0.2
+
+    /// The far joint of a limb: its own depth when that sits plausibly near the joint before it, otherwise
+    /// the detected image point at the near joint's depth. The image point is always the measured one.
+    static func limbEnd(_ image: SIMD2<Double>, after start: (point: SIMD3<Float>, z: Float), lengths: ClosedRange<Float>,
+                        depth: BodyDepth, camera: CameraPose) -> (point: SIMD3<Float>, z: Float, inferred: Bool)? {
+        if let z = depth.sample(image), abs(z - start.z) < limbDepthStep,
+           let point = BodyDepth.worldPoint(image, z: z, camera: camera), lengths.contains(simd_distance(start.point, point)) {
+            return (point, z, false)
+        }
+        // Held level with the near joint, a limb pointing at or away from the camera looks short, so only
+        // a quarter of the shortest length is asked of it. Too long is still too long.
+        let foreshortened = (lengths.lowerBound * 0.25)...lengths.upperBound
+        guard let point = BodyDepth.worldPoint(image, z: start.z, camera: camera),
+              foreshortened.contains(simd_distance(start.point, point)) else { return nil }
+        return (point, start.z, true)
     }
 
     /// Depth at the face is its surface, so the centre sits a head's half-depth further from the camera.

@@ -27,17 +27,70 @@ final class GhostRenderer {
     /// Separate from the practice/animated ghost: tracks the currently observed real patient.
     private let detectedAnchor = AnchorEntity(world: .zero)
     private let detectedModel = Entity()
-    private let detectedFill = Entity()
-    private let detectedShell = Entity()
     private let chestAnchor = AnchorEntity(world: .zero)
     private let chestEstimate = Entity()
-    private var limbModels: [LimbModel] = []
-    /// The head, apart from the body, so it can sit where depth found the real one.
+    private var limbs = TrackedLimbs()
+    /// The torso, head, neck and limbs blended into one surface.
+    private var skin: BodySkin?
+    private weak var arView: ARView?
+    /// Where the head is, apart from the body, so it can sit where depth found the real one.
     private let detectedHead = Entity()
     private var patientLoaded = false
+    private var stats = BodyLog()
+    private var alignmentFrame = 0
+
+    /// One console line a second about the tracked 3D body, for watching it on a device.
+    private struct BodyLog {
+        var start = CACurrentMediaTime(), last = CACurrentMediaTime()
+        var frames = 0, shown = 0, measured = 0, drawn = 0, worstFrame = 0.0, placementChanges = 0
+        var worstBuild = 0.0, vertices = 0
+        /// Screen distance from each limb end to its 2D joint dot, and how many ends had inferred depth.
+        var offsets: [Double] = [], ends = 0, inferred = 0
+
+        mutating func alignment(_ placement: PatientBodyPlacement, view: ARView, bodies: [VisionOverlay.DetectedBody]) {
+            let size = view.bounds.size
+            guard size.width > 0, let body = bodies.max(by: { $0.joints.count < $1.joints.count }) else { return }
+            for limb in placement.limbs {
+                ends += 1
+                if limb.inferredDepth { inferred += 1 }
+                guard let dot = body.joints[limb.to], let drawn = view.project(limb.end) else { continue }
+                offsets.append(hypot(drawn.x - dot.x * size.width, drawn.y - dot.y * size.height))
+            }
+        }
+        var lastPlacement: PatientBodyPlacement?
+
+        var cell: Float = 0
+
+        mutating func frame(_ placement: PatientBodyPlacement?, drawn limbs: Int, buildMs: Double, vertices skin: Int, cell grid: Float) {
+            let now = CACurrentMediaTime()
+            worstFrame = max(worstFrame, now - last)
+            last = now
+            frames += 1
+            if let placement {
+                shown += 1
+                measured += placement.limbs.count
+                drawn += limbs
+                if placement != lastPlacement { placementChanges += 1 }
+                worstBuild = max(worstBuild, buildMs)
+                vertices = skin
+                cell = grid
+            }
+            lastPlacement = placement
+            guard now - start >= 1 else { return }
+            let f = Double(max(frames, 1)), s = Double(max(shown, 1))
+            let sorted = offsets.sorted()
+            let median = sorted.isEmpty ? 0 : sorted[sorted.count / 2], worstOffset = sorted.last ?? 0
+            let thermal = ["nominal", "fair", "serious", "critical"][min(ProcessInfo.processInfo.thermalState.rawValue, 3)]
+            print(String(format: "[Body3D] fps %.0f worst %.0fms | thermal %@ | body shown %d%% | new fits/s %d | limbs measured %.1f drawn %.1f | skin %.0fms %d verts %.1fcm grid | limb-to-dot median %.0fpt worst %.0fpt | inferred depth %d/%d",
+                         f / (now - start), worstFrame * 1000, thermal, Int(Double(shown) / f * 100), placementChanges,
+                         Double(measured) / s, Double(drawn) / s, worstBuild, vertices, cell * 100, median, worstOffset, inferred, ends))
+            self = BodyLog(start: now, last: now, lastPlacement: lastPlacement)
+        }
+    }
 
     init(arView: ARView, vision: VisionSession) {
         self.vision = vision
+        self.arView = arView
         anchor.isEnabled = false
         anchor.addChild(model)
         model.addChild(rescuer)
@@ -59,8 +112,6 @@ final class GhostRenderer {
         arView.scene.addAnchor(handsAnchor)
         detectedAnchor.isEnabled = false
         detectedAnchor.addChild(detectedModel)
-        detectedModel.addChild(detectedFill)
-        detectedModel.addChild(detectedShell)
         chestAnchor.isEnabled = false
         chestAnchor.addChild(chestEstimate)
         arView.scene.addAnchor(chestAnchor)
@@ -131,11 +182,16 @@ final class GhostRenderer {
                 detectedModel.transform = target
             }
             placeHead(placement)
-            placeLimbs(placement.limbs)
+            skin?.submit(skinPieces(placement))
+            alignmentFrame += 1
+            if alignmentFrame % 6 == 0, let arView { stats.alignment(placement, view: arView, bodies: vision.overlay().bodies) }
             detectedAnchor.isEnabled = true
         } else {
             detectedAnchor.isEnabled = false
+            limbs.reset()
+            skin?.clear()
         }
+        stats.frame(patientLoaded ? trackedBody : nil, drawn: limbs.drawn, buildMs: skin?.lastBuildMs ?? 0, vertices: skin?.lastVertices ?? 0, cell: skin?.cell ?? 0)
         let surface = vision.chestSurfacePlacement()
         if let surface {
             chestAnchor.isEnabled = true
@@ -170,89 +226,47 @@ final class GhostRenderer {
         patientOutline.components.set(OpacityComponent(opacity: GhostPlacement.outlineOpacity))
     }
 
-    /// The practice Blender mesh is intentionally untouched. The detected body has no fixed-pose
-    /// arms or legs: rounded torso/head shapes use its proportions, and limbs follow measured joints.
+    /// The practice Blender mesh is intentionally untouched. The detected body has no fixed-pose arms or
+    /// legs: its torso and head use the Blender proportions, its limbs follow measured joints, and all of
+    /// it is blended into one skin.
     private func buildTrackedBody() {
-        let sphere = MeshResource.generateSphere(radius: 1)
-        let cylinder = MeshResource.generateCylinder(height: 1, radius: 1)
         let fill = Self.patientGlow(opacity: 0.07)
         var shell = Self.patientGlow(opacity: 0.48)
         shell.faceCulling = .front
-        func ellipsoid(center: SIMD3<Float>, size: SIMD3<Float>) {
-            let inside = ModelEntity(mesh: sphere, materials: [fill])
-            inside.position = center
-            inside.scale = size
-            detectedFill.addChild(inside)
-            let outside = ModelEntity(mesh: sphere, materials: [shell])
-            outside.position = center
-            outside.scale = size + SIMD3(repeating: 0.012)
-            detectedShell.addChild(outside)
-        }
-        // Model-space values follow patient() in tools/make_ghost_model.py.
-        ellipsoid(center: [-0.1, -0.1, 0], size: [0.31, 0.095, 0.17])
-        ellipsoid(center: [-0.4, -0.1, 0], size: [0.12, 0.09, 0.16])
-        ellipsoid(center: [0.25, -0.1, 0], size: [0.08, 0.05, 0.05])
-        let headFill = ModelEntity(mesh: sphere, materials: [fill])
-        headFill.scale = [0.1, 0.08, 0.075]
-        let headShell = ModelEntity(mesh: sphere, materials: [shell])
-        headShell.scale = [0.112, 0.092, 0.087]
-        detectedHead.addChild(headFill)
-        detectedHead.addChild(headShell)
-        for _ in 0..<8 {
-            let limb = LimbModel(sphere: sphere, cylinder: cylinder, fill: fill, shell: shell)
-            detectedAnchor.addChild(limb.root)
-            limbModels.append(limb)
-        }
+        // The group's depth goes down first, so only the skin's nearest surface draws and the outline
+        // shell shows round the silhouette alone.
+        let skin = BodySkin(fill: fill, shell: shell, group: ModelSortGroup(depthPass: .prePass))
+        detectedAnchor.addChild(skin.root)
+        self.skin = skin
         patientLoaded = true
         vision.patientModelDidLoad()
     }
 
-    private func placeLimbs(_ limbs: [TrackedBodyLimb]) {
-        for index in limbModels.indices {
-            guard index < limbs.count else { limbModels[index].root.isEnabled = false; continue }
-            limbModels[index].place(limbs[index])
+    /// Everything the skin is made of this frame, in world metres: the eased torso, the head, the neck
+    /// joining them, and the measured limbs.
+    private func skinPieces(_ placement: PatientBodyPlacement) -> [BodyPiece] {
+        let model = detectedModel.transform.matrix
+        var pieces: [BodyPiece] = [.torso(TorsoLoft(model: model))]
+        let head = detectedHead.position
+        let size = detectedHead.scale.x
+        pieces.append(.ellipsoid(center: head, axes: simd_float3x3(detectedHead.orientation), radii: Self.headRadii * size))
+        let neckBase = model * SIMD4(TorsoProfile.neckBase, 1)
+        let neck = SIMD3(neckBase.x, neckBase.y, neckBase.z)
+        // A head found far off the shoulders isn't joined on with a stretched neck.
+        if simd_distance(neck, head) < 0.35 {
+            pieces.append(.cone(from: neck, to: head, r1: 0.05 * size, r2: 0.045 * size))
         }
+        pieces += limbs.update(placement.limbs, camera: arView?.cameraTransform.translation, now: CACurrentMediaTime())
+        return pieces
     }
 
-    /// Cached geometry: rotate and resize each segment between its measured endpoints each frame.
-    /// It is deliberately independent of the torso's nonuniform scale and smoothing.
-    @MainActor
-    private struct LimbModel {
-        let root = Entity()
-        let tubes: [ModelEntity]
-        let starts: [ModelEntity]
-        let ends: [ModelEntity]
-
-        init(sphere: MeshResource, cylinder: MeshResource, fill: PhysicallyBasedMaterial, shell: PhysicallyBasedMaterial) {
-            tubes = [ModelEntity(mesh: cylinder, materials: [fill]), ModelEntity(mesh: cylinder, materials: [shell])]
-            starts = [ModelEntity(mesh: sphere, materials: [fill]), ModelEntity(mesh: sphere, materials: [shell])]
-            ends = [ModelEntity(mesh: sphere, materials: [fill]), ModelEntity(mesh: sphere, materials: [shell])]
-            for part in tubes + starts + ends { root.addChild(part) }
-            root.isEnabled = false
-        }
-
-        func place(_ limb: TrackedBodyLimb) {
-            let delta = limb.end - limb.start
-            let length = simd_length(delta)
-            guard length > 0.01 else { root.isEnabled = false; return }
-            root.isEnabled = true
-            for i in 0..<2 {
-                let radius = limb.radius + (i == 0 ? 0 : 0.008)
-                tubes[i].position = (limb.start + limb.end) / 2
-                tubes[i].scale = [radius, length, radius]
-                tubes[i].orientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: delta / length)
-                starts[i].position = limb.start
-                ends[i].position = limb.end
-                starts[i].scale = SIMD3(repeating: radius)
-                ends[i].scale = SIMD3(repeating: radius)
-            }
-        }
-    }
+    /// The template head's half sizes, from HEAD_SIZE in tools/make_ghost_model.py.
+    private static let headRadii = SIMD3<Float>(0.1, 0.08, 0.075)
 
     /// The head where depth found it, or where the fitted body's own head would be when no face was
     /// seen. It turns and sizes with the body, but isn't stretched by the torso's own length and width.
     private func placeHead(_ placement: PatientBodyPlacement) {
-        guard !detectedHead.children.isEmpty else { return }
+        guard patientLoaded else { return }
         let template = placement.transform * SIMD4(PatientModelFit.headCenter, 1)
         let target = placement.head ?? SIMD3(template.x, template.y, template.z)
         let body = detectedModel.transform
