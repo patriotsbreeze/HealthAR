@@ -129,18 +129,24 @@ import Testing
 
     // MARK: - By silence
 
+    /// No reply never moves on. The question repeats every 10 s until someone answers.
     @Test func silenceNeverGivesAspirin() throws {
         var session = try inFlow()
-        session.advance(15)
+        session.advance(10)
+        #expect(session.state.stateID == "chest_call", "the call step waits for Done or Called")
+        #expect(session.phrases == ["chest_sit"])
+        session.human(.done)
         #expect(session.state.stateID == "chest_aspirin_check")
         #expect(session.phrases == ["aspirin_check"])
-        session.advance(20)
-        #expect(session.state.stateID == "chest_wait")
-        #expect(session.phrases == ["aspirin_skip", "chest_wait_line"], "someone holding aspirin is told")
-        #expect(session.entries(.answer).last?.detail == "aspirin_risk_reported=no_reply")
-        #expect(session.entries(.answer).last?.source == .timer)
+        for _ in 0..<2 {
+            session.advance(10)
+            #expect(session.state.stateID == "chest_aspirin_check")
+            #expect(session.phrases == ["aspirin_check"], "the question again, at 10 s and 20 s")
+        }
+        #expect(session.entries(.answer).filter { $0.detail.hasPrefix("aspirin") }.isEmpty, "silence isn't an answer")
 
         session.advance(600)
+        #expect(session.state.stateID == "chest_aspirin_check")
         #expect(!session.allPhrases.contains("aspirin_give"))
         #expect(session.entries(.aspirinAdvised).isEmpty)
     }
@@ -153,7 +159,8 @@ import Testing
         #expect(!session.effects.contains(.cutPhrases))
     }
 
-    @Test func theAspirinStepAndTheScanEndOnTheirOwn() throws {
+    /// The dose step keeps its timer, so it is never said twice. The scan waits, saying its line again.
+    @Test func theAspirinStepEndsOnItsOwnAndTheScanWaits() throws {
         var aspirin = try inFlow()
         aspirin.human(.done)
         aspirin.human(.no)
@@ -166,10 +173,14 @@ import Testing
         scan.human(.done)
         scan.human(.yes)
         scan.human(.scan)
-        scan.advance(19)
+        scan.advance(10)
         #expect(scan.state.stateID == "chest_scan")
-        scan.advance(1)
+        #expect(scan.phrases == ["aed_look"])
+        scan.advance(600)
+        #expect(scan.state.stateID == "chest_scan")
+        scan.human(.done)
         #expect(scan.state.stateID == "chest_wait")
+        #expect(aspirin.allPhrases.filter { $0 == "aspirin_give" }.count == 1, "the dose line never repeats")
     }
 
     @Test(arguments: [("triage", "triage_recheck"), ("general_talk", "general_intro"), ("chest_wait", "chest_wait_line")])
@@ -407,16 +418,35 @@ import Testing
     @Test func aStepWaitsForTheDispatcherThenStartsItsClockOver() throws {
         var session = try inFlow()
         session.human(.done)
+        session.human(.no)
+        #expect(session.state.stateID == "chest_aspirin")
+        session.human(.dispatcherOn)
+        session.advance(60)
+        #expect(session.state.stateID == "chest_aspirin")
+
+        session.human(.dispatcherOff)
+        session.advance(14)
+        #expect(session.state.stateID == "chest_aspirin", "the whole window is theirs again")
+        session.advance(1)
+        #expect(session.state.stateID == "chest_wait")
+    }
+
+    /// The question doesn't talk over the dispatcher either, and its 10 s start over when they're done.
+    @Test func aQuestionWaitsForTheDispatcherThenStartsItsRepeatOver() throws {
+        var session = try inFlow()
+        session.human(.done)
         session.human(.dispatcherOn)
         session.advance(60)
         #expect(session.state.stateID == "chest_aspirin_check")
+        #expect(session.phrases.isEmpty)
         #expect(session.entries(.answer).filter { $0.detail.hasPrefix("aspirin") }.isEmpty)
 
         session.human(.dispatcherOff)
-        session.advance(19)
-        #expect(session.state.stateID == "chest_aspirin_check", "the whole window is theirs again")
+        session.advance(9)
+        #expect(session.phrases.isEmpty, "the whole 10 s is theirs again")
         session.advance(1)
-        #expect(session.state.stateID == "chest_wait")
+        #expect(session.phrases == ["aspirin_check"])
+        #expect(session.state.stateID == "chest_aspirin_check")
     }
 
     @Test func aReAskWaitsForACallToo() throws {
@@ -435,13 +465,13 @@ import Testing
     @Test func theArrestPathDoesNotWaitForTheDispatcher() throws {
         var session = Session(engine: try engine())
         session.human(.dispatcherOn)
-        session.advance(10)
+        session.advance(30)
         #expect(session.state.stateID == "call_911")
 
         var collapsed = try inFlow()
         collapsed.human(.patientUnresponsive)
         collapsed.human(.dispatcherOn)
-        collapsed.advance(10)
+        collapsed.advance(30)
         #expect(collapsed.state.stateID == "call_911")
     }
 
@@ -504,17 +534,25 @@ import Testing
     }
 
     @Test func anEarlierNoAspirinStaysNo() throws {
+        // Silence no longer rules aspirin out. It only asks again.
         var silent = try inFlow()
         silent.human(.done)
         silent.advance(20)
-        #expect(silent.phrases == ["aspirin_skip", "chest_wait_line"])
-        silent.human(.notThis)
-        silent.human(.triageChest)
-        silent.human(.done)
-        silent.human(.no)
-        #expect(silent.state.stateID == "chest_wait")
-        #expect(silent.phrases == ["aspirin_stop", "chest_wait_line"])
-        #expect(!silent.allPhrases.contains("aspirin_give"))
+        #expect(silent.state.stateID == "chest_aspirin_check")
+        #expect(silent.phrases == ["aspirin_check"])
+        #expect(!silent.state.aspirinRuledOut)
+
+        var reported = try inFlow()
+        reported.human(.done)
+        report(.aspirinUnsafe, .high, into: &reported)
+        #expect(reported.state.aspirinRuledOut)
+        reported.human(.notThis)
+        reported.human(.triageChest)
+        reported.human(.done)
+        reported.human(.no)
+        #expect(reported.state.stateID == "chest_wait")
+        #expect(reported.phrases == ["aspirin_stop", "chest_wait_line"])
+        #expect(!reported.allPhrases.contains("aspirin_give"))
 
         var tapped = try inFlow()
         tapped.human(.done)
@@ -596,6 +634,8 @@ import Testing
         #expect(session.entries(.observation).last?.detail == "\(second.rawValue),heard,high")
 
         session.advance(9)
+        #expect(session.phrases == ["ask_breathing"], "the question repeats at 10 s")
+        session.advance(20)
         #expect(session.state.stateID == "call_911", "no reply still gets there, on the question's own clock")
         #expect(!session.state.breathingAskedAwake)
     }
@@ -632,7 +672,12 @@ import Testing
         #expect(session.state.stateID == "call_911", "no breaths marked still gets there")
         #expect(!session.state.breathingAskedAwake)
         for _ in 0..<15 { session.advance(1) }
-        #expect(session.state.stateID == "compressions", "25 s from the Yes, and nobody tapped anything else")
+        #expect(session.state.stateID == "call_911", "the setup steps wait for a tap")
+        session.human(.called)
+        session.human(.done)
+        session.human(.done)
+        #expect(session.state.stateID == "compressions")
+        #expect(!session.state.breathingAskedAwake)
     }
 
     @Test func aTapStillLeavesTheWatchAtOnce() throws {

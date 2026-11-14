@@ -163,6 +163,7 @@ protocol AudioPort: AnyObject, Sendable {
     func play(phraseID: String)
     func enqueueModelAudio(_ data: Data)
     func flushModelAudio()
+    var modelAudioPending: Bool { get }
     func dropQueuedPhrases(keeping: [String])
     func cutPhrases()
     func modelTurnEnded()

@@ -208,13 +208,14 @@ import Testing
         #expect(row.time == "T+0:11")
     }
 
-    @Test func noReplyIsItsOwnAnswer() throws {
+    /// The check repeats rather than timing out, so silence gives no row to read as an answer.
+    @Test func silenceLeavesNoAnswerRow() throws {
         var session = try inFlow()
-        session.advance(15)
-        session.advance(20)
-        let row = try #require(value("Aspirin risk reported", card(session)))
-        #expect(row.value == "no reply")
-        #expect(row.source == .timer)
+        session.human(.done)
+        session.advance(10)
+        session.advance(10)
+        #expect(session.state.stateID == "chest_aspirin_check")
+        #expect(value("Aspirin risk reported", card(session)) == nil)
     }
 
     /// Its own question rows already cover these.

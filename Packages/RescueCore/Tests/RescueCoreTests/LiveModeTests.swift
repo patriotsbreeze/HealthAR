@@ -87,10 +87,13 @@ import Testing
         var session = try merged()
         session.human(.yes)
         session.human(.triageChest)
+        session.human(.done)
+        session.human(.no)
+        #expect(session.state.stateID == "chest_aspirin")
         session.send(.modelTurn(active: true))
         session.advance(15.2)
-        #expect(session.state.stateID == "chest_aspirin_check")
-        #expect(session.phrases.contains("aspirin_check"))
+        #expect(session.state.stateID == "chest_wait")
+        #expect(session.phrases.contains("chest_wait_line"))
     }
 
     /// The arrest path's prompts run as they always have.
@@ -228,10 +231,13 @@ import Testing
         unsure.human(.unsure)
         #expect(try #require(lastBrief(unsure)).text.contains("aspirin=ruled_out"))
 
+        // Silence stays on the check, so the brief there still says nobody has answered.
         var silent = try atTheCheck()
+        #expect(try #require(lastBrief(silent)).text.contains("aspirin=not_asked"))
         silent.advance(20)
-        #expect(silent.state.stateID == "chest_wait")
-        #expect(try #require(lastBrief(silent)).text.contains("aspirin=ruled_out"))
+        #expect(silent.state.stateID == "chest_aspirin_check")
+        #expect(!silent.state.aspirinRuledOut && !silent.state.aspirinAdvised)
+        #expect(lastBrief(silent).map { !$0.text.contains("aspirin=ruled_out") } ?? true)
 
         var reported = try atTheCheck()
         reported.modelFinding(.aspirinUnsafe)

@@ -168,14 +168,16 @@ import Testing
     /// With nobody touching the phone, every required step must play, so nothing is ever stale.
     @Test func aTimeoutDropsNothing() throws {
         var session = Session(engine: try engine())
-        for _ in 0..<4 {
+        // Two repeats of the question, the 30 s timeout, then the call line again while it waits.
+        for _ in 0..<6 {
             session.advance(10)
             let drops = session.effects.contains {
                 if case .dropQueuedPhrases = $0 { true } else { $0 == .cutPhrases }
             }
             #expect(!drops, "\(session.state.stateID)")
         }
-        #expect(session.state.stateID == "compressions")
+        #expect(session.state.stateID == "call_911")
+        #expect(session.allPhrases.filter { $0 == "call_911" }.count == 4, "at 30 s, then 40, 50 and 60")
     }
 
     // MARK: - Pads stay on
@@ -185,14 +187,14 @@ import Testing
         let routes: [(String, Walk)] = [
             ("mistaken EMS, then resume", { $0.human(.emsArrived); $0.human(.resumeCpr) }),
             ("patient moved, then no reply", { s in
-                s.human(.patientMoving); s.advance(10)
+                s.human(.patientMoving); s.advance(30)
             }),
             ("patient moved, then start cpr", { $0.human(.patientMoving); $0.human(.startCpr) }),
             ("patient moved, marks, re-ask says no", { s in
                 s.human(.patientMoving); s.human(.breathMarked); s.human(.breathMarked); s.advance(10); s.human(.no)
             }),
             ("patient moved, marks, re-ask no reply", { s in
-                s.human(.patientMoving); s.human(.breathMarked); s.human(.breathMarked); s.advance(10); s.advance(10)
+                s.human(.patientMoving); s.human(.breathMarked); s.human(.breathMarked); s.advance(10); s.advance(30)
             }),
             ("patient awake, then start cpr", { s in
                 s.human(.patientMoving); s.human(.patientAwake); s.human(.startCpr)

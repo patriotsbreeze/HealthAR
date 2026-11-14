@@ -144,45 +144,60 @@ private let dangerPhrases = ["call_911", "limb_danger_care", "limb_tourniquet"]
 
     // MARK: - By silence
 
-    @Test func silenceTakesTheDangerBranch() throws {
+    /// No reply never moves on. The danger question repeats every 10 s until someone answers.
+    @Test func silenceRepeatsTheDangerQuestion() throws {
         var session = try inFlow()
-        session.advance(5)
-        #expect(session.state.stateID == "limb_start")
-        session.advance(1)
+        session.advance(10)
+        #expect(session.state.stateID == "limb_start", "the first step waits for Done too")
+        #expect(session.phrases == ["limb_possible"])
+        session.human(.done)
         #expect(session.state.stateID == "limb_flags")
         #expect(session.phrases == ["limb_danger_ask"])
 
         session.advance(9)
         #expect(session.state.stateID == "limb_flags")
-        session.advance(1)
-        #expect(session.state.stateID == "limb_danger")
-        #expect(session.phrases == dangerPhrases)
-        #expect(session.entries(.answer).last?.detail == "danger_signs=no_reply")
-        #expect(session.entries(.answer).last?.source == .timer)
-        #expect(session.entries(.callPrompted).count == 1)
+        #expect(session.phrases.isEmpty)
+        for _ in 0..<2 {
+            session.advance(1)
+            #expect(session.state.stateID == "limb_flags")
+            #expect(session.phrases == ["limb_danger_ask"], "the question again, at 10 s and 20 s")
+            session.advance(9)
+        }
+        #expect(!session.entries(.answer).contains { $0.detail.hasPrefix("danger_signs") }, "silence isn't an answer")
 
         session.advance(600)
-        #expect(session.state.stateID == "limb_danger")
+        #expect(session.state.stateID == "limb_flags")
         #expect(!session.allPhrases.contains("limb_wound"))
         #expect(!session.state.metronomeOn)
+
+        session.human(.yes)
+        #expect(session.state.stateID == "limb_danger")
+        #expect(session.phrases == dangerPhrases)
+        #expect(session.entries(.callPrompted).count == 1)
     }
 
     /// Nobody tapped past anything, so queued steps still play.
     @Test func noTouchKeepsWhatIsQueued() throws {
         var session = try inFlow()
-        for seconds in [6.0, 10] {
+        for seconds in [6.0, 10, 10] {
             session.advance(seconds)
             #expect(!session.effects.contains { if case .dropQueuedPhrases = $0 { true } else { false } })
             #expect(!session.effects.contains(.cutPhrases))
         }
-        #expect(session.state.stateID == "limb_danger")
+        #expect(session.state.stateID == "limb_start")
     }
 
-    @Test func theSplintStepEndsOnItsOwn() throws {
+    /// The splint step says its support line again every 10 s and only Done ends it.
+    @Test func theSplintStepWaitsForDone() throws {
         var session = try session(in: "limb_splint")
         session.advance(9)
-        #expect(session.state.stateID == "limb_splint")
+        #expect(session.phrases.isEmpty)
         session.advance(1)
+        #expect(session.state.stateID == "limb_splint")
+        #expect(session.phrases == ["limb_support"])
+        session.advance(600)
+        #expect(session.state.stateID == "limb_splint")
+        session.human(.done)
         #expect(session.state.stateID == "limb_wait")
         #expect(session.phrases == ["limb_seek_care"])
     }
@@ -455,12 +470,13 @@ private let dangerPhrases = ["call_911", "limb_danger_care", "limb_tourniquet"]
         #expect(script.situation.contains("possible broken bone"))
     }
 
+    /// Silence on the danger question logs nothing, so the card can't claim any answer.
     @Test func noReplyIsNotReadAsAnAnswer() throws {
         var session = try inFlow()
         session.advance(6)
         session.advance(10)
+        session.advance(10)
         let card = HandoffBuilder.build(from: session.log.entries)
-        #expect(card.items.first { $0.label == "Danger signs" }?.value == "no reply")
-        #expect(card.items.first { $0.label == "Danger signs" }?.source == .timer)
+        #expect(card.items.first { $0.label == "Danger signs" } == nil)
     }
 }

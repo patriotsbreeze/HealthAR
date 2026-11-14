@@ -352,7 +352,11 @@ import Testing
         session.advance(10)
         #expect(session.state.stateID == "watch_reask")
         session.advance(10)
-        #expect(session.state.stateID == "call_911", "no reply goes to CPR")
+        session.advance(10)
+        #expect(session.state.stateID == "watch_reask")
+        session.advance(10)
+        #expect(session.state.stateID == "call_911", "no reply in 30 s goes to CPR")
+        #expect(session.allPhrases.filter { $0 == "ask_still_breathing" }.count == 3)
     }
 
     @Test func watchLoopRestartsTheCount() throws {
@@ -370,21 +374,22 @@ import Testing
     }
 
     // 6. Uncertainty, or no reply in 10 s, goes to CPR.
-    @Test func noReplyReachesCompressionsWithNoHumanInput() throws {
+    /// No reply on a question still goes on towards CPR, as far as a step that needs a tap. Every
+    /// state from there on has Start CPR, and no state with no reply ever lowers the urgency.
+    @Test func noReplyReachesCallingWithNoHumanInput() throws {
         let definition = try loadBundle().definition
         for state in definition.states where state.kind != .card {
             var session = Session(engine: try engine())
             session.state.stateID = state.id
             session.state.enteredAt = session.now
-            var steps = 0
-            while session.state.stateID != "compressions", steps < 12 {
-                session.advance(30)
-                steps += 1
-                let current = try #require(definition.states.first { $0.id == session.state.stateID })
-                if current.urgency == 4 { break }
-            }
+            for _ in 0..<12 { session.advance(30) }
             let reached = try #require(definition.states.first { $0.id == session.state.stateID })
-            #expect(reached.urgency == 4, "\(state.id) stops at \(session.state.stateID) with no reply")
+            #expect(reached.urgency >= 3, "\(state.id) stops at \(session.state.stateID) with no reply")
+            if reached.urgency < 4 {
+                #expect(reached.transition(on: "human.start_cpr")?.to == "compressions", "\(reached.id)")
+                session.human(.startCpr)
+                #expect(session.state.stateID == "compressions", "one tap from \(reached.id)")
+            }
         }
     }
 
@@ -399,9 +404,13 @@ import Testing
         #expect(second.state.stateID == "call_911")
     }
 
-    @Test func intakeTimeoutsAreAtMostTenSeconds() throws {
+    /// A question waits at most 30 s for an answer, and says itself again every 10 s while it waits.
+    @Test func intakeTimeoutsAreAtMostThirtySecondsAndTheQuestionRepeats() throws {
         for state in try loadBundle().definition.states where state.kind == .intake || state.kind == .watch {
-            #expect((state.timeout?.seconds ?? .infinity) <= 10, "\(state.id)")
+            #expect((state.timeout?.seconds ?? .infinity) <= (state.question == nil ? 10 : 30), "\(state.id)")
+            guard state.question != nil else { continue }
+            let repeats = state.repeating.filter { state.entryPhrases.contains($0.phrase) }
+            #expect(repeats.map(\.everySeconds) == [10], "\(state.id) repeats its question every 10 s")
         }
     }
 
@@ -426,7 +435,7 @@ import Testing
         session.human(.done)
         #expect(session.state.stateID == "place_hands")
         #expect(session.effects.contains(.overlay(.chestCenter)))
-        session.advance(5)
+        session.human(.done)
         #expect(session.state.stateID == "compressions")
         #expect(session.effects.contains(.overlay(nil)))
     }

@@ -32,7 +32,7 @@
       "frame_uplink": false,
       "guide": "sit_rest",
       "allowed_say": ["assign_helper"],
-      "timeout": { "seconds": 15, "to": "chest_aspirin_check" },
+      "repeating": [{ "phrase": "chest_sit", "every_seconds": 10 }],
       "transitions": [
         { "on": "human.done", "to": "chest_aspirin_check" },
         { "on": "human.called", "to": "chest_aspirin_check" },
@@ -50,7 +50,7 @@
       "metronome": "off",
       "frame_uplink": false,
       "allowed_say": [],
-      "timeout": { "seconds": 20, "to": "chest_wait", "phrases": ["aspirin_skip"] },
+      "repeating": [{ "phrase": "aspirin_check", "every_seconds": 10 }],
       "transitions": [
         { "on": "human.yes", "to": "chest_wait", "phrases": ["aspirin_skip"] },
         { "on": "human.no", "to": "chest_aspirin" },
@@ -104,7 +104,7 @@
       "frame_uplink": true,
       "overlay": "aed_device",
       "allowed_say": ["assign_helper", "aed_found"],
-      "timeout": { "seconds": 20, "to": "chest_wait" },
+      "repeating": [{ "phrase": "aed_look", "every_seconds": 10 }],
       "transitions": [
         { "on": "human.done", "to": "chest_wait" },
         { "on": "model.aspirin_unsafe", "to": "chest_scan", "phrases": ["aspirin_stop"] }

@@ -37,7 +37,7 @@
       "locate_materials": true,
       "overlay": "injury_site",
       "allowed_say": [],
-      "timeout": { "seconds": 6, "to": "limb_flags" },
+      "repeating": [{ "phrase": "limb_possible", "every_seconds": 10 }],
       "transitions": [
         { "on": "human.done", "to": "limb_flags" },
         { "on": "model.heavy_bleeding", "to": "limb_danger", "min_confidence": "medium" },
@@ -58,7 +58,7 @@
       "locate_materials": true,
       "overlay": "injury_site",
       "allowed_say": [],
-      "timeout": { "seconds": 10, "to": "limb_danger" },
+      "repeating": [{ "phrase": "limb_danger_ask", "every_seconds": 10 }],
       "transitions": [
         { "on": "human.yes", "to": "limb_danger" },
         { "on": "human.no", "to": "limb_splint" },
@@ -85,7 +85,7 @@
         { "phrase": "limb_support", "material": "towel", "body": "injured_limb", "placement": "under", "callout": "Pad under · Towel" },
         { "phrase": "limb_support", "material": "pillow", "body": "injured_limb", "placement": "under", "callout": "Pad under · Pillow" }
       ],
-      "timeout": { "seconds": 10, "to": "limb_wait" },
+      "repeating": [{ "phrase": "limb_support", "every_seconds": 10 }],
       "transitions": [
         { "on": "human.done", "to": "limb_wait" },
         { "on": "model.heavy_bleeding", "to": "limb_danger", "min_confidence": "medium" },

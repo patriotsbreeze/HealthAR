@@ -29,7 +29,8 @@
       "metronome": "off",
       "frame_uplink": true,
       "allowed_say": ["gasping_not_normal", "no_pulse_check", "assign_helper"],
-      "timeout": { "seconds": 10, "to": "call_911" },
+      "timeout": { "seconds": 30, "to": "call_911" },
+      "repeating": [{ "phrase": "ask_responsive", "every_seconds": 10 }],
       "transitions": [
         { "on": "human.no", "to": "intake_breathing" },
         { "on": "human.unsure", "to": "call_911" },
@@ -51,7 +52,8 @@
       "metronome": "off",
       "frame_uplink": true,
       "allowed_say": ["gasping_not_normal", "no_pulse_check", "assign_helper"],
-      "timeout": { "seconds": 10, "to": "call_911" },
+      "timeout": { "seconds": 30, "to": "call_911" },
+      "repeating": [{ "phrase": "ask_breathing", "every_seconds": 10 }],
       "transitions": [
         { "on": "human.no", "to": "call_911" },
         { "on": "human.unsure", "to": "call_911" },
@@ -90,7 +92,8 @@
       "metronome": "off",
       "frame_uplink": false,
       "allowed_say": ["gasping_not_normal", "no_pulse_check", "assign_helper"],
-      "timeout": { "seconds": 10, "to": "call_911" },
+      "timeout": { "seconds": 30, "to": "call_911" },
+      "repeating": [{ "phrase": "ask_still_breathing", "every_seconds": 10 }],
       "transitions": [
         { "on": "human.yes", "to": "watch_breathing" },
         { "on": "human.no", "to": "call_911" },
@@ -152,7 +155,7 @@
       "metronome": "off",
       "frame_uplink": false,
       "allowed_say": ["assign_helper"],
-      "timeout": { "seconds": 5, "to": "position_patient" },
+      "repeating": [{ "phrase": "call_911", "every_seconds": 10 }],
       "transitions": [
         { "on": "human.called", "to": "position_patient" },
         { "on": "human.done", "to": "position_patient" },
@@ -168,7 +171,7 @@
       "metronome": "off",
       "frame_uplink": false,
       "allowed_say": [],
-      "timeout": { "seconds": 5, "to": "place_hands" },
+      "repeating": [{ "phrase": "roll_flat", "every_seconds": 10 }],
       "transitions": [
         { "on": "human.done", "to": "place_hands" },
         { "on": "human.start_cpr", "to": "compressions", "phrases": ["hands_center"] }
@@ -184,7 +187,7 @@
       "frame_uplink": false,
       "overlay": "chest_center",
       "allowed_say": ["no_pulse_check"],
-      "timeout": { "seconds": 5, "to": "compressions" },
+      "repeating": [{ "phrase": "hands_center", "every_seconds": 10 }],
       "transitions": [
         { "on": "human.done", "to": "compressions" },
         { "on": "human.start_cpr", "to": "compressions" }

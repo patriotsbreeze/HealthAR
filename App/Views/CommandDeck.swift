@@ -148,21 +148,16 @@ private struct DeckHeader: View {
     }
 }
 
-/// "Step 2 of 3" only where there's a real sequence, and how long until the step moves on by itself.
+/// "Step 2 of 3" only where there's a real sequence. No countdown: a clock running down read as
+/// the app skipping ahead, and the question repeats instead.
 private struct MetaRow: View {
     let coordinator: AppCoordinator
 
     var body: some View {
-        let progress = coordinator.stepProgress
-        if progress != nil || coordinator.definition?.timeout != nil {
+        if let progress = coordinator.stepProgress {
             HStack(spacing: DS.Space.s) {
-                if let progress { Text(progress.text) }
+                Text(progress.text)
                 Spacer(minLength: DS.Space.s)
-                TimelineView(.periodic(from: .now, by: 0.25)) { _ in
-                    if let left = coordinator.secondsUntilTimeout {
-                        Text("Moves on in \(Int(left.rounded(.up))) s")
-                    }
-                }
             }
             .dsFont(DS.Fonts.meta)
             .foregroundStyle(DS.Colors.textSecondary)

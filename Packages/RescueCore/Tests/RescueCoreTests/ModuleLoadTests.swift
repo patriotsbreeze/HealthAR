@@ -306,7 +306,7 @@ private func mergedEngine() throws -> ProtocolEngine {
 
     /// A patient who is talking gets asked first, however sure the report sounds.
     @Test(arguments: [Finding.notBreathing, .abnormalBreathing, .unresponsive])
-    func aCollapseReportAsksAboutBreathingAndStillReachesCPRInTime(finding: Finding) throws {
+    func aCollapseReportAsksAboutBreathingAndStillReachesTheCallInTime(finding: Finding) throws {
         var session = Session(engine: try mergedEngine())
         session.human(.yes)
         let reported = session.now
@@ -314,11 +314,16 @@ private func mergedEngine() throws -> ProtocolEngine {
         #expect(session.state.stateID == "intake_breathing")
         #expect(!session.state.metronomeOn)
 
-        for seconds in [10.0, 5, 5, 5] { session.advance(seconds) }
+        for _ in 0..<3 { session.advance(10) }
+        #expect(session.state.stateID == "call_911")
+        #expect(session.now - reported <= 30)
+        #expect(session.allPhrases.filter { $0 == "ask_breathing" }.count == 3, "asked, then twice more")
+        #expect(session.entries(.answer).contains { $0.detail == "breathing=no_reply" })
+
+        // The setup steps wait for a tap, and Start CPR is one.
+        session.human(.startCpr)
         #expect(session.state.stateID == "compressions")
         #expect(session.state.metronomeOn)
-        #expect(session.now - reported <= 30)
-        #expect(session.entries(.answer).contains { $0.detail == "breathing=no_reply" })
     }
 
     // MARK: - Reports from before the tap

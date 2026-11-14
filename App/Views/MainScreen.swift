@@ -3,7 +3,7 @@ import RescueVision
 import SwiftUI
 
 enum AppSheet: String, Identifiable {
-    case dispatcher, sentinel, operatorPanel
+    case dispatcher, sentinel, operatorPanel, agents
     var id: String { rawValue }
 }
 
@@ -23,7 +23,7 @@ struct MainScreen: View {
             cameraLayer
             VStack(spacing: 0) {
                 SimulationStrip(operatorUsed: coordinator.operatorUsed) { present(.operatorPanel) }
-                StatusRail(coordinator: coordinator, showsHUD: $showsHUD) { present(.sentinel) }
+                StatusRail(coordinator: coordinator, showsHUD: $showsHUD, onAgents: { present(.agents) }) { present(.sentinel) }
                 if showsHUD { LatencyHUD(coordinator: coordinator) }
                 if coordinator.isHandoff {
                     HandoffCardView(coordinator: coordinator)
@@ -88,6 +88,7 @@ struct MainScreen: View {
             case .dispatcher:
                 DispatcherSheet(coordinator: coordinator, onClose: { present(nil) }, onOperator: { present(.operatorPanel) })
             case .sentinel: SentinelPanel(coordinator: coordinator) { present(.operatorPanel) }
+            case .agents: AgentsSheet(coordinator: coordinator) { present(.operatorPanel) }
             case .operatorPanel:
                 OperatorPanel(coordinator: coordinator, showsHUD: $showsHUD) { present(.sentinel) }
             }
@@ -137,6 +138,14 @@ struct MainScreen: View {
                 .padding(DS.Space.m)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
             }
+            if coordinator.aiTalking || coordinator.aiListening {
+                // Top-leading is the one corner nothing else in the band uses, and a tap goes through it.
+                ListeningBubble(mode: coordinator.aiTalking ? .talking : .listening)
+                    .padding(DS.Space.m)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
             if coordinator.overlayTarget == .padZones {
                 // Vision finds the body some frames in, and nothing here would redraw when it does.
                 TimelineView(.periodic(from: .now, by: 0.5)) { _ in
@@ -158,6 +167,7 @@ struct MainScreen: View {
             }
         }
         .frame(maxWidth: .infinity, minHeight: bandMinimum, maxHeight: .infinity)
+        .animation(DS.Motion.alert, value: coordinator.aiListening || coordinator.aiTalking)
     }
 
     /// Only a camera step's is a promise to someone aiming, the arrest path's hands and pads among

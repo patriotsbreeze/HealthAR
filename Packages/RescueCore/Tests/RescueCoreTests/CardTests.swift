@@ -80,7 +80,7 @@ import Testing
 
     @Test func noReplyIsRecordedAsNoReply() throws {
         var session = Session(engine: try engine())
-        session.advance(10)
+        session.advance(30)
         let card = HandoffBuilder.build(from: session.log.entries)
         #expect(value("Responding", card)?.value == "no reply")
         #expect(value("Responding", card)?.source == .timer)
@@ -147,10 +147,10 @@ import Testing
             ("yes, then not responding", { $0.human(.yes); $0.human(.patientUnresponsive) }, ["not responding"], ["unwell"]),
             ("start cpr with nothing asked", { $0.human(.startCpr) }, ["responsiveness not recorded"], ["not responding"]),
             ("not sure on responding", { $0.human(.unsure) }, ["responsiveness not confirmed"], ["not responding"]),
-            ("no reply on responding", { $0.advance(10) }, ["responsiveness not confirmed"], ["not responding"]),
+            ("no reply on responding", { $0.advance(30) }, ["responsiveness not confirmed"], ["not responding"]),
             ("no, no", { $0.human(.no); $0.human(.no) }, ["not responding", "not breathing normally"], ["confirmed"]),
             ("no, not sure", { $0.human(.no); $0.human(.unsure) }, ["breathing not confirmed"], ["not breathing normally"]),
-            ("no, no reply", { $0.human(.no); $0.advance(10) }, ["breathing not confirmed"], ["not breathing normally"]),
+            ("no, no reply", { $0.human(.no); $0.advance(30) }, ["breathing not confirmed"], ["not breathing normally"]),
             ("no, yes", { $0.human(.no); $0.human(.yes) }, ["breathing reported"], ["not confirmed"]),
             ("no, yes, no breaths", { $0.human(.no); $0.human(.yes); $0.advance(10) }, ["breathing not confirmed"], ["breathing reported"]),
             ("no, yes, start cpr", { $0.human(.no); $0.human(.yes); $0.human(.startCpr) }, ["breathing reported earlier"], ["not breathing normally"]),

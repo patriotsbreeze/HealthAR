@@ -79,6 +79,7 @@ final class FakeAudio: AudioPort, @unchecked Sendable {
     var onPhraseFinished: (@Sendable (String) -> Void)?
     var onCallChanged: (@Sendable (Bool) -> Void)?
     var onStatus: (@Sendable (AudioStatus) -> Void)?
+    var modelAudioPending = false
 }
 
 final class FakeVision: VisionPort, @unchecked Sendable {

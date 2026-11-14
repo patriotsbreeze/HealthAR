@@ -582,16 +582,24 @@ private final class Rescue {
     #expect(rescue.session.overlay() == .empty, "back in compressions, it would point where the AED was")
 }
 
-/// No touch from the collapse on: the breathing question and the setup steps time out into compressions.
-@Test func theCarriedArrowWaitsOutTheNoTouchPathAndNeverSitsBesideTheRing() async throws {
+/// No touch from the collapse on: the breathing question times out into the call step, which waits.
+/// Tapping on through the setup steps reaches compressions, and the arrow waits until then.
+@Test func theCarriedArrowWaitsOutTheSetupStepsAndNeverSitsBesideTheRing() async throws {
     let rescue = Rescue(bundle: try mergedBundle(), locator: FixedLocator(box: box))
     rescue.awakeScan()
     #expect(await rescue.locate(until: .located))
     rescue.tap(.patientUnresponsive)
 
     var visited: [String] = []
-    for _ in 0..<300 where rescue.state.stateID != "compressions" {
+    for _ in 0..<300 where rescue.state.stateID != "call_911" {
         rescue.tick()
+        if visited.last != rescue.state.stateID { visited.append(rescue.state.stateID) }
+        await step(rescue.session)
+        #expect(rescue.session.overlay().aedArrow == nil, "\(rescue.state.stateID)")
+    }
+    #expect(rescue.state.stateID == "call_911", "\(visited)")
+    for _ in 0..<3 where rescue.state.stateID != "compressions" {
+        rescue.tap(.done)
         if visited.last != rescue.state.stateID { visited.append(rescue.state.stateID) }
         await step(rescue.session)
         if rescue.state.stateID != "compressions" {
