@@ -195,6 +195,9 @@ public final class VisionSession: Sendable {
     /// Latest wins, so a slow socket can't build a queue. Has one consumer.
     public let uplinkFrames: AsyncStream<UplinkFrame>
     private let uplinkContinuation: AsyncStream<UplinkFrame>.Continuation
+    /// Callers waiting on the next frame as a JPEG, each with its own deadline.
+    private let snapshotWaiters = Mutex<[UInt64: CheckedContinuation<Data?, Never>]>([:])
+    private let nextSnapshotID = Mutex<UInt64>(0)
 
     /// On a device this owns the AR session. In the Simulator and on macOS it is a clean no-op.
     public convenience init(locator: any ObjectLocating) {
@@ -259,6 +262,28 @@ public final class VisionSession: Sendable {
     func finishStreams() {
         framesContinuation.finish()
         uplinkContinuation.finish()
+        resumeSnapshots(with: nil)
+    }
+
+    /// The next camera frame as a JPEG, or nil if none comes before the deadline. The caller decides
+    /// whether a frame may leave the phone; this only takes the picture.
+    public func snapshot(timeout: TimeInterval = 1.5) async -> Data? {
+        let id = nextSnapshotID.withLock { $0 += 1; return $0 }
+        return await withCheckedContinuation { continuation in
+            snapshotWaiters.withLock { $0[id] = continuation }
+            Task.detached { [weak self] in
+                try? await Task.sleep(for: .seconds(timeout))
+                self?.snapshotWaiters.withLock { $0.removeValue(forKey: id) }?.resume(returning: nil)
+            }
+        }
+    }
+
+    private func resumeSnapshots(with jpeg: Data?) {
+        let waiting = snapshotWaiters.withLock { waiters in
+            defer { waiters = [:] }
+            return Array(waiters.values)
+        }
+        waiting.forEach { $0.resume(returning: jpeg) }
     }
 
     // MARK: - Driving
@@ -776,6 +801,9 @@ public final class VisionSession: Sendable {
     /// Returns true if this frame went out on the uplink.
     @discardableResult
     func process(_ frame: CapturedFrame) async -> Bool {
+        if snapshotWaiters.withLock({ !$0.isEmpty }) {
+            resumeSnapshots(with: await encode(frame, Self.jpegRotation))
+        }
         let now = clock()
         let holdsLimb = pose.holdsLimb
         let job: FrameJob? = state.withLock { state in

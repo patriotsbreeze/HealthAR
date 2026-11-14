@@ -14,7 +14,7 @@ private let everyAwakeState = [
     private func engine() throws -> ProtocolEngine { ProtocolEngine(bundle: try loadMergedBundle()) }
 
     /// Only a tap may land on these.
-    private let humanOnly: Set<String> = ["triage", "chest_aspirin"]
+    private let humanOnly: Set<String> = ["assess", "triage", "chest_aspirin"]
 
     /// As if the rest of the rescue had got it there.
     private func session(_ engine: ProtocolEngine, in id: String) throws -> Session {
@@ -64,7 +64,8 @@ private let everyAwakeState = [
         #expect(bundle.moduleFailures.isEmpty, "\(bundle.moduleFailures)")
         #expect(bundle.flows.map(\.id) == ["possible_heart_attack", "possible_broken_bone"])
         let awake = bundle.definition.states.filter(\.kind.isAwake).map(\.id)
-        #expect(Set(awake) == Set(everyAwakeState), "a new state needs a walk below")
+        // Assess is only ever where a rescue opens, so no walk from core reaches it. `AssessTests` covers it.
+        #expect(Set(awake) == Set(everyAwakeState + [ScenarioModule.assessState]), "a new state needs a walk below")
     }
 
     /// The walk the rest of this suite relies on is the real one.
@@ -102,39 +103,36 @@ private let everyAwakeState = [
 
     /// With no further input a collapse gets as far as the call, which waits for a tap, and one Start
     /// CPR tap from there reaches the beat.
-    @Test func everyCollapseReachesTheCallWithNoFurtherInputAndNeverLowersUrgency() throws {
+    /// A tap or something the rescuer said takes an awake patient to the breathing question or CPR,
+    /// never lower, and from there it waits on them. What the AI only saw moves nothing.
+    @Test func everyCollapseReachesTheBreathingQuestionAndWaitsThere() throws {
         let engine = try engine()
         let triggers: [(String, (inout Session) -> Void)] = [
             ("tap, start CPR", { $0.human(.startCpr) }),
             ("tap, not responding", { $0.human(.patientUnresponsive) }),
             ("report, unresponsive", { $0.model(.reportFinding(.unresponsive, source: .heard, confidence: .low)) }),
             ("report, not breathing", { $0.model(.reportFinding(.notBreathing, source: .heard, confidence: .low)) }),
-            ("report, abnormal breathing", { $0.model(.reportFinding(.abnormalBreathing, source: .seen, confidence: .low)) }),
+            ("report, abnormal breathing", { $0.model(.reportFinding(.abnormalBreathing, source: .heard, confidence: .low)) }),
         ]
         for state in engine.bundle.definition.states where state.kind.isAwake {
             for (name, trigger) in triggers {
                 var session = try session(engine, in: state.id)
-                let started = session.now
                 trigger(&session)
-                #expect(["intake_breathing", "compressions"].contains(session.state.stateID), "\(state.id), \(name)")
+                let reached = session.state.stateID
+                #expect(["intake_breathing", "compressions"].contains(reached), "\(state.id), \(name)")
                 #expect(session.effects.contains(.cutPhrases), "\(state.id), \(name)")
-
-                var urgency = try #require(engine.definition(of: session.state.stateID)).urgency
+                let urgency = try #require(engine.definition(of: reached)).urgency
                 #expect(urgency >= state.urgency, "\(state.id), \(name)")
-                // The breathing question waits 30 s, then the call step waits for a tap.
-                while session.now - started < 40 {
-                    session.advance(1)
-                    let next = try #require(engine.definition(of: session.state.stateID)).urgency
-                    #expect(next >= urgency, "\(state.id), \(name) dropped at \(session.state.stateID)")
-                    if urgency < 3, next >= 3 { #expect(session.now - started <= 30, "\(state.id), \(name)") }
-                    urgency = next
-                }
-                #expect(["call_911", "compressions"].contains(session.state.stateID), "\(state.id), \(name)")
-                #expect(session.allPhrases.contains("call_911"), "\(state.id), \(name)")
+                for _ in 0..<40 { session.advance(1) }
+                #expect(session.state.stateID == reached, "\(state.id), \(name) moved on by itself")
                 session.human(.startCpr)
                 #expect(session.state.stateID == "compressions", "\(state.id), \(name)")
                 #expect(session.state.metronomeOn, "\(state.id), \(name)")
             }
+
+            var seen = try session(engine, in: state.id)
+            seen.model(.reportFinding(.abnormalBreathing, source: .seen, confidence: .high))
+            #expect(seen.state.stateID == state.id, "\(state.id): a camera report moved the step")
         }
     }
 
@@ -161,7 +159,9 @@ private let everyAwakeState = [
     /// Their timers end in the safer branch, never in compressions, whoever was or wasn't there.
     @Test func noAwakeStateTimesOutIntoCPR() throws {
         let engine = try engine()
-        for state in engine.bundle.definition.states where state.kind.isAwake {
+        // Nobody has said the patient on assess is awake, so its silence goes to the arrest questions,
+        // which `AssessTests` holds to never reaching CPR without a tap.
+        for state in engine.bundle.definition.states where state.kind.isAwake && state.id != ScenarioModule.assessState {
             var session = try session(engine, in: state.id)
             for _ in 0..<300 {
                 session.advance(1)
@@ -209,7 +209,7 @@ private let everyAwakeState = [
                 entries += 1
             }
         }
-        #expect(entries == 4)
+        #expect(entries == 6)
     }
 
     @Test func theArrestPathTakesNoRoutingReportAtAll() throws {
@@ -445,19 +445,13 @@ private let everyAwakeState = [
 
     /// The question is asked three times over 30 s, then the call step waits, saying its line every
     /// 10 s, and one Start CPR tap reaches the beat.
-    @Test func noTouchLaunchReachesTheCallIn30SecondsAndWaitsThere() throws {
+    @Test func noTouchLaunchStaysOnTheFirstQuestionAndKeepsAsking() throws {
         var session = Session(engine: try engine())
         let started = session.now
-        while session.state.stateID != "call_911", session.now - started < 35 {
-            session.advance(0.2)
-        }
-        #expect(session.state.stateID == "call_911")
-        #expect(session.now - started <= 30.2)
-        #expect(session.allPhrases == ["ask_responsive", "ask_responsive", "ask_responsive", "call_911"])
-
-        while session.now - started < 51 { session.advance(0.2) }
-        #expect(session.state.stateID == "call_911")
-        #expect(session.allPhrases.filter { $0 == "call_911" }.count == 3)
+        while session.now - started < 60 { session.advance(0.2) }
+        #expect(session.state.stateID == "intake_responsive")
+        #expect(session.allPhrases.allSatisfy { $0 == "ask_responsive" })
+        #expect(session.allPhrases.count >= 6, "asked again every 10 s")
         #expect(!session.state.metronomeOn)
 
         session.human(.startCpr)
@@ -548,7 +542,7 @@ private let everyAwakeState = [
         #expect(opened.isDisjoint(with: ["chest_call", "chest_aspirin_check", "chest_aspirin", "chest_scan", "limb_start", "limb_flags", "limb_splint"]))
 
         let framed = definition.states.filter { $0.kind.isAwake && $0.frameUplink }.map(\.id)
-        #expect(framed == ["chest_scan"])
+        #expect(framed == ["assess", "chest_scan"])
         #expect(states["chest_scan"]?.overlay == .aedDevice)
     }
 

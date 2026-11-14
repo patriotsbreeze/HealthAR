@@ -25,8 +25,11 @@ struct MainScreen: View {
                 .ignoresSafeArea()
             cameraLayer
             VStack(spacing: 0) {
-                SimulationStrip(operatorUsed: coordinator.operatorUsed) { present(.operatorPanel) }
-                StatusRail(coordinator: coordinator, showsHUD: $showsHUD, onAgents: { present(.agents) }, onDispatcher: { present(.dispatcher) }) { present(.sentinel) }
+                StatusRail(
+                    coordinator: coordinator, showsHUD: $showsHUD,
+                    onAgents: { present(.agents) }, onDispatcher: { present(.dispatcher) }, onSentinel: { present(.sentinel) },
+                    onOperator: { present(.operatorPanel) }
+                )
                 if showsHUD { LatencyHUD(coordinator: coordinator) }
                 if coordinator.isHandoff {
                     HandoffCardView(coordinator: coordinator)
@@ -41,8 +44,13 @@ struct MainScreen: View {
                         .preference(key: FreeCameraArea.self, value: freeArea)
                 }
                 // Sized first, so the band gets what's left, and never less than its least.
-                CommandDeck(coordinator: coordinator, onStopRequested: { pendingStop = $0 })
-                    .layoutPriority(1)
+                if coordinator.isAssessing {
+                    AssessPanel(coordinator: coordinator) { present(.dispatcher) }
+                        .layoutPriority(1)
+                } else {
+                    CommandDeck(coordinator: coordinator, onStopRequested: { pendingStop = $0 })
+                        .layoutPriority(1)
+                }
             }
             // Above the panels, or a chest outside the band would hide behind them. The marks themselves
             // stay inside the band.
@@ -128,13 +136,32 @@ struct MainScreen: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                     .allowsHitTesting(false)
             }
-            if coordinator.aiTalking || coordinator.aiListening {
-                // Top-leading is the one corner nothing else in the band uses, and a tap goes through it.
-                ListeningBubble(mode: coordinator.aiTalking ? .talking : .listening)
-                    .padding(DS.Space.m)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
+            if showsVoice || showsAssessment {
+                // Top-leading is the one corner nothing else in the band uses. A tap goes through the
+                // orb; the read beside it opens on one.
+                HStack(alignment: .top, spacing: DS.Space.xs) {
+                    if showsVoice {
+                        ListeningBubble(mode: coordinator.aiTalking ? .talking : .listening)
+                            .allowsHitTesting(false)
+                            .transition(.opacity)
+                    }
+                    if showsAssessment {
+                        AssessmentChip(
+                            assessment: coordinator.sceneRead,
+                            log: coordinator.assessmentLog,
+                            source: coordinator.assessmentSource?.rawValue,
+                            assessing: coordinator.assessing,
+                            failed: coordinator.assessmentFailed
+                        )
+                        // Level with the orb's middle, and it opens downward from there.
+                        .padding(.top, showsVoice ? (DS.Listening.frame - DS.Height.control) / 2 : 0)
+                        .transition(.opacity)
+                    }
+                }
+                .padding(DS.Space.m)
+                // Clear of a docked beat in the other corner.
+                .padding(.trailing, coordinator.showsBeatPulse && coordinator.pulseDocked ? DS.Pulse.docked + DS.Pulse.dockedInset : 0)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
             if coordinator.offersPracticePatient {
                 // Bottom-trailing is free in compressions. The patient lands where the band's middle meets the floor.
@@ -169,7 +196,17 @@ struct MainScreen: View {
             }
         }
         .frame(maxWidth: .infinity, minHeight: bandMinimum, maxHeight: .infinity)
-        .animation(DS.Motion.alert, value: coordinator.aiListening || coordinator.aiTalking)
+        .animation(DS.Motion.alert, value: showsVoice)
+        .animation(DS.Motion.alert, value: showsAssessment)
+    }
+
+    private var showsVoice: Bool { coordinator.aiTalking || coordinator.aiListening }
+
+    /// A read only with the AI up, since one from a session that's gone would be about another scene.
+    private var showsAssessment: Bool {
+        // The log shows on its own too, so the 911 agent's call is seen even with the AI offline.
+        !coordinator.assessmentLog.isEmpty
+            || coordinator.liveConnected && (coordinator.assessing || coordinator.sceneRead != nil || coordinator.assessmentFailed)
     }
 
     /// Only a camera step's is a promise to someone aiming, the arrest path's hands and pads among

@@ -17,7 +17,7 @@ struct StopConfirmation: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SimulationStrip(operatorUsed: operatorUsed, onOperator: onOperator)
+            OperatorBadgeRow(operatorUsed: operatorUsed, onOperator: onOperator)
             VStack(alignment: .leading, spacing: DS.Space.l) {
                 if showsPulse {
                     // The beat stays up: until this is confirmed, pushing goes on. It says so, as on the main screen.

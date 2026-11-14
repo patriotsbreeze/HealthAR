@@ -44,6 +44,10 @@ final class UplinkGate: Sendable {
     /// Single frozen frames to the one-shot locator. Never to the Live session, which only
     /// `framesOpen` lets through. Vision asks on the same terms.
     var locateOpen: Bool { state.withLock { $0.policy.map { $0.frameLocate || $0.frameUplink } ?? false } }
+    /// One frame at a time to the scene read, on any step, so the live log runs the whole rescue. Shut
+    /// with the mic: on a call, with the dispatcher open, or while the dispatcher was just heard, so
+    /// nothing leaves the phone while someone else is on the line.
+    var sceneReadOpen: Bool { state.withLock { $0.policy?.micUplink ?? false } }
     /// Towels, pillows and gloves: only where the step itself allows frozen frames to the locator.
     /// The uplink alone, as on the arrest path, opens this for the AED and nothing else.
     var materialsOpen: Bool { state.withLock { $0.policy?.frameLocate ?? false } }

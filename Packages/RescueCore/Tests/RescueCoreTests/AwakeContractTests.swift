@@ -68,9 +68,13 @@ import Testing
         #expect(try line(of: "other_concern").contains("trouble breathing in someone still talking"))
     }
 
+    /// report_scene is arrest only: on the awake model a tool call ends the turn, so describing the
+    /// view could cut off an answer someone is waiting for.
     @Test func everythingElseMatchesTheArrestContract() throws {
-        let arrest = try tools("tools.v1.json")
+        let arrest = try tools("tools.v1.json").filter { $0["name"] as? String != "report_scene" }
         let awake = try tools("tools.awake.v1.json")
+        #expect(try tools("tools.v1.json").contains { $0["name"] as? String == "report_scene" })
+        #expect(!awake.contains { $0["name"] as? String == "report_scene" })
         #expect(awake.compactMap { $0["name"] as? String } == arrest.compactMap { $0["name"] as? String })
 
         for (old, new) in zip(arrest, awake) where old["name"] as? String != "report_finding" {

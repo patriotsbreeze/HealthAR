@@ -465,13 +465,14 @@ import Testing
     @Test func theArrestPathDoesNotWaitForTheDispatcher() throws {
         var session = Session(engine: try engine())
         session.human(.dispatcherOn)
-        session.advance(30)
+        session.human(.no)
+        session.human(.no)
         #expect(session.state.stateID == "call_911")
 
         var collapsed = try inFlow()
         collapsed.human(.patientUnresponsive)
         collapsed.human(.dispatcherOn)
-        collapsed.advance(30)
+        collapsed.human(.no)
         #expect(collapsed.state.stateID == "call_911")
     }
 
@@ -635,8 +636,10 @@ import Testing
 
         session.advance(9)
         #expect(session.phrases == ["ask_breathing"], "the question repeats at 10 s")
-        session.advance(20)
-        #expect(session.state.stateID == "call_911", "no reply still gets there, on the question's own clock")
+        session.advance(30)
+        #expect(session.state.stateID == "intake_breathing", "no reply keeps asking; only the rescuer moves it on")
+        session.human(.no)
+        #expect(session.state.stateID == "call_911")
         #expect(!session.state.breathingAskedAwake)
     }
 

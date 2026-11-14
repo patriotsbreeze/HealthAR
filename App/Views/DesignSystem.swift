@@ -84,7 +84,7 @@ extension DS {
         static let critical = Color(hex: Hex.critical)
         /// The same meaning as a fill under white text.
         static let criticalFill = Color(hex: Hex.criticalFill)
-        /// A degraded system, and the simulation strip.
+        /// A degraded system, and the operator badge.
         static let caution = Color(hex: Hex.caution)
         /// Live or confirmed. Never decoration.
         static let ok = Color(hex: Hex.ok)
@@ -116,20 +116,20 @@ struct DSFont: Equatable, Sendable {
 
 extension DS {
     enum Fonts {
-        /// The step. 26 so a long one takes three lines, not four, and the camera keeps the screen.
+        /// The step. 22 so a long one takes two or three lines, and the camera keeps the screen.
         /// Never shrinks past 0.85, so it stays readable at a glance.
-        static let command = DSFont(size: 26, weight: .bold, relativeTo: .largeTitle)
-        /// A camera step's step. SAFETY.md holds it at 24 pt, so the band keeps its room.
-        static let commandCompact = DSFont(size: 24, weight: .bold, relativeTo: .title)
+        static let command = DSFont(size: 22, weight: .bold, relativeTo: .title)
+        /// A camera step's step. SAFETY.md holds it at 20 pt, so the band keeps its room.
+        static let commandCompact = DSFont(size: 20, weight: .bold, relativeTo: .title2)
         static let confirm = DSFont(size: 34, weight: .bold, relativeTo: .largeTitle)
         static let title = DSFont(size: 22, weight: .bold, relativeTo: .title2)
-        static let detail = DSFont(size: 20, weight: .semibold, relativeTo: .title3)
-        static let detailCompact = DSFont(size: 15, weight: .semibold, relativeTo: .subheadline)
-        static let prompt = DSFont(size: 17, weight: .semibold, relativeTo: .headline)
+        static let detail = DSFont(size: 16, weight: .semibold, relativeTo: .callout)
+        static let detailCompact = DSFont(size: 14, weight: .semibold, relativeTo: .subheadline)
+        static let prompt = DSFont(size: 15, weight: .semibold, relativeTo: .subheadline)
         static let body = DSFont(size: 17, weight: .regular, relativeTo: .body)
-        static let button = DSFont(size: 19, weight: .semibold, relativeTo: .title3)
+        static let button = DSFont(size: 17, weight: .semibold, relativeTo: .headline)
         /// The way-out row a size down, so Not responding now stays on one line on a small phone.
-        static let buttonTight = DSFont(size: 16, weight: .semibold, relativeTo: .title3)
+        static let buttonTight = DSFont(size: 15, weight: .semibold, relativeTo: .headline)
         static let buttonCompact = DSFont(size: 15, weight: .semibold, relativeTo: .subheadline)
         /// Three to a row, or a long hold label on a camera step, where 15 pt would wrap to three lines.
         static let buttonSmall = DSFont(size: 13, weight: .semibold, relativeTo: .footnote)
@@ -137,7 +137,6 @@ extension DS {
         static let label = DSFont(size: 15, weight: .semibold, relativeTo: .subheadline)
         static let meta = DSFont(size: 13, weight: .semibold, relativeTo: .footnote, monospacedDigits: true)
         static let caption = DSFont(size: 13, weight: .regular, relativeTo: .footnote)
-        static let strip = DSFont(size: 13, weight: .semibold, relativeTo: .footnote)
         static let badge = DSFont(size: 12, weight: .semibold, relativeTo: .caption)
         static let value = DSFont(size: 17, weight: .semibold, relativeTo: .body, monospacedDigits: true)
     }
@@ -186,8 +185,8 @@ extension DS {
         static let xxl: CGFloat = 32
         static let gutter: CGFloat = 16
         static let deckInset: CGFloat = 8
-        static let deckPadding: CGFloat = 16
-        static let betweenButtons: CGFloat = 8
+        static let deckPadding: CGFloat = 14
+        static let betweenButtons: CGFloat = 6
     }
 
     /// Three families and nothing else: the deck, capsules for anything pressed, 14 for rows and cards.
@@ -233,25 +232,26 @@ extension DS {
     /// is given. A label that needs more grows the button.
     enum Height {
         /// Start CPR and Resume CPR on the arrest path.
-        static let arrestPrimary: CGFloat = 64
-        static let arrest: CGFloat = 54
+        static let arrestPrimary: CGFloat = 54
+        static let arrest: CGFloat = 48
         /// No, keep pushing.
         static let stopCancel: CGFloat = 96
         /// Yes, stop CPR.
         static let stopConfirm: CGFloat = 84
         /// Answers, triage and steps when someone is awake.
-        static let awake: CGFloat = 50
-        static let awakeHold: CGFloat = 50
+        static let awake: CGFloat = 44
+        static let awakeHold: CGFloat = 44
         /// Start CPR and Not responding now, outside the scroll.
-        static let awakeWayOut: CGFloat = 52
+        static let awakeWayOut: CGFloat = 46
         /// Holds on a camera step, and the standing row.
         static let camera: CGFloat = 44
-        static let strip: CGFloat = 28
         static let rail: CGFloat = 44
         static let pill: CGFloat = 28
         /// The one glass button, and every other small control.
         static let control: CGFloat = 44
         static let alertRow: CGFloat = 32
+        /// The why row. Shorter than a control, since a miss only leaves it shut, and its whole width is the target.
+        static let why: CGFloat = 36
     }
 
     /// The least band a step keeps. Only the camera step's is a promise to someone aiming.
@@ -275,6 +275,22 @@ extension DS {
         static let orb: CGFloat = 56
         /// The glow reaches out to this, and it's the bubble's whole height.
         static let frame: CGFloat = 88
+        /// How far the label rises into the glow, so it reads as the orb's and not a line of its own.
+        static let labelTuck: CGFloat = 12
+    }
+
+    /// The AI's read of the scene, beside the orb. Narrow, so the band keeps the patient in view.
+    enum Assessment {
+        static let maxWidth: CGFloat = 250
+        /// The drop-down under the pill is a little wider, so the reasoning wraps less.
+        static let panelWidth: CGFloat = 262
+        static let radius: CGFloat = 18
+        /// Under the frost, so the words keep their contrast over a bright floor or window.
+        static let glassFloor = Color(hex: 0x0E1117, opacity: 0.22)
+        /// The live log is always open, so it scrolls past this and leaves the patient in view.
+        static let openMaxHeight: CGFloat = 128
+        /// A soft blue for the AI's read, never the cyan of the beat.
+        static let tint = Color(hex: 0x6E9BF2)
     }
 
     /// No bounce anywhere. Motion explains a change, or it doesn't happen.

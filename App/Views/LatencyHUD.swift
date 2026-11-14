@@ -28,6 +28,12 @@ struct LatencyHUD: View {
                 line("Keypoint age", coordinator.vision.keypointAge.map(Self.milliseconds) ?? "not measured")
                 line("AR", arText)
                 line("AED locate", coordinator.vision.aedStatus.rawValue)
+                let reads = coordinator.assessmentStats
+                line("Live scene gap", Self.summary(reads.liveGaps))
+                line("Quick look", Self.summary(reads.quick))
+                if reads.failures > 0 {
+                    line("Scene read failures", "\(reads.failures), last \(reads.lastProblem ?? "unknown")")
+                }
                 if let tokens = coordinator.usage?.totalTokens {
                     line("Tokens", String(tokens))
                 }

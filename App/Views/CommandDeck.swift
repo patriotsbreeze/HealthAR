@@ -35,7 +35,7 @@ struct CommandDeck: View {
                             // Shut on every new step, or one opened earlier would keep the band small.
                             WhyDisclosure(explanation: explanation)
                                 .id(stateID)
-                                .padding(.top, DS.Space.s)
+                                .padding(.top, DS.Space.xs)
                         }
                         Group {
                             if awake {
@@ -44,7 +44,7 @@ struct CommandDeck: View {
                                 ArrestRows(coordinator: coordinator, onStopRequested: onStopRequested)
                             }
                         }
-                        .padding(.top, camera ? DS.Space.m : DS.Space.l)
+                        .padding(.top, camera ? DS.Space.s : DS.Space.m)
                     }
                     .onGeometryChange(for: CGFloat.self, of: \.size.height) { contentHeight = $0 }
                 }
@@ -58,7 +58,7 @@ struct CommandDeck: View {
             }
             if awake {
                 WayOutRow(coordinator: coordinator)
-                    .padding(.top, DS.Space.s)
+                    .padding(.top, DS.Space.betweenButtons)
                     .overlay(alignment: .top) {
                         // Where the step scrolls under the fixed row, a rule marks the edge, so a cut row
                         // reads as more to scroll and not as a drawing fault.
@@ -70,9 +70,9 @@ struct CommandDeck: View {
             }
         }
         .padding(.horizontal, DS.Space.deckPadding)
-        .padding(.top, DS.Space.m)
+        .padding(.top, DS.Space.s + DS.Space.xs)
         // The home indicator's strip is already clear, so the deck only needs its own margin where there isn't one.
-        .padding(.bottom, bottomInset > 0 ? DS.Space.xs : DS.Space.l)
+        .padding(.bottom, bottomInset > 0 ? 0 : DS.Space.m)
         // Exactly the width it's given. A row a fraction wider would otherwise widen the whole screen.
         .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
         .background { DeckSurface() }
@@ -101,7 +101,7 @@ private struct DeckHeader: View {
     let compact: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: compact ? DS.Space.xs : 6) {
+        VStack(alignment: .leading, spacing: compact ? 2 : DS.Space.xs) {
             MetaRow(coordinator: coordinator)
             Text(CommandEmphasis.attributed(coordinator.deckCommand, terms: coordinator.commandTerms))
                 .dsFont(compact ? DS.Fonts.commandCompact : DS.Fonts.command)
@@ -176,16 +176,17 @@ private struct WhyDisclosure: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.s) {
             Button { isOpen.toggle() } label: {
+                // One line, headline then who chose, so the why costs the deck a single row.
                 HStack(alignment: .center, spacing: DS.Space.s) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(explanation.headline)
-                            .dsFont(DS.Fonts.label)
-                            .foregroundStyle(DS.Colors.textPrimary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Text(explanation.chooser.rawValue)
-                            .dsFont(DS.Fonts.meta)
-                            .foregroundStyle(DS.Colors.textSecondary)
-                    }
+                    Text(explanation.headline)
+                        .dsFont(DS.Fonts.label)
+                        .foregroundStyle(DS.Colors.textPrimary)
+                        .lineLimit(isOpen ? nil : 1)
+                        .layoutPriority(1)
+                    Text(explanation.chooser.rawValue)
+                        .dsFont(DS.Fonts.meta)
+                        .foregroundStyle(DS.Colors.textSecondary)
+                        .lineLimit(1)
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.down")
                         .font(.system(size: 13, weight: .semibold))
@@ -193,7 +194,7 @@ private struct WhyDisclosure: View {
                         .rotationEffect(.degrees(isOpen ? 180 : 0))
                 }
                 .padding(.horizontal, DS.Space.m)
-                .frame(minHeight: DS.Height.control)
+                .frame(minHeight: DS.Height.why)
                 .background(DS.Glass.fill, in: RoundedRectangle(cornerRadius: DS.Radius.row, style: .continuous))
                 .contentShape(RoundedRectangle(cornerRadius: DS.Radius.row, style: .continuous))
             }

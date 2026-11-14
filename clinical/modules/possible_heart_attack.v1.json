@@ -17,6 +17,8 @@
     { "state": "triage", "edge": { "on": "human.triage_chest", "to": "chest_call" } },
     { "state": "triage", "edge": { "on": "model.chest_pain", "to": "chest_call", "min_confidence": "medium" } },
     { "state": "triage", "edge": { "on": "model.other_heart_signs", "to": "chest_call", "min_confidence": "medium" } },
+    { "state": "assess", "edge": { "on": "model.chest_pain", "to": "chest_call", "min_confidence": "medium" } },
+    { "state": "assess", "edge": { "on": "model.other_heart_signs", "to": "chest_call", "min_confidence": "medium" } },
     { "state": "general_talk", "edge": { "on": "model.chest_pain", "to": "chest_call", "min_confidence": "medium" } },
     { "state": "general_talk", "edge": { "on": "model.other_heart_signs", "to": "chest_call", "min_confidence": "medium" } }
   ],

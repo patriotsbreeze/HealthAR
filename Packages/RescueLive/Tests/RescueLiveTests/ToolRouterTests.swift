@@ -79,7 +79,7 @@ import Testing
             Issue.record("contract shape changed")
             return
         }
-        #expect(declarations.count == 5)
+        #expect(declarations.count == 6)
 
         for declaration in declarations {
             guard case let .object(item) = declaration,
@@ -109,13 +109,43 @@ import Testing
                     alternatives += values.map { (argument, $0) }
                 }
             }
-            #expect(router.route(call(name, .object(valid))).proposal != nil, "\(name) did not decode")
+            // report_scene is for the screen, so it decodes to a scene and never to a proposal.
+            func decodes(_ routed: ToolRouter.Routed) -> Bool {
+                name == "report_scene" ? routed.scene != nil && routed.proposal == nil : routed.proposal != nil
+            }
+            #expect(decodes(router.route(call(name, .object(valid)))), "\(name) did not decode")
             for (argument, value) in alternatives {
                 var args = valid
                 args[argument] = value
-                #expect(router.route(call(name, .object(args))).proposal != nil, "\(name) rejected \(argument)=\(value)")
+                #expect(decodes(router.route(call(name, .object(args)))), "\(name) rejected \(argument)=\(value)")
             }
         }
+    }
+
+    @Test func aSceneReportNeverBecomesAProposal() {
+        let args: JSONValue = [
+            "sees": "Person face up on the floor, eyes closed", "headline": "Not moving",
+            "prediction": "Possible cardiac arrest", "confidence": "medium",
+            "note": "Person came into view", "emergency": "Person down on the floor", "state_version": .number(3),
+        ]
+        let routed = router.route(call("report_scene", args))
+        #expect(routed.proposal == nil)
+        #expect(routed.scene == SceneReport(sees: "Person face up on the floor, eyes closed", headline: "Not moving", prediction: "Possible cardiac arrest", confidence: .medium, note: "Person came into view", emergency: "Person down on the floor", stateVersion: 3))
+        #expect(routed.response?.status == .received)
+    }
+
+    @Test(arguments: [
+        ["sees": "x", "headline": "y", "prediction": "z", "confidence": "sure", "note": "n", "emergency": "", "state_version": .number(1)],
+        ["sees": "x", "headline": "y", "prediction": "z", "confidence": "low", "note": "n"],
+        ["sees": "x", "headline": "y", "prediction": "z", "confidence": "low", "note": "n", "state_version": .number(1)],
+        ["sees": "x", "headline": "y", "prediction": "z", "confidence": "low", "note": "n", "emergency": "", "state_version": .number(1), "step": "cpr"],
+        ["sees": "", "headline": "y", "prediction": "z", "confidence": "low", "note": "n", "emergency": "", "state_version": .number(1)],
+        ["sees": .string(String(repeating: "a", count: 201)), "headline": "y", "prediction": "z", "confidence": "low", "note": "n", "emergency": "", "state_version": .number(1)],
+    ] as [JSONValue])
+    func aBadSceneReportIsRejected(_ args: JSONValue) {
+        let routed = router.route(call("report_scene", args))
+        #expect(routed.scene == nil && routed.proposal == nil)
+        #expect(routed.response?.status == .rejected)
     }
 
     private func enumValues(_ schema: JSONValue) -> [JSONValue] {

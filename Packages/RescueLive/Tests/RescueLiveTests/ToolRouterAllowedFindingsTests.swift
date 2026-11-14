@@ -85,6 +85,7 @@ import Testing
                 return fields["name"]
             }
         }
-        #expect(names(awake) == names(arrest))
+        // report_scene is arrest only. On the awake model a tool call ends the turn.
+        #expect(names(awake) == names(arrest).filter { $0 != "report_scene" })
     }
 }

@@ -79,7 +79,9 @@ enum AppBoot {
         #endif
 
         return .ready(AppCoordinator(
-            engine: ProtocolEngine(bundle: protocolBundle),
+            // With an AI to look and listen, the rescue opens on assess. With none it opens on the
+            // arrest path's first question, since nothing could do the assessing.
+            engine: ProtocolEngine(bundle: key == nil ? protocolBundle : protocolBundle.startingWithAssessment()),
             audio: RescueAudioController(phraseTexts: texts, bundle: bundle),
             vision: vision,
             gate: gate,
@@ -127,6 +129,15 @@ enum AppBoot {
         }
     }
 
+    /// Debug builds print the scene read's diagnostics to the console, so a run on a phone can be read
+    /// from `devicectl --console`. Release builds log nothing.
+    static func assessor(key: APIKey) -> SituationAssessor {
+        #if DEBUG
+        SituationAssessor.logSink.withLock { $0 = { print("[Assess] \($0)") } }
+        #endif
+        return SituationAssessor(apiKey: key)
+    }
+
     /// A new session for each rescue and each mode, because a kept resumption handle carries the old
     /// context. A mode whose contract didn't ship stays offline, and the other still runs.
     static func liveFactory(
@@ -148,7 +159,8 @@ enum AppBoot {
             configuration.voiceName = voiceName
             return LiveStack(
                 session: LiveSession(transport: makeTransport(configuration), clock: clock, mode: mode),
-                auditor: Auditor(apiKey: key)
+                auditor: Auditor(apiKey: key),
+                assessor: assessor(key: key)
             )
         }
     }
@@ -210,6 +222,8 @@ protocol VisionPort: AnyObject, Sendable {
     func compressionFeedback() -> CompressionFeedback?
     /// The ghost is on screen pushing on the beat.
     var showsGhost: Bool { get }
+    /// The next camera frame as a JPEG, for the scene read. Nil with no camera or none in time.
+    func snapshot(timeout: TimeInterval) async -> Data?
 }
 
 extension VisionPort {
@@ -219,6 +233,7 @@ extension VisionPort {
     func clearPracticePatient() {}
     func compressionFeedback() -> CompressionFeedback? { nil }
     var showsGhost: Bool { false }
+    func snapshot(timeout: TimeInterval) async -> Data? { nil }
 }
 
 extension VisionSession: VisionPort {}

@@ -230,13 +230,14 @@ import Testing
         #expect(drop < hands)
     }
 
+    /// The breath count is the arrest path's one clock, and a forced state starts it from now.
     @Test func aForcedStateStillRunsItsOwnTimeoutFromNow() throws {
         let fixture = try Fixture()
         fixture.coordinator.beginRescue()
         fixture.run(seconds: 20)
-        fixture.coordinator.force(stateID: "intake_breathing")
-        fixture.run(seconds: 29.6)
-        #expect(fixture.coordinator.state.stateID == "intake_breathing")
+        fixture.coordinator.force(stateID: "watch_breathing")
+        fixture.run(seconds: 9.6)
+        #expect(fixture.coordinator.state.stateID == "watch_breathing")
         fixture.run(seconds: 0.6)
         #expect(fixture.coordinator.state.stateID == "call_911")
     }

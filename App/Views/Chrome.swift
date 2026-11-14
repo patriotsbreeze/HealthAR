@@ -1,68 +1,54 @@
 import RescueCore
 import SwiftUI
 
-/// On every screen, so no view of this app can be mistaken for a real emergency tool.
-struct SimulationStrip: View {
-    static let text = "SIMULATION, will not call 911"
-    static let badge = "OPERATOR USED"
-    /// The hidden gesture for the operator panel. A stage hand holds it, nobody finds it by accident.
-    static let operatorHoldSeconds = 1.5
-
+/// The operator badge on a screen of its own, like a sheet or the stop confirmation, where it
+/// also takes the stage hand's hold. Nothing at all until the panel is used.
+struct OperatorBadgeRow: View {
     var operatorUsed = false
-    /// Nil where there's no operator panel to open.
     var onOperator: (() -> Void)?
 
     var body: some View {
-        strip
-            .modifier(OperatorGesture(action: onOperator))
-    }
-
-    /// A yellow pill on the camera rather than a band across it: the words are the same, and the
-    /// picture shows round them. The whole row still takes the stage hand's hold.
-    private var strip: some View {
-        HStack(spacing: DS.Space.s) {
-            HStack(spacing: DS.Space.s) {
-                Text(Self.text)
-                    .dsFont(DS.Fonts.strip)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                if operatorUsed {
-                    Text(Self.badge)
-                        .dsFont(DS.Fonts.badge)
-                        .lineLimit(1)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(DS.Colors.ink, in: Capsule())
-                        .foregroundStyle(DS.Colors.caution)
-                        .accessibilityLabel("Operator panel was used in this run")
-                }
+        if operatorUsed {
+            HStack(spacing: 0) {
+                OperatorBadge()
+                Spacer(minLength: 0)
             }
-            .foregroundStyle(DS.Colors.ink)
-            .padding(.horizontal, DS.Space.m)
-            .frame(minHeight: DS.Height.strip)
-            .background(DS.Colors.caution, in: Capsule(style: .continuous))
-            .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
-            Spacer(minLength: 0)
+            .padding(.horizontal, DS.Space.gutter)
+            .padding(.top, DS.Space.xs)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+            .modifier(OperatorGesture(action: onOperator))
         }
-        .padding(.horizontal, DS.Space.gutter)
-        .padding(.top, DS.Space.xs)
-        .frame(maxWidth: .infinity)
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
-        // Its words are pinned, so they never shrink to an ellipsis: beside the badge on a 375 pt phone
-        // they fit up to this size, and the sheets, outside the main screen's cap, get it too.
-        .dynamicTypeSize(...DynamicTypeSize.xLarge)
     }
 }
 
-private struct OperatorGesture: ViewModifier {
+/// Says the operator panel was used in this run, so a forced beat is never passed off as a real one.
+struct OperatorBadge: View {
+    static let text = "OPERATOR USED"
+
+    var body: some View {
+        Text(Self.text)
+            .dsFont(DS.Fonts.badge)
+            .lineLimit(1)
+            .padding(.horizontal, DS.Space.s)
+            .frame(minHeight: DS.Height.pill)
+            .background(DS.Colors.caution, in: Capsule(style: .continuous))
+            .foregroundStyle(DS.Colors.ink)
+            .accessibilityLabel("Operator panel was used in this run")
+            .dynamicTypeSize(...DynamicTypeSize.xLarge)
+    }
+}
+
+struct OperatorGesture: ViewModifier {
+    /// The hidden gesture for the operator panel. A stage hand holds it, nobody finds it by accident.
+    static let holdSeconds = 1.5
+
     let action: (() -> Void)?
 
     @ViewBuilder func body(content: Content) -> some View {
         if let action {
             content
-                .onLongPressGesture(minimumDuration: SimulationStrip.operatorHoldSeconds) { action() }
+                .onLongPressGesture(minimumDuration: Self.holdSeconds) { action() }
                 .accessibilityAction(named: "Open operator panel") { action() }
         } else {
             content
@@ -83,21 +69,25 @@ struct Pill<Content: View>: View {
     }
 }
 
-/// Time since the start, the link, the one floating control, and any alerts under them.
+/// Time since the start, the agents, the one floating control, and any alerts under them. The link
+/// has no pill: the orb shows when the AI can hear, and an alert says when it can't.
 struct StatusRail: View {
     let coordinator: AppCoordinator
     @Binding var showsHUD: Bool
     let onAgents: () -> Void
     let onDispatcher: () -> Void
     let onSentinel: () -> Void
+    /// The stage hand's hidden hold, on the clock now that the strip is gone.
+    var onOperator: (() -> Void)?
 
     var body: some View {
         let alerts = coordinator.statusAlerts
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: DS.Space.s) {
                 ElapsedPill(coordinator: coordinator)
-                LinkPill(coordinator: coordinator)
+                    .modifier(OperatorGesture(action: onOperator))
                 AgentsPill(action: onAgents)
+                if coordinator.operatorUsed { OperatorBadge() }
                 Spacer(minLength: 0)
                 OverflowMenu(coordinator: coordinator, showsHUD: $showsHUD, onDispatcher: onDispatcher, onSentinel: onSentinel)
             }
@@ -126,32 +116,6 @@ private struct ElapsedPill: View {
                     .accessibilityLabel("Elapsed \(Int(seconds) / 60) minutes \(Int(seconds) % 60) seconds")
             }
         }
-    }
-}
-
-private struct LinkPill: View {
-    let coordinator: AppCoordinator
-
-    var body: some View {
-        Pill {
-            // A dot only for a real state, and it never pulses.
-            Circle()
-                .fill(dot)
-                .frame(width: 8, height: 8)
-            Text(coordinator.linkLabel)
-                .dsFont(DS.Fonts.label)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .foregroundStyle(coordinator.liveConnected ? DS.Colors.textPrimary : DS.Colors.textSecondary)
-        }
-        .accessibilityElement(children: .combine)
-        // "AI switching, can't hear" is shown word for word, and past this it would lose "can't hear".
-        .dynamicTypeSize(...DynamicTypeSize.xLarge)
-    }
-
-    private var dot: Color {
-        if coordinator.liveConnected { return DS.Colors.ok }
-        return coordinator.liveSwapping ? DS.Colors.caution : DS.Colors.textTertiary
     }
 }
 
@@ -259,12 +223,12 @@ struct AlertRow: View {
 /// compressions whatever else is open, so the current step comes along with it.
 struct SheetTopBar: View {
     let coordinator: AppCoordinator
-    /// The same hidden hold as the main screen's strip. It swaps this sheet for the operator panel.
+    /// The same hidden hold as the main screen's clock, on the badge once there is one.
     var onOperator: (() -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
-            SimulationStrip(operatorUsed: coordinator.operatorUsed, onOperator: onOperator)
+            OperatorBadgeRow(operatorUsed: coordinator.operatorUsed, onOperator: onOperator)
             if coordinator.showsPulse {
                 HStack(spacing: DS.Space.m) {
                     BeatPulse(diameter: DS.Pulse.sheet, showsLabel: false)

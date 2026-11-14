@@ -146,7 +146,7 @@ import Testing
 
     /// With no reply the breathing question goes to the call step in 30 s, which is one tap from compressions.
     @Test(arguments: ["limb_start", "limb_flags", "limb_splint", "limb_wait", "limb_danger"])
-    func aTappedCollapseFromAnyStepIsOneTapFromCompressingWithin30Seconds(id: String) throws {
+    func aTappedCollapseFromAnyStepWaitsOnTheBreathingQuestion(id: String) throws {
         let fixture = try inFlow()
         let coordinator = fixture.coordinator
         coordinator.force(stateID: id)
@@ -159,7 +159,7 @@ import Testing
         #expect(explanation(fixture) == nil, "the why panel is about a flow they've left")
 
         fixture.run(seconds: 30.2)
-        #expect(coordinator.state.stateID == "call_911")
+        #expect(coordinator.state.stateID == "intake_breathing", "only the rescuer moves it on")
         coordinator.perform(.startCpr)
         #expect(coordinator.state.stateID == "compressions")
         #expect(coordinator.showsPulse)

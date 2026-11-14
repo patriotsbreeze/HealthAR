@@ -50,7 +50,6 @@ struct RootView: View {
 struct FallbackCard: View {
     var body: some View {
         VStack(spacing: 0) {
-            SimulationStrip()
             VStack(alignment: .leading, spacing: DS.Space.l) {
                 Text("Guide unavailable")
                     .dsFont(DS.Fonts.label)
