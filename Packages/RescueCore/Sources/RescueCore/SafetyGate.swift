@@ -80,6 +80,9 @@ public enum SafetyGate {
             // The question stands between a talking patient and CPR, so only a tap or its timeout answers it.
             if state.breathingAskedAwake, collapses.contains(finding) { return evidence }
             if let transition = definition.transition(on: "model.\(finding.rawValue)") {
+                // Only the rescuer moves the rescue on: a tap, or what they said. What the AI saw on
+                // camera goes on the record and the screen, and the step waits for them.
+                if source == .seen { return evidence }
                 guard let target = landing(transition.to, padsOn: state.padsOn, lookup: lookup) else {
                     return .reject(.notApplicable)
                 }

@@ -343,7 +343,7 @@ import Testing
         #expect(session.state.stateID == "call_911")
     }
 
-    @Test func markedBreathsLeadToAReaskThatDefaultsToCpr() throws {
+    @Test func markedBreathsLeadToAReaskThatWaitsForTheRescuer() throws {
         var session = Session(engine: try engine())
         session.human(.no)
         session.human(.yes)
@@ -351,12 +351,11 @@ import Testing
         session.human(.breathMarked)
         session.advance(10)
         #expect(session.state.stateID == "watch_reask")
-        session.advance(10)
-        session.advance(10)
-        #expect(session.state.stateID == "watch_reask")
-        session.advance(10)
-        #expect(session.state.stateID == "call_911", "no reply in 30 s goes to CPR")
-        #expect(session.allPhrases.filter { $0 == "ask_still_breathing" }.count == 3)
+        for _ in 0..<6 { session.advance(10) }
+        #expect(session.state.stateID == "watch_reask", "no reply keeps asking, and never moves on")
+        #expect(session.allPhrases.filter { $0 == "ask_still_breathing" }.count >= 6)
+        session.human(.no)
+        #expect(session.state.stateID == "call_911")
     }
 
     @Test func watchLoopRestartsTheCount() throws {
@@ -376,19 +375,21 @@ import Testing
     // 6. Uncertainty, or no reply in 10 s, goes to CPR.
     /// No reply on a question still goes on towards CPR, as far as a step that needs a tap. Every
     /// state from there on has Start CPR, and no state with no reply ever lowers the urgency.
-    @Test func noReplyReachesCallingWithNoHumanInput() throws {
+    /// Only the rescuer moves the rescue on. Silence leaves every step where it is, apart from the breath
+    /// count and the aspirin dose step, and Start CPR is still one tap wherever it's offered.
+    @Test func noReplyNeverMovesTheStep() throws {
         let definition = try loadBundle().definition
-        for state in definition.states where state.kind != .card {
+        let timed: Set<String> = ["watch_breathing"]
+        #expect(Set(definition.states.filter { $0.timeout != nil }.map(\.id)).isSubset(of: timed))
+        for state in definition.states where state.kind != .card && state.timeout == nil {
             var session = Session(engine: try engine())
             session.state.stateID = state.id
             session.state.enteredAt = session.now
             for _ in 0..<12 { session.advance(30) }
-            let reached = try #require(definition.states.first { $0.id == session.state.stateID })
-            #expect(reached.urgency >= 3, "\(state.id) stops at \(session.state.stateID) with no reply")
-            if reached.urgency < 4 {
-                #expect(reached.transition(on: "human.start_cpr")?.to == "compressions", "\(reached.id)")
+            #expect(session.state.stateID == state.id, "\(state.id) moved to \(session.state.stateID) with no reply")
+            if state.transition(on: "human.start_cpr")?.to == "compressions" {
                 session.human(.startCpr)
-                #expect(session.state.stateID == "compressions", "one tap from \(reached.id)")
+                #expect(session.state.stateID == "compressions", "one tap from \(state.id)")
             }
         }
     }
@@ -405,10 +406,15 @@ import Testing
     }
 
     /// A question waits at most 30 s for an answer, and says itself again every 10 s while it waits.
-    @Test func intakeTimeoutsAreAtMostThirtySecondsAndTheQuestionRepeats() throws {
+    /// A question never answers itself: it waits for a tap or a word and says itself again every 10 s.
+    @Test func intakeQuestionsNeverTimeOutAndTheQuestionRepeats() throws {
         for state in try loadBundle().definition.states where state.kind == .intake || state.kind == .watch {
-            #expect((state.timeout?.seconds ?? .infinity) <= (state.question == nil ? 10 : 30), "\(state.id)")
-            guard state.question != nil else { continue }
+            guard state.question != nil else {
+                // The breath count after "yes, breathing" is the one watch with a clock, and it's 10 s.
+                #expect((state.timeout?.seconds ?? .infinity) <= 10, "\(state.id)")
+                continue
+            }
+            #expect(state.timeout == nil, "\(state.id) waits for the rescuer")
             let repeats = state.repeating.filter { state.entryPhrases.contains($0.phrase) }
             #expect(repeats.map(\.everySeconds) == [10], "\(state.id) repeats its question every 10 s")
         }

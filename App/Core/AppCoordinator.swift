@@ -9,6 +9,7 @@ import UIKit
 struct LiveStack: Sendable {
     var session: LiveSession
     var auditor: Auditor?
+    var assessor: SituationAssessor? = nil
 }
 
 /// Owns the engine's state and log, feeds it every event, and applies every effect it emits. The
@@ -41,6 +42,29 @@ final class AppCoordinator {
     private static let kickFollowsPhrase = "triage_ask"
     private static let maxVoiceRows = 40
     private static let maxTranscriptCharacters = 400
+    /// The least gap between quick looks. The key is shared with the voice, the checker and the AED
+    /// finder, so this leaves them room.
+    private static let quickLookGap: TimeInterval = 1.5
+    /// A live scene report this recent stands in for a quick look.
+    private static let liveSceneFresh: TimeInterval = 5
+    /// After a failure the quick look waits twice as long as last time, up to this, and resets on a success.
+    private static let assessBackoffCap: TimeInterval = 16
+    /// How many of the voice model's latest tool calls ride with a quick look.
+    private static let assessedToolCalls = 4
+    private static let snapshotSeconds: TimeInterval = 1.5
+    /// The live log keeps this many lines, newest first.
+    private static let maxLogEntries = 40
+
+    /// One line of the live log: what the voice AI saw, did, heard or said, as it happened.
+    struct AssessmentLogEntry: Identifiable, Equatable {
+        enum Kind: Equatable { case alert, saw, tool, heard, said, look, call }
+        var id: Int
+        var at: TimeInterval
+        var kind: Kind
+        var text: String
+        /// The voice AI's own line on why it matters, for a scene report.
+        var detail: String?
+    }
 
     struct ModelCall: Identifiable, Equatable {
         var id: Int
@@ -67,6 +91,7 @@ final class AppCoordinator {
         case live(LiveEvent, session: Int)
         case modelVoice(session: Int)
         case auditFlag(SentinelFlag, session: Int)
+        case quickLook(AssessmentOutcome, startedAt: TimeInterval, session: Int, round: Int)
     }
 
     // MARK: - Fixed parts
@@ -116,6 +141,31 @@ final class AppCoordinator {
     private(set) var seededSequences: Set<Int> = []
     private(set) var operatorUsed = false
     private(set) var dispatcherOpen = false
+    /// The latest read of the scene. It only informs, and goes when the session or the rescue does.
+    private(set) var assessment: SituationAssessment?
+    /// Everything the voice AI saw, did, heard and said, newest first, for the drop-down under the read.
+    private(set) var assessmentLog: [AssessmentLogEntry] = []
+    private(set) var assessing = false
+    /// The last try failed and there's no read yet to keep, so the chip says so rather than vanish.
+    private(set) var assessmentFailed = false
+    /// Who made the scene lines on screen.
+    private(set) var assessmentSource: AssessmentSource?
+
+    enum AssessmentSource: String {
+        case live = "Seen live by the voice AI"
+        case quickLook = "Quick look at one frame, while the voice AI was quiet"
+    }
+    /// For the latency display: how long quick looks take, how often the voice AI reports, and why
+    /// the last look failed.
+    private(set) var assessmentStats = AssessmentStats()
+
+    struct AssessmentStats: Equatable {
+        var quick: [TimeInterval] = []
+        /// Seconds between one live scene report and the next.
+        var liveGaps: [TimeInterval] = []
+        var failures = 0
+        var lastProblem: String?
+    }
 
     // MARK: - Working state
 
@@ -146,6 +196,22 @@ final class AppCoordinator {
     /// When both pads were last drawn in the band, so a pose dropout doesn't blink the diagram back.
     @ObservationIgnored var padsInBandAt: TimeInterval?
     @ObservationIgnored private var nextModelCallID = 0
+    /// Bumped on every reset and swap, so a read for an older scene lands nowhere.
+    @ObservationIgnored private var assessRound = 0
+    @ObservationIgnored private var quickInFlight = false
+    @ObservationIgnored private var lastQuickAt = -TimeInterval.infinity
+    @ObservationIgnored private var quickBackoff: TimeInterval = 0
+    @ObservationIgnored private var lastLookReason = ""
+    @ObservationIgnored private var lastLiveSceneAt = -TimeInterval.infinity
+    @ObservationIgnored private var nextLogID = 0
+    @ObservationIgnored private var lastEmergency: String?
+    /// The simulated 911 agent's call, played into the log once a rescue. Cancelled on reset.
+    @ObservationIgnored private var callerAgentTask: Task<Void, Never>?
+    @ObservationIgnored private var callerAgentRan = false
+    /// What the rescuer said since the log last took it, so it goes in as one line and not word by word.
+    @ObservationIgnored private var heardPending = ""
+    /// When the read behind the scene lines on screen started, so an older reply can't overwrite them.
+    @ObservationIgnored private var sceneStartedAt = -TimeInterval.infinity
 
     init(
         engine: ProtocolEngine,
@@ -240,6 +306,7 @@ final class AppCoordinator {
         modelCalls = []
         heardTranscript = ""
         saidTranscript = ""
+        clearAssessment()
         seededSequences = []
         timings = [:]
         usage = nil
@@ -551,6 +618,8 @@ final class AppCoordinator {
         if talking != aiTalking { aiTalking = talking }
         retryLocate(at: now)
         watchAIVoice(at: now)
+        assessIfDue(at: now)
+        startCallerAgentIfDue()
     }
 
     private func commit(_ result: ReduceResult, at now: TimeInterval, seeded: Bool = false) {
@@ -813,6 +882,9 @@ final class AppCoordinator {
             } else {
                 dispatchFlag(flag)
             }
+        case let .quickLook(outcome, startedAt, session, round):
+            guard session == liveSession, round == assessRound else { break }
+            noteQuickLook(outcome, startedAt: startedAt)
         }
     }
 
@@ -854,6 +926,8 @@ final class AppCoordinator {
         gate.setBargeIn(false)
         gate.setCurrentSession(nil)
         liveSession = nil
+        // The next mode is another scene, and a read of this one would sit over it.
+        clearAssessment()
         // Lets the uplink drain the stop, then finish on its own.
         liveUplink = nil
         liveRouter?.cancel()
@@ -992,6 +1066,8 @@ final class AppCoordinator {
             gate.setBargeIn(false)
             audio.modelTurnEnded()
             finishModelTurn()
+        case let .scene(report):
+            noteScene(report)
         case let .proposal(proposal):
             noteModelCall(proposal, seeded: false)
             let before = log.entries.count
@@ -1010,8 +1086,11 @@ final class AppCoordinator {
             finishModelTurn()
         case let .inputTranscript(text):
             heardTranscript = trimmed(heardTranscript + text)
+            heardPending += text
         case let .outputTranscript(text):
             saidTranscript = trimmed(saidTranscript + text)
+            // The AI answering closes what the rescuer said, so the log keeps the order they spoke in.
+            if turnText.isEmpty { flushHeard() }
             turnText += text
             for flag in transcriptBuffer.feed(text, profile: liveMode.profile) {
                 turnFlags.insert(flag.category)
@@ -1044,6 +1123,8 @@ final class AppCoordinator {
             dispatchFlag(flag)
         }
         let spoken = turnText
+        flushHeard()
+        appendLog(.said, spoken)
         let flagged = turnFlags
         turnText = ""
         turnFlags = []
@@ -1056,6 +1137,176 @@ final class AppCoordinator {
             else { return }
             inbox.yield(.auditFlag(flag, session: session))
         }
+    }
+
+    // MARK: - Reading the scene
+
+    /// The voice AI describes the camera itself, live, with `report_scene`. A quick look at one frame
+    /// only fills in while it's been quiet, on a step that lets a frame leave the phone. Neither feeds
+    /// the engine, so a slow or failed read changes nothing but the chip.
+    private func assessIfDue(at now: TimeInterval) {
+        guard liveConnected, let assessor = live?.assessor, let brief = latestBrief, let session = liveSession else { return }
+        // Every step while the camera is up, so the log runs the whole rescue, but never while
+        // someone else is on the line.
+        let looks = cameraLive && gate.sceneReadOpen
+        let why = "state=\(state.stateID) camera=\(showsCamera) vision=\(visionStatus.rawValue) sceneRead=\(gate.sceneReadOpen)"
+        if why != lastLookReason {
+            lastLookReason = why
+            SituationAssessor.log("looks=\(looks) \(why)")
+        }
+        // While the voice model is describing the view itself, a second look would only cost quota.
+        let liveSees = now - lastLiveSceneAt < Self.liveSceneFresh
+        guard looks, !liveSees, !quickInFlight, now - lastQuickAt >= max(Self.quickLookGap, quickBackoff) else { return }
+        quickInFlight = true
+        lastQuickAt = now
+        assessing = true
+        let toolCalls = Array(modelCalls.filter { !$0.seeded }.suffix(Self.assessedToolCalls).map(\.summary))
+        let input = AssessmentInput(brief: brief, heard: heardTranscript, said: saidTranscript, toolCalls: toolCalls)
+        let mode = liveMode
+        let round = assessRound
+        let inbox = inbox
+        let vision = vision
+        let gate = gate
+        let snapshotSeconds = Self.snapshotSeconds
+        Task.detached(priority: .userInitiated) {
+            var input = input
+            let asked = Date()
+            if let jpeg = await vision.snapshot(timeout: snapshotSeconds), gate.sceneReadOpen {
+                input.jpeg = jpeg
+                SituationAssessor.log("quick snapshot \(jpeg.count)B in \(Int(Date().timeIntervalSince(asked) * 1000))ms")
+            } else {
+                SituationAssessor.log("quick snapshot NONE after \(Int(Date().timeIntervalSince(asked) * 1000))ms")
+            }
+            // A quick look with no picture has nothing to look at.
+            let outcome = input.jpeg == nil
+                ? AssessmentOutcome(assessment: nil, problem: "no camera frame")
+                : await assessor.quickLook(input, mode: mode)
+            inbox.yield(.quickLook(outcome, startedAt: now, session: session, round: round))
+        }
+    }
+
+    private func noteQuickLook(_ outcome: AssessmentOutcome, startedAt: TimeInterval) {
+        quickInFlight = false
+        assessing = false
+        if let result = outcome.assessment {
+            quickBackoff = 0
+            assessmentStats.quick = Array((assessmentStats.quick + [clock() - startedAt]).suffix(20))
+            // A live report that landed while this was out is newer, and keeps the screen.
+            guard startedAt >= sceneStartedAt else { return }
+            assessment = merged(result, startedAt: startedAt, source: .quickLook)
+            noteEmergency(result.emergency)
+            appendLog(.look, result.sees ?? result.headline, detail: result.prediction)
+        } else if outcome.problem != "no camera frame" {
+            // Waiting longer each time is what lets a rate limit or an overload clear.
+            quickBackoff = min(Self.assessBackoffCap, max(2, quickBackoff * 2))
+            assessmentStats.failures += 1
+            assessmentStats.lastProblem = outcome.problem
+            SituationAssessor.log("quick backing off \(Int(quickBackoff))s after \(outcome.problem ?? "?")")
+            if assessment == nil { assessmentFailed = true }
+        }
+    }
+
+    /// The voice model said what the camera shows. It lands at once, over any older read.
+    private func noteScene(_ report: SceneReport) {
+        guard let screened = SituationAssessor.screen(report, mode: liveMode) else {
+            SituationAssessor.log("live scene dropped by the validators: \(report.headline) | \(report.prediction)")
+            return
+        }
+        let now = clock()
+        if lastLiveSceneAt.isFinite {
+            assessmentStats.liveGaps = Array((assessmentStats.liveGaps + [now - lastLiveSceneAt]).suffix(20))
+        }
+        lastLiveSceneAt = now
+        SituationAssessor.log("live scene: \(screened.sees ?? "-") | \(screened.headline) | \(screened.prediction) (\(screened.confidence.rawValue)) note=\(report.note)")
+        assessment = merged(screened, startedAt: now, source: .live)
+        noteEmergency(screened.emergency)
+        let note = SituationAssessor.screenNote(report.note, mode: liveMode)
+        appendLog(.saw, screened.sees ?? screened.headline, detail: [note, screened.prediction].compactMap { $0 }.joined(separator: " · "))
+    }
+
+    // MARK: - The 911 agent, simulated
+
+    static let callerAgentStepSeconds: TimeInterval = 2.5
+    static let callerAgentState = "call_911"
+
+    /// A scripted call between an AI agent and a mock dispatcher, built from the caller script, so the
+    /// log shows what an agent would say. Nothing is dialed, it's labeled a simulation, and it moves
+    /// no step: the rescuer still taps Called.
+    static func callerAgentLines(_ script: CallerScript) -> [String] {
+        let done = script.actions.isEmpty ? "The caller is getting ready to start CPR, coached by the app." : script.actions.joined(separator: ", ") + "."
+        return [
+            "911 agent: calling the mock dispatcher. Simulation, no real call is placed.",
+            "Dispatcher: 911, what's the address of your emergency?",
+            "Agent: I'm an AI assistant calling for a bystander. \(script.locationLine)",
+            "Dispatcher: Tell me exactly what happened.",
+            "Agent: \(script.situation)",
+            "Dispatcher: Is anyone helping the patient right now?",
+            "Agent: \(done)",
+            "Dispatcher: Help is on the way. Stay with them and keep following the app.",
+            "911 agent: call ended. Help dispatched (simulated). Tap Called when you're ready.",
+        ]
+    }
+
+    private func startCallerAgentIfDue() {
+        guard state.stateID == Self.callerAgentState, !callerAgentRan else { return }
+        callerAgentRan = true
+        let lines = Self.callerAgentLines(callerScript)
+        let round = assessRound
+        callerAgentTask = Task { [weak self] in
+            for line in lines {
+                guard let self, !Task.isCancelled, round == self.assessRound else { return }
+                self.appendLog(.call, line)
+                try? await Task.sleep(for: .seconds(Self.callerAgentStepSeconds))
+            }
+        }
+    }
+
+    /// A red line in the log when an emergency first shows, or changes, and not on every read of it.
+    private func noteEmergency(_ emergency: String?) {
+        defer { lastEmergency = emergency }
+        guard let emergency, emergency.lowercased() != lastEmergency?.lowercased() else { return }
+        appendLog(.alert, emergency)
+    }
+
+    /// The newest scene lines over whatever is on screen.
+    private func merged(_ result: SituationAssessment, startedAt: TimeInterval, source: AssessmentSource) -> SituationAssessment {
+        assessmentFailed = false
+        sceneStartedAt = startedAt
+        assessmentSource = source
+        return result
+    }
+
+    /// Words go in as the voice AI or the rescuer finishes, so the log reads as turns.
+    private func appendLog(_ kind: AssessmentLogEntry.Kind, _ text: String, detail: String? = nil) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        nextLogID += 1
+        assessmentLog.insert(AssessmentLogEntry(id: nextLogID, at: elapsedSeconds, kind: kind, text: trimmed, detail: detail?.isEmpty == true ? nil : detail), at: 0)
+        if assessmentLog.count > Self.maxLogEntries { assessmentLog.removeLast(assessmentLog.count - Self.maxLogEntries) }
+    }
+
+    private func flushHeard() {
+        appendLog(.heard, heardPending)
+        heardPending = ""
+    }
+
+    private func clearAssessment() {
+        assessRound += 1
+        assessment = nil
+        assessmentLog = []
+        assessmentFailed = false
+        assessing = false
+        quickInFlight = false
+        heardPending = ""
+        lastEmergency = nil
+        callerAgentTask?.cancel()
+        callerAgentTask = nil
+        callerAgentRan = false
+        lastQuickAt = -.infinity
+        lastLiveSceneAt = -.infinity
+        assessmentSource = nil
+        sceneStartedAt = -.infinity
+        quickBackoff = 0
     }
 
     /// A flag from the model's own words. Where none of them could be heard, it goes on the record and
@@ -1140,6 +1391,8 @@ final class AppCoordinator {
     }
 
     private func noteModelCall(_ proposal: ModelProposal, seeded: Bool) {
+        flushHeard()
+        appendLog(.tool, seeded ? "[seeded] \(proposal.summary)" : proposal.summary)
         nextModelCallID += 1
         modelCalls.append(ModelCall(
             id: nextModelCallID,

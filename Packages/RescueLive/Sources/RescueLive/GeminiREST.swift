@@ -17,10 +17,33 @@ enum GeminiREST {
         http: HTTPClient,
         timeout: TimeInterval
     ) async -> String? {
+        await generate(model: model, body: body, apiKey: apiKey, http: http, timeout: timeout)?.text
+    }
+
+    /// The reply's text, with the thought summaries kept apart, for a caller that asked for them.
+    static func generate(
+        model: String,
+        body: JSONValue,
+        apiKey: APIKey,
+        http: HTTPClient,
+        timeout: TimeInterval
+    ) async -> Reply? {
+        await generateWithStatus(model: model, body: body, apiKey: apiKey, http: http, timeout: timeout).reply
+    }
+
+    /// The same call, with the HTTP status when there was one, so a caller can tell a rate limit from
+    /// an overload. The status never carries the key.
+    static func generateWithStatus(
+        model: String,
+        body: JSONValue,
+        apiKey: APIKey,
+        http: HTTPClient,
+        timeout: TimeInterval
+    ) async -> (reply: Reply?, status: Int?, error: String?) {
         guard !apiKey.isEmpty,
               let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent"),
               let payload = try? body.encoded()
-        else { return nil }
+        else { return (nil, nil, nil) }
 
         var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpMethod = "POST"
@@ -28,14 +51,23 @@ enum GeminiREST {
         request.setValue(apiKey.value, forHTTPHeaderField: "x-goog-api-key")
         request.httpBody = payload
 
-        guard let (data, response) = try? await http(request),
-              (response as? HTTPURLResponse)?.statusCode == 200
-        else { return nil }
-        return responseText(from: data)
+        guard let (data, response) = try? await http(request) else { return (nil, nil, nil) }
+        let status = (response as? HTTPURLResponse)?.statusCode
+        // Google's error message, for logs. The key goes in a header, so it's never in here.
+        guard status == 200 else { return (nil, status, String(decoding: data.prefix(300), as: UTF8.self)) }
+        return (reply(from: data), status, nil)
+    }
+
+    struct Reply: Sendable, Equatable {
+        var text: String
+        var thoughts: String
     }
 
     /// Joins the text parts of the first candidate, leaving out thought summaries.
-    static func responseText(from data: Data) -> String? {
+    static func responseText(from data: Data) -> String? { reply(from: data)?.text }
+
+    /// The answer and the thought summaries, each joined. Nil when there's no answer.
+    static func reply(from data: Data) -> Reply? {
         struct Envelope: Decodable {
             struct Candidate: Decodable { let content: Content? }
             struct Content: Decodable { let parts: [Part]? }
@@ -49,7 +81,8 @@ enum GeminiREST {
               let parts = envelope.candidates?.first?.content?.parts
         else { return nil }
         let text = parts.filter { $0.thought != true }.compactMap(\.text).joined()
-        return text.isEmpty ? nil : text
+        let thoughts = parts.filter { $0.thought == true }.compactMap(\.text).joined(separator: "\n")
+        return text.isEmpty ? nil : Reply(text: text, thoughts: thoughts)
     }
 }
 

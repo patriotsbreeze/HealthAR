@@ -10,7 +10,6 @@ struct OnboardingView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SimulationStrip()
             ScrollView {
                 VStack(alignment: .leading, spacing: DS.Space.m) {
                     card(

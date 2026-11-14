@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Shown only while the AI can hear or is talking, so a rescuer knows they can just talk. A sky orb with
-/// clouds drifting through it and a soft glow that breathes, slowly while it listens and quicker while it
-/// talks. Even talking it's slower than the cyan Push beat, and never its color, so the two can't mix up.
+/// Shown only while the AI can hear or is talking, so a rescuer knows they can just talk. The app's
+/// pixel cross with a soft glow that breathes, slowly while it listens and quicker while it talks. Even
+/// talking it's slower than the cyan Push beat, and never its color, so the two can't mix up.
 struct ListeningBubble: View {
     enum Mode {
         case listening, talking
@@ -41,7 +41,8 @@ struct ListeningBubble: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: DS.Space.m) {
+        // The words sit under the orb, so the read beside it gets the width.
+        VStack(spacing: 0) {
             TimelineView(.animation(paused: reduceMotion)) { context in
                 let time = reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate
                 let breath = (1 - cos(2 * .pi * time / mode.breathSeconds)) / 2
@@ -54,7 +55,9 @@ struct ListeningBubble: View {
             }
             Text(mode.label)
                 .contentTransition(.opacity)
-                .dsFont(DS.Fonts.label)
+                .dsFont(DS.Fonts.caption)
+                // The glow reaches the frame's edge, so the words tuck up under the orb itself.
+                .padding(.top, -DS.Listening.labelTuck)
                 .foregroundStyle(DS.Colors.textPrimary)
                 .shadow(color: DS.Colors.ink.opacity(0.6), radius: 4)
                 .lineLimit(1)
@@ -69,7 +72,7 @@ struct ListeningBubble: View {
     private func glow(breath: Double) -> some View {
         Circle()
             .fill(RadialGradient(
-                colors: [Self.sky.opacity(0.55), Self.sky.opacity(0)],
+                colors: [Self.glowColor.opacity(0.55), Self.glowColor.opacity(0)],
                 center: .center,
                 startRadius: DS.Listening.orb * 0.3,
                 endRadius: DS.Listening.frame / 2
@@ -79,40 +82,19 @@ struct ListeningBubble: View {
             .blur(radius: 6)
     }
 
-    /// Deep blue up top fading to pale at the bottom, with soft white clouds drifting across.
+    /// The app's mark: a pixel red cross with eyes, on white, kept crisp at any size.
     private func orb(time: TimeInterval) -> some View {
         let side = DS.Listening.orb
-        return ZStack {
-            LinearGradient(colors: [Self.deep, Self.sky, Self.pale], startPoint: .topLeading, endPoint: .bottomTrailing)
-            cloud(time: time, period: 9, width: 1.1, height: 0.55, x: 0.15, y: 0.25, drift: 0.18, opacity: 0.85)
-            cloud(time: time, period: 13, width: 0.8, height: 0.45, x: -0.2, y: 0.05, drift: 0.22, opacity: 0.6)
-            cloud(time: time, period: 7, width: 0.6, height: 0.3, x: 0.25, y: -0.1, drift: 0.15, opacity: 0.5)
-            cloud(time: time, period: 11, width: 0.9, height: 0.35, x: -0.1, y: 0.4, drift: 0.2, opacity: 0.9)
-            // A little light on the upper rim, so it reads as a sphere and not a flat disc.
-            Circle()
-                .fill(RadialGradient(colors: [.white.opacity(0.35), .clear], center: UnitPoint(x: 0.3, y: 0.2), startRadius: 0, endRadius: side * 0.45))
-        }
-        .frame(width: side, height: side)
-        .clipShape(Circle())
-        .overlay(Circle().strokeBorder(.white.opacity(0.15), lineWidth: 0.5))
+        return Image("ListeningMark")
+            .resizable()
+            .interpolation(.none)
+            .scaledToFill()
+            .frame(width: side, height: side)
+            .clipShape(Circle())
+            .overlay(Circle().strokeBorder(.white.opacity(0.15), lineWidth: 0.5))
+            .accessibilityHidden(true)
     }
 
-    /// One blurred white puff, wandering on a slow loop around where it starts.
-    private func cloud(
-        time: TimeInterval, period: TimeInterval, width: CGFloat, height: CGFloat,
-        x: CGFloat, y: CGFloat, drift: CGFloat, opacity: Double
-    ) -> some View {
-        let side = DS.Listening.orb
-        let angle = 2 * .pi * time / period
-        return Ellipse()
-            .fill(.white.opacity(opacity))
-            .frame(width: side * width, height: side * height)
-            .blur(radius: side * 0.09)
-            .rotationEffect(.radians(sin(angle) * 0.25))
-            .offset(x: side * (x + drift * sin(angle)), y: side * (y + drift * 0.5 * cos(angle * 0.8)))
-    }
-
-    private static let deep = Color(hex: 0x3B6FE0)
-    private static let sky = Color(hex: 0x6E9BF2)
-    private static let pale = Color(hex: 0xDCE8FC)
+    /// A soft red, from the cross, for the glow around it.
+    private static let glowColor = Color(hex: 0xE63030)
 }

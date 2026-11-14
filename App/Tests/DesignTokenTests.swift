@@ -30,7 +30,7 @@ private func contrast(_ a: UInt32, _ b: UInt32) -> Double {
         ("critical text on the deck", Hex.critical, Hex.surface),
         ("critical text on a row", Hex.critical, Hex.surfaceRaised),
         ("caution text on the deck", Hex.caution, Hex.surface),
-        ("ink on the strip", Hex.ink, Hex.caution),
+        ("ink on the operator badge", Hex.ink, Hex.caution),
         ("ink on the beat", Hex.ink, Hex.target),
         ("ink on a primary button", Hex.ink, Hex.primaryFill),
         ("white on Start CPR", Hex.textPrimary, Hex.criticalFill),
@@ -72,9 +72,8 @@ private func contrast(_ a: UInt32, _ b: UInt32) -> Double {
     // MARK: - Pinned words and sizes
 
     @Test func theGuardrailWordsStay() {
-        #expect(SimulationStrip.text == "SIMULATION, will not call 911")
-        #expect(SimulationStrip.badge == "OPERATOR USED")
-        #expect(SimulationStrip.operatorHoldSeconds == 1.5)
+        #expect(OperatorBadge.text == "OPERATOR USED")
+        #expect(OperatorGesture.holdSeconds == 1.5)
         #expect(HoldButton.holdSeconds == 2)
         #expect(HoldButton.holdLine == "Hold 2 s")
         #expect(StopConfirmation.cancelTitle == "No, keep pushing")
@@ -86,13 +85,13 @@ private func contrast(_ a: UInt32, _ b: UInt32) -> Double {
 
     /// Compact for the camera, and never under the 44 pt a finger needs. A label that needs more grows the button, never the other way.
     @Test func buttonHeightsAreThePinnedOnes() {
-        #expect(DS.Height.arrestPrimary == 64)
-        #expect(DS.Height.arrest == 54)
+        #expect(DS.Height.arrestPrimary == 54)
+        #expect(DS.Height.arrest == 48)
         #expect(DS.Height.stopCancel == 96)
         #expect(DS.Height.stopConfirm == 84)
-        #expect(DS.Height.awake == 50)
-        #expect(DS.Height.awakeHold == 50)
-        #expect(DS.Height.awakeWayOut == 52)
+        #expect(DS.Height.awake == 44)
+        #expect(DS.Height.awakeHold == 44)
+        #expect(DS.Height.awakeWayOut == 46)
         #expect(DS.Height.camera == 44)
     }
 
@@ -107,12 +106,12 @@ private func contrast(_ a: UInt32, _ b: UInt32) -> Double {
         let tokens = [
             DS.Fonts.command, DS.Fonts.commandCompact, DS.Fonts.confirm, DS.Fonts.title, DS.Fonts.detail, DS.Fonts.detailCompact,
             DS.Fonts.prompt, DS.Fonts.body, DS.Fonts.button, DS.Fonts.buttonTight, DS.Fonts.buttonCompact, DS.Fonts.buttonSmall, DS.Fonts.label, DS.Fonts.meta,
-            DS.Fonts.caption, DS.Fonts.strip, DS.Fonts.badge, DS.Fonts.value,
+            DS.Fonts.caption, DS.Fonts.badge, DS.Fonts.value,
         ]
         #expect(tokens.allSatisfy { [Font.Weight.regular, .semibold, .bold].contains($0.weight) })
-        #expect(DS.Fonts.command.size == 26)
+        #expect(DS.Fonts.command.size == 22)
         #expect(DS.Fonts.command.weight == .bold)
-        #expect(DS.Fonts.commandCompact.size == 24, "SAFETY.md holds a camera step's command at 24 pt")
+        #expect(DS.Fonts.commandCompact.size == 20, "SAFETY.md holds a camera step's command at 20 pt")
     }
 
     @Test func dynamicTypeMovesTheTokens() {

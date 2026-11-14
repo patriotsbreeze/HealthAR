@@ -71,9 +71,11 @@ import Testing
         #expect(built.source == source)
     }
 
-    @Test func whatItSawAndHowSure() throws {
-        let built = try #require(explanation(try heardIn(.otherHeartSigns, source: .seen, confidence: .medium)))
-        #expect(built.lines.last == "AI saw: other heart signs (medium), T+0:11")
+    /// What the AI only saw goes on the record but routes nothing, so there's no flow to explain.
+    @Test func whatItSawRoutesNothing() throws {
+        let session = try heardIn(.otherHeartSigns, source: .seen, confidence: .medium)
+        #expect(explanation(session) == nil)
+        #expect(session.entries(.observation).last?.detail == "other_heart_signs,seen,medium")
     }
 
     /// A low report just before it isn't what moved anything, and it isn't what's quoted.
@@ -82,8 +84,8 @@ import Testing
         session.human(.yes)
         session.model(.reportFinding(.otherHeartSigns, source: .heard, confidence: .low))
         session.now += 2
-        session.model(.reportFinding(.chestPain, source: .seen, confidence: .medium))
-        #expect(explanation(session)?.lines.last == "AI saw: chest pain (medium), T+0:02")
+        session.model(.reportFinding(.chestPain, source: .heard, confidence: .medium))
+        #expect(explanation(session)?.lines.last == "AI heard: chest pain (medium), T+0:02")
     }
 
     @Test func aLaterReportDoesNotRewriteWhyItWasChosen() throws {

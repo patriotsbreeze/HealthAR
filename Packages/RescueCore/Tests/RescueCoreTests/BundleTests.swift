@@ -174,7 +174,7 @@ import Testing
             return try #require(parameters["properties"] as? [String: [String: Any]])
         }
 
-        #expect(Set(tools.compactMap { $0["name"] as? String }) == ["report_finding", "report_resources", "say", "locate_object", "log_event"])
+        #expect(Set(tools.compactMap { $0["name"] as? String }) == ["report_finding", "report_resources", "say", "locate_object", "log_event", "report_scene"])
         #expect(Set(try properties("report_finding")["kind"]?["enum"] as? [String] ?? []) == Set(Finding.arrestCases.map(\.rawValue)))
         let items = try properties("report_resources")["items"]?["items"] as? [String: Any]
         #expect(Set(items?["enum"] as? [String] ?? []) == Set(Resource.allCases.map(\.rawValue)))

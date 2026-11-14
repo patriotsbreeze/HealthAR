@@ -149,7 +149,7 @@ import Testing
     }
 
     @Test(arguments: ["triage", "general_talk", "choking_talk", "chest_call", "chest_aspirin_check", "chest_aspirin", "chest_wait", "chest_scan"])
-    func aTappedCollapseFromAnyAwakeStateIsOneTapFromCompressingWithin30Seconds(id: String) throws {
+    func aTappedCollapseFromAnyAwakeStateWaitsOnTheBreathingQuestion(id: String) throws {
         let fixture = try begun()
         let coordinator = fixture.coordinator
         coordinator.force(stateID: id)
@@ -158,17 +158,17 @@ import Testing
         coordinator.perform(.patientUnresponsive)
         #expect(coordinator.state.stateID == "intake_breathing")
         fixture.run(seconds: 30.2)
-        #expect(coordinator.state.stateID == "call_911")
+        #expect(coordinator.state.stateID == "intake_breathing", "only the rescuer moves it on")
         coordinator.perform(.startCpr)
         #expect(coordinator.state.stateID == "compressions")
         #expect(coordinator.showsPulse)
     }
 
-    @Test func noTouchFromLaunchIsStillTheArrestPath() throws {
+    @Test func noTouchFromLaunchKeepsAskingAndStartCprIsOneTap() throws {
         let fixture = try begun()
         fixture.run(seconds: 30.2)
-        #expect(fixture.coordinator.state.stateID == "call_911")
-        #expect(fixture.audio.played == ["ask_responsive", "ask_responsive", "ask_responsive", "call_911"])
+        #expect(fixture.coordinator.state.stateID == "intake_responsive")
+        #expect(fixture.audio.played == ["ask_responsive", "ask_responsive", "ask_responsive", "ask_responsive"])
         fixture.coordinator.perform(.startCpr)
         #expect(fixture.coordinator.state.stateID == "compressions")
         #expect(fixture.audio.metronome == [true])

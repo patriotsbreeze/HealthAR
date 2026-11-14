@@ -1,6 +1,6 @@
 {
   "version": "tools.v1",
-  "note": "Everything the Live model may do. Enums must match RescueCore. The model has no tools for overlay coordinates, step changes, stopping the metronome, or dialing.",
+  "note": "Everything the Live model may do. Enums must match RescueCore. The model has no tools for overlay coordinates, step changes, stopping the metronome, or dialing. report_scene only describes the camera view for the screen; it never reaches the protocol.",
   "function_declarations": [
     {
       "name": "report_finding",
@@ -73,6 +73,24 @@
           "state_version": { "type": "INTEGER" }
         },
         "required": ["kind", "state_version"]
+      }
+    },
+    {
+      "name": "report_scene",
+      "description": "Describe what the camera shows right now, for a short read on the rescuer's screen. Call it whenever the view changes, for example when a person comes into view, and at least every few seconds while one is in view. It never changes the step, plays nothing, and its result is silent.",
+      "behavior": "NON_BLOCKING",
+      "parameters": {
+        "type": "OBJECT",
+        "properties": {
+          "sees": { "type": "STRING", "description": "At most 12 words. Only what the camera shows about the person: position, eyes open or closed, movement, visible chest rise, skin color, blood, or an AED. Plain observation, no conclusions. 'No person in view' when there is none." },
+          "headline": { "type": "STRING", "description": "At most 8 words. The single most important thing in the scene." },
+          "prediction": { "type": "STRING", "description": "At most 12 words, starting with 'Possible', or 'Not enough information yet'. Never a condition stated as fact." },
+          "confidence": { "type": "STRING", "enum": ["low", "medium", "high"] },
+          "note": { "type": "STRING", "description": "One short sentence: what changed since your last report and why it matters to the rescuer." },
+          "emergency": { "type": "STRING", "description": "At most 6 words, only when the camera shows a possible emergency: a person lying on the floor or ground, slumped, not moving, bleeding, choking, or clearly in distress, such as 'Person down on the floor'. An empty string otherwise." },
+          "state_version": { "type": "INTEGER", "description": "The version from the latest state brief." }
+        },
+        "required": ["sees", "headline", "prediction", "confidence", "note", "emergency", "state_version"]
       }
     }
   ]

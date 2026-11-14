@@ -94,7 +94,7 @@ import Testing
             guard case let .object(item) = declaration, case let .string(name)? = item["name"] else { return nil }
             return name
         }
-        #expect(names == ["report_finding", "report_resources", "say", "locate_object", "log_event"])
+        #expect(names == ["report_finding", "report_resources", "say", "locate_object", "log_event", "report_scene"])
     }
 
     @Test func everyFunctionIsNonBlockingWhateverTheFileSays() throws {

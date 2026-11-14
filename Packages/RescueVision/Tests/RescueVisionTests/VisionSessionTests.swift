@@ -218,7 +218,7 @@ private func step(
         if await step(session).sentUplink { sent += 1 }
         clock.advance(1.0 / 60)
     }
-    #expect(sent == 3, "at 0, 5, and 10 s")
+    #expect(sent == 11, "once a second, at 0 through 10 s")
 }
 
 @Test func closingBeforeTheFrameIsWorkedStillBlocksIt() async throws {
