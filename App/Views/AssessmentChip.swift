@@ -17,14 +17,15 @@ struct AssessmentChip: View {
     var source: String?
     let assessing: Bool
     var failed = false
-    /// Open by default: the log drops down by itself once there's a line in it. A tap only puts it away.
-    @State private var collapsed = false
-    private var isOpen: Bool { !collapsed && !log.isEmpty }
+    /// Shut, only the newest line shows, as a one-row ticker, so the camera stays clear. A tap on the
+    /// read opens the whole log, and another puts it back to the ticker.
+    @State private var expanded = false
+    private var isOpen: Bool { expanded && !log.isEmpty }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.xs) {
-            Button { if !log.isEmpty { collapsed.toggle() } } label: {
+            Button { if !log.isEmpty { expanded.toggle() } } label: {
                 summary
                     .padding(.horizontal, DS.Space.s + 2)
                     .padding(.vertical, 6)
@@ -44,6 +45,17 @@ struct AssessmentChip: View {
                     .frame(maxWidth: DS.Assessment.panelWidth, alignment: .leading)
                     .frostedGlass(RoundedRectangle(cornerRadius: DS.Assessment.radius, style: .continuous))
                     .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.96, anchor: .top)))
+            } else if let latest = log.first {
+                // The newest line only, so the agent can be seen working without covering the patient.
+                LogRow(entry: latest, oneLine: true)
+                    .id(latest.id)
+                    .transition(.opacity)
+                    .padding(.horizontal, DS.Space.s)
+                    .padding(.vertical, 4)
+                    .frame(maxWidth: DS.Assessment.maxWidth, alignment: .leading)
+                    .frostedGlass(Capsule(style: .continuous))
+                    .onTapGesture { expanded = true }
+                    .accessibilityHint("Shows the live log.")
             }
         }
         .fixedSize(horizontal: false, vertical: true)
@@ -225,6 +237,8 @@ private extension View {
 /// One line of the live log: when, what kind, and the words, with the AI's reason under a scene line.
 private struct LogRow: View {
     let entry: AppCoordinator.AssessmentLogEntry
+    /// The ticker under the read: one line, no note under it.
+    var oneLine = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -238,10 +252,10 @@ private struct LogRow: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(entry.text)
                     .font(entry.kind == .tool ? .system(size: 10, weight: .regular, design: .monospaced) : nil)
-                    .lineLimit(2)
+                    .lineLimit(oneLine ? 1 : 2)
                     .foregroundStyle(entry.kind == .alert ? DS.Colors.critical : [.saw, .call].contains(entry.kind) ? DS.Colors.textPrimary : DS.Colors.textSecondary)
                     .fontWeight(entry.kind == .alert ? .semibold : nil)
-                if let detail = entry.detail {
+                if !oneLine, let detail = entry.detail {
                     Text(detail).foregroundStyle(DS.Colors.textTertiary).lineLimit(1)
                 }
             }
