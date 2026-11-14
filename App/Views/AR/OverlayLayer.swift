@@ -95,6 +95,9 @@ struct OverlayLayer: View {
         )
         // Use the current detections, never ARMemory's held marks after a dropout.
         if coordinator.cameraLive {
+            scene.chestEstimateLabel = seen.chestEstimateLabel
+            scene.patientIn3D = seen.patientIn3D
+            if seen.patientIn3D { scene.outline = nil }
             scene.bodies = seen.bodies.map { body in
                 VisionOverlay.DetectedBody(joints: body.joints.mapValues {
                     CGPoint(x: $0.x * geometry.size.width, y: $0.y * geometry.size.height)

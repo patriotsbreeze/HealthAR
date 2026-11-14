@@ -7,6 +7,7 @@ import Foundation
 struct CapturedFrame: @unchecked Sendable {
     var id: UInt64
     var pixels: CVPixelBuffer
+    var bodyDepth: BodyDepth? = nil
 }
 
 /// Scales to 768 px on the long side and encodes JPEG. An actor, so it runs off the main thread

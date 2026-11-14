@@ -260,6 +260,9 @@ public struct VisionOverlay: Sendable, Equatable {
     public var ghost: Ghost?
     /// The AR view draws realistic hands on the chest, so the flat ghost hands stay off.
     public var handsIn3D = false
+    /// A fresh, depth-fitted Blender template replaces the flat patient outlines.
+    public var patientIn3D = false
+    public var chestEstimateLabel: String?
     public var injuryPin: InjuryPin?
     /// The camera is live and nothing is placed, and nothing else would say a tap does anything.
     public var showsInjuryHint: Bool

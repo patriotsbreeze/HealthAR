@@ -148,6 +148,7 @@ final class PoseWorker: Sendable {
         var latest: TimedTorsoTarget?
         var latestPose: TimedPose?
         var jointPose: TimedPose?
+        var patientBody: TimedPatientBody?
         var lastNoTargetReason: NoTargetReason?
         var smoother = JointSmoother()
         var lastBone: LimbBone?
@@ -172,6 +173,8 @@ final class PoseWorker: Sendable {
 
     var jointPose: TimedPose? { state.withLock { $0.jointPose } }
 
+    var patientBody: TimedPatientBody? { state.withLock { $0.patientBody } }
+
     var latest: TimedTorsoTarget? { state.withLock { $0.latest } }
     var latestPose: TimedPose? { state.withLock { $0.latestPose } }
     /// Both from one lock, so the ring and the chest zone always come from the same frame.
@@ -187,6 +190,7 @@ final class PoseWorker: Sendable {
             state.latest = nil
             state.latestPose = nil
             state.jointPose = nil
+            state.patientBody = nil
             state.lastNoTargetReason = nil
             state.smoother.reset()
             state.lastBone = nil
@@ -198,7 +202,7 @@ final class PoseWorker: Sendable {
     @concurrent func rescuer(_ frame: CapturedFrame, record: FrameRecord) async -> CompressionSample? {
         let generation = state.withLock { $0.generation }
         let detection = await detect(frame, .right)
-        publishJoints(detection, record: record, generation: generation)
+        publishJoints(detection, record: record, generation: generation, depth: frame.bodyDepth)
         let people = detection.people
         let gravity = record.tracking == .notAvailable ? nil : record.pose.gravityInImage
         return CompressionSignal.sample(people: people, gravity: gravity, imageAspect: record.pose.imageAspect)
@@ -207,7 +211,7 @@ final class PoseWorker: Sendable {
     @concurrent func process(_ frame: CapturedFrame, record: FrameRecord, request: PoseRequest = .lying) async {
         let (rotation, generation) = state.withLock { ($0.scan.current, $0.generation) }
         let detection = await detect(frame, rotation)
-        publishJoints(detection, record: record, generation: generation)
+        publishJoints(detection, record: record, generation: generation, depth: frame.bodyDepth)
         let people = detection.people
         state.withLock { state in
             guard state.generation == generation else { return }
@@ -224,10 +228,16 @@ final class PoseWorker: Sendable {
         }
     }
 
-    private func publishJoints(_ detection: PoseDetection, record: FrameRecord, generation: UInt64) {
+    private func publishJoints(_ detection: PoseDetection, record: FrameRecord, generation: UInt64, depth: BodyDepth?) {
+        var fitted: PatientBodyPlacement?
+        if record.tracking == .normal, let depth,
+           case let .patient(person) = selector.select(people: detection.people, gravity: record.pose.gravityInImage, imageAspect: record.pose.imageAspect) {
+            fitted = PatientModelFit.fit(person: person, depth: depth, camera: record.pose)
+        }
         state.withLock { state in
             guard state.generation == generation else { return }
             state.jointPose = TimedPose(regions: BodyRegions(), joints: detection.joints, skeletons: detection.skeletons, frameID: record.id, capturedAt: record.timestamp)
+            state.patientBody = fitted.map { TimedPatientBody(placement: $0, capturedAt: record.timestamp) }
         }
     }
 

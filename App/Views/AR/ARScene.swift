@@ -140,6 +140,8 @@ struct ARScene: Equatable {
     var band: CGRect
     var joints: [CGPoint] = []
     var bodies: [VisionOverlay.DetectedBody] = []
+    var chestEstimateLabel: String?
+    var patientIn3D = false
     var zone: ARZone?
     var items: [ARItem] = []
     var pointer: ARPointer?

@@ -14,7 +14,7 @@ enum ARPainter {
         guard scene.hasMarks || scene.hint != nil else { return }
         // Nothing is drawn under the deck. A body zone that runs past the band is cut at its edge.
         context.clip(to: Path(scene.band))
-        paintDetectedBodies(scene, in: &context)
+        if !scene.patientIn3D { paintDetectedBodies(scene, in: &context) }
         if let ghost = scene.ghost { paintGhost(ghost, in: &context) }
         if let outline = scene.outline {
             appearing(appear[ARSceneBuilder.outlineID], around: outline.center, style: style, in: &context) { layer in
@@ -50,6 +50,14 @@ enum ARPainter {
         if let zoneChip = scene.zone?.chip { chip(zoneChip, style: style, in: &context) }
         for case let itemChip? in scene.items.map(\.chip) { chip(itemChip, style: style, in: &context) }
         if let hint = scene.hint { chip(hint, style: style, in: &context) }
+        if let label = scene.chestEstimateLabel {
+            let text = context.resolve(Text(label).font(.system(size: 11, weight: .semibold)).foregroundStyle(.white))
+            let box = scene.band.insetBy(dx: 8, dy: 8)
+            let size = text.measure(in: CGSize(width: max(1, box.width - 12), height: 50))
+            let frame = CGRect(x: box.midX - (size.width + 12) / 2, y: box.minY, width: size.width + 12, height: size.height + 8)
+            context.fill(Path(roundedRect: frame, cornerRadius: 5), with: .color(.black.opacity(0.8)))
+            context.draw(text, in: frame.insetBy(dx: 6, dy: 4))
+        }
     }
 
     /// Layered round strokes give the measured torso and arms a translucent tube appearance.

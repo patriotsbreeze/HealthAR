@@ -2,6 +2,7 @@
 import Combine
 import RealityKit
 import UIKit
+import simd
 
 /// Draws the ghost rescuer, and the practice patient, as see-through 3D bodies in the AR view, lit
 /// by the room. Reads `VisionSession.ghostPlacement()` once a rendered frame and only ever draws.
@@ -23,6 +24,13 @@ final class GhostRenderer {
     private let handsAnchor = AnchorEntity(world: .zero)
     private let hands = Entity()
     private var handsLoaded = false
+    /// Separate from the practice/animated ghost: tracks the currently observed real patient.
+    private let detectedAnchor = AnchorEntity(world: .zero)
+    private let detectedModel = Entity()
+    private let detectedFill = Entity()
+    private let detectedShell = Entity()
+    private let chestEstimate = Entity()
+    private var patientLoaded = false
 
     init(arView: ARView, vision: VisionSession) {
         self.vision = vision
@@ -45,6 +53,18 @@ final class GhostRenderer {
         handsLight.look(at: [0, 0, 0], from: [0.3, 1, 0.5], relativeTo: nil)
         handsAnchor.addChild(handsLight)
         arView.scene.addAnchor(handsAnchor)
+        detectedAnchor.isEnabled = false
+        detectedAnchor.addChild(detectedModel)
+        detectedModel.addChild(detectedFill)
+        detectedModel.addChild(detectedShell)
+        detectedAnchor.addChild(chestEstimate)
+        // A coarse surface disc, not a pin claiming to identify a bone.
+        let disc = ModelEntity(
+            mesh: .generateCylinder(height: 0.004, radius: 0.045),
+            materials: [Self.patientGlow(opacity: 0.45)]
+        )
+        chestEstimate.addChild(disc)
+        arView.scene.addAnchor(detectedAnchor)
         update = arView.scene.subscribe(to: SceneEvents.Update.self) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }
@@ -84,11 +104,29 @@ final class GhostRenderer {
         var line = UnlitMaterial(color: Self.patientColor)
         line.faceCulling = .front
         apply(line, to: patientOutline)
+        detectedFill.addChild(patient.clone(recursive: true))
+        detectedShell.addChild(outline.clone(recursive: true))
+        apply(Self.patientGlow(opacity: 0.08), to: detectedFill)
+        var glow = Self.patientGlow(opacity: 0.8)
+        glow.faceCulling = .front
+        apply(glow, to: detectedShell)
+        patientLoaded = true
+        vision.patientModelDidLoad()
         tone = nil
     }
 
     private func refresh() {
-        if handsLoaded, let placement = vision.handsPlacement() {
+        let trackedBody = vision.patientBodyPlacement()
+        if patientLoaded, let placement = trackedBody {
+            detectedAnchor.isEnabled = true
+            detectedModel.transform = Transform(matrix: placement.transform)
+            chestEstimate.isEnabled = placement.showsChestEstimate
+            chestEstimate.position = placement.chest
+            chestEstimate.orientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: placement.normal)
+        } else {
+            detectedAnchor.isEnabled = false
+        }
+        if handsLoaded, !(patientLoaded && trackedBody?.showsChestEstimate == true), let placement = vision.handsPlacement() {
             handsAnchor.isEnabled = true
             hands.transform = Transform(matrix: placement.transform)
         } else {
@@ -109,6 +147,8 @@ final class GhostRenderer {
         patientGroup.scale = SIMD3(repeating: placement.patientScale)
         patientFill.isEnabled = placement.practice
         patientFill.components.set(OpacityComponent(opacity: GhostPlacement.patientOpacity))
+        // The depth-fitted real body replaces the older rigid ghost-patient shell.
+        patientOutline.isEnabled = placement.practice || trackedBody == nil
         patientOutline.components.set(OpacityComponent(opacity: GhostPlacement.outlineOpacity))
     }
 
@@ -136,6 +176,19 @@ final class GhostRenderer {
         case .matching: UIColor(red: 0x34 / 255, green: 0xC7 / 255, blue: 0x59 / 255, alpha: 1)
         case .correcting: UIColor(red: 0xFF / 255, green: 0xB0 / 255, blue: 0x20 / 255, alpha: 1)
         }
+    }
+
+    /// Emissive glass remains visible in dim rooms without covering the real chest.
+    private static func patientGlow(opacity: Float) -> PhysicallyBasedMaterial {
+        var material = PhysicallyBasedMaterial()
+        let cyan = UIColor(red: 0.12, green: 0.65, blue: 1, alpha: 1)
+        material.baseColor = .init(tint: cyan)
+        material.emissiveColor = .init(color: cyan)
+        material.emissiveIntensity = 1.6
+        material.roughness = 0.25
+        material.metallic = 0
+        material.blending = .transparent(opacity: .init(floatLiteral: opacity))
+        return material
     }
 
     private static let patientColor = UIColor(white: 0.92, alpha: 1)

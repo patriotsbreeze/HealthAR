@@ -232,3 +232,19 @@ Pose and the locator, on the phone. The Simulator's staged camera shows only whe
 | 76 | Volunteer consent, covering video sent to Google | On file | ____ | |
 | 77 | Freeze: tag `demo-v1` once all of the above pass | Tagged | ____ | |
 | 78 | After the demo: key rotated, and app removed from any daily phone | Done | ____ | |
+
+
+## Depth-fitted Blender patient: pending device verification
+
+Run on the iPhone 17 Pro with a manikin and an instructor-marked reference. These checks do not establish clinical validity.
+
+| Check | Expected behavior | Result |
+|---|---|---|
+| Frame one lying manikin's shoulders, hips, and chest in good light | Glowing cyan 3D template follows torso position, orientation, length, and width. Record offsets in centimetres at each landmark; do not record a visual impression as accuracy evidence | Pending |
+| Bend/move a limb or use a different body shape | Document the mismatch: the mesh retains the Blender limb pose and template shape | Pending |
+| Enter hand placement and the initial compressions guide | Chest disc is labeled "Estimated hand placement - Not a sternum detection". Record signed offset from the instructor's reference in centimetres from several camera angles | Pending |
+| Intake, awake states, and compressions after the hand guide ends | Detecting a person never adds a CPR instruction; no estimated chest disc outside the existing hand-placement guide | Pending |
+| Cover a hip, show two lying candidates, stand up, or lose reliable depth | No fitted 3D patient; existing local guidance and eligible 2D marks continue | Pending |
+| Hide the body, interrupt AR, stop/start camera, or shed AR for heat | No stale world-space patient or chest disc; pose fit expires within 0.75 s when no fresh fit is available | Pending |
+| Remove/disable scene depth or make the mesh unavailable | Flat overlay remains usable; no claim that a 3D model is rendering | Pending |
+| Move the phone around the patient and rehearse for 10 minutes | Record drift, fit dropouts, frame rate, and thermal state. Check the emissive mesh does not obscure the real chest or controls | Pending |

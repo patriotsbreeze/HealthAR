@@ -90,7 +90,8 @@ final class ARController: NSObject, ARSessionDelegate, CameraDriver, @unchecked 
             tracking: TrackingQuality(camera.trackingState),
             imageToView: viewport.width > 0 && viewport.height > 0
                 ? frame.displayTransform(for: .portrait, viewportSize: viewport)
-                : nil
+                : nil,
+            bodyDepth: frame.sceneDepth.flatMap { BodyDepth($0) }
         )
     }
 
@@ -110,6 +111,34 @@ final class ARController: NSObject, ARSessionDelegate, CameraDriver, @unchecked 
             let y = plane.transform.columns.3.y
             floorY = min(floorY ?? y, y)
         }
+    }
+}
+
+extension BodyDepth {
+    /// Copy only the small depth/confidence grids, never retain an ARFrame across inference.
+    init?(_ data: ARDepthData) {
+        let depth = data.depthMap
+        guard let confidence = data.confidenceMap,
+              CVPixelBufferGetPixelFormatType(depth) == kCVPixelFormatType_DepthFloat32,
+              CVPixelBufferLockBaseAddress(depth, .readOnly) == kCVReturnSuccess else { return nil }
+        defer { CVPixelBufferUnlockBaseAddress(depth, .readOnly) }
+        guard CVPixelBufferLockBaseAddress(confidence, .readOnly) == kCVReturnSuccess else { return nil }
+        defer { CVPixelBufferUnlockBaseAddress(confidence, .readOnly) }
+        let width = CVPixelBufferGetWidth(depth), height = CVPixelBufferGetHeight(depth)
+        guard width > 0, height > 0, width <= 1024, height <= 1024,
+              CVPixelBufferGetWidth(confidence) == width, CVPixelBufferGetHeight(confidence) == height,
+              let depthBase = CVPixelBufferGetBaseAddress(depth),
+              let confidenceBase = CVPixelBufferGetBaseAddress(confidence) else { return nil }
+        var values: [Float] = [], certainty: [UInt8] = []
+        values.reserveCapacity(width * height)
+        certainty.reserveCapacity(width * height)
+        for y in 0..<height {
+            let row = depthBase.advanced(by: y * CVPixelBufferGetBytesPerRow(depth)).assumingMemoryBound(to: Float.self)
+            let confidenceRow = confidenceBase.advanced(by: y * CVPixelBufferGetBytesPerRow(confidence)).assumingMemoryBound(to: UInt8.self)
+            values.append(contentsOf: UnsafeBufferPointer(start: row, count: width))
+            certainty.append(contentsOf: UnsafeBufferPointer(start: confidenceRow, count: width))
+        }
+        self.init(width: width, height: height, metres: values, confidence: certainty)
     }
 }
 

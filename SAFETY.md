@@ -6,6 +6,12 @@ It guides an adult cardiac arrest. Once a person taps that the patient is respon
 
 None of the Live behaviour has run on a phone. What is known comes from a Mac with synthesised speech: see [Live behaviour, measured on a Mac only](#live-behaviour-measured-on-a-mac-only).
 
+## Depth-fitted body visualization
+
+The glowing patient uses the Blender practice mannequin, fitted to measured shoulder and hip surface points. It is a scaled template, not a body scan: its limb pose, silhouette, and anatomy may not match the person. A successful depth fit is not evidence of correct hand placement. The chest marker uses the existing unvalidated torso fraction (`TorsoMap.alongTorso`), not a detected sternum or other anatomical landmark. LiDAR observes the visible surface, including clothing, and cannot identify the sternum underneath it. The app labels this marker as an estimate and shows it only where the protocol already requests hand placement. Validate on a manikin with an instructor-marked reference before any demo; none of this authorizes use in a real emergency.
+
+The adult hand-placement reference is the [AHA adult BLS guideline](https://cpr.heart.org/en/resuscitation-science/cpr-and-ecc-guidelines/adult-basic-life-support). The guideline does not validate this camera-based localization method.
+
 ## Rules for running it
 
 - Nobody compresses a real person. Compressions go on a manikin only.

@@ -93,6 +93,7 @@ public final class VisionSession: Sendable {
         var worldEpoch: UInt64 = 0
         var wantsRunning = false
         var arActive = false
+        var patientModelReady = false
         var failed = false
 
         enum DriverAction { case none, run, pause }
@@ -463,6 +464,23 @@ public final class VisionSession: Sendable {
 
     // MARK: - Reading
 
+    /// Called only after the renderer has loaded both patient meshes successfully.
+    func patientModelDidLoad() { state.withLock { $0.patientModelReady = true } }
+
+    /// Depth-backed patient template. It expires instead of staying at an old body location.
+    public func patientBodyPlacement() -> PatientBodyPlacement? {
+        let now = clock()
+        guard let fitted = pose.patientBody, (0...VisionOverlay.maxJointAge).contains(now - fitted.capturedAt) else { return nil }
+        return state.withLock { state in
+            guard state.arActive, let camera = state.ledger.latest, camera.tracking == .normal,
+                  (0...VisionOverlay.maxCameraAge).contains(now - camera.timestamp),
+                  state.mapping != nil, !state.ghostPractice else { return nil }
+            var placement = fitted.placement
+            placement.showsChestEstimate = state.overlayTarget == .chestCenter || state.showsHandsGuide(at: now)
+            return placement
+        }
+    }
+
     /// The overlay for this instant, cheap enough to call every display frame.
     public func overlay() -> VisionOverlay {
         let now = clock()
@@ -492,7 +510,14 @@ public final class VisionSession: Sendable {
             )
         }
         // The 3D hands take over from the flat ones wherever they show.
-        overlay.handsIn3D = handsPlacement() != nil
+        let patientBody = patientBodyPlacement()
+        overlay.patientIn3D = patientBody != nil && state.withLock { $0.patientModelReady }
+        if overlay.patientIn3D {
+            overlay.chestEstimateLabel = patientBody?.showsChestEstimate == true
+                ? "Estimated hand placement - Not a sternum detection"
+                : "3D body fit - Template estimate"
+        }
+        overlay.handsIn3D = (overlay.patientIn3D && patientBody?.showsChestEstimate == true) || handsPlacement() != nil
         return overlay
     }
 
@@ -599,6 +624,7 @@ public final class VisionSession: Sendable {
             state.worldEpoch += 1
         }
         objects.clear()
+        pose.reset()
     }
 
     // MARK: - Frames in
@@ -615,7 +641,8 @@ public final class VisionSession: Sendable {
         pixels: CVPixelBuffer,
         pose: CameraPose,
         tracking: TrackingQuality,
-        imageToView: CGAffineTransform?
+        imageToView: CGAffineTransform?,
+        bodyDepth: BodyDepth? = nil
     ) -> CapturedFrame? {
         // Stamped here rather than from ARFrame.timestamp, whose clock Apple doesn't document,
         // so every age in this package reads one clock. It under-counts by the delivery delay.
@@ -629,7 +656,7 @@ public final class VisionSession: Sendable {
             return state.needsPixels(at: now, holdsLimb: holdsLimb) ? record.id : nil
         }
         guard let wanted else { return nil }
-        let frame = CapturedFrame(id: wanted, pixels: pixels)
+        let frame = CapturedFrame(id: wanted, pixels: pixels, bodyDepth: bodyDepth)
         framesContinuation.yield(frame)
         return frame
     }

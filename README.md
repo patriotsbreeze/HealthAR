@@ -20,6 +20,10 @@ Everything works offline by taps. The AI adds to the local steps and replaces no
 
 While the camera is active, on-device pose detection shows blue, named dots for shoulders, elbows, wrists, and hips, with a translucent arm-and-torso outline for each person. Left and right are the detected person's sides. Face and leg points are hidden, and missing or uncertain joints leave gaps. The shaded outline follows 2D image points; it is not a depth-accurate 3D body mesh, a sternum detector, or a compression-depth measurement. The existing hand-placement guide remains separate. Test alignment and left/right labels on a device before a demo.
 
+On a scene-depth-capable device, the AR view can additionally fit the actual Blender `Patient` and `PatientOutline` meshes from `Ghost.usdz` to one clearly detected lying patient's measured shoulders and hips. It draws emissive cyan glass in world space and expires the fit after 0.75 seconds without fresh measurements. High-confidence depth from the same captured frame is required at all four torso landmarks and the estimated chest point; inferred hips, ambiguous patients, uncertain depth, and standing bodies do not produce a 3D fit. If the asset or depth is unavailable, the existing 2D overlay stays available.
+
+This is a torso-fitted mannequin template: its limb pose and body shape are not reconstructed from the person. The chest disc is the existing unvalidated `TorsoMap` estimate placed on measured chest-surface depth, displayed only during the hand-placement guide with the label "Estimated hand placement - Not a sternum detection". It does not detect the sternum, measure compression depth, or establish clinical accuracy.
+
 ## Layout
 
 | Path | What it is |
