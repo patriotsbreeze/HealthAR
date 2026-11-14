@@ -3,13 +3,57 @@ import simd
 
 /// The 19 joints Vision's body pose reports, under our own names so nothing past the detector
 /// depends on Vision's raw values, which Apple doesn't document.
-enum BodyJoint: String, CaseIterable, Sendable, Hashable {
+public enum BodyJoint: String, CaseIterable, Sendable, Hashable {
     case leftEar, leftEye, rightEar, rightEye, neck, nose
     case leftShoulder, leftElbow, leftWrist
     case rightShoulder, rightElbow, rightWrist
     case root
     case leftHip, leftKnee, leftAnkle
     case rightHip, rightKnee, rightAnkle
+}
+
+extension BodyJoint {
+    /// Torso alignment and the rescuer's arm chain. The sternum is not a detected joint.
+    public static let cprJoints: [BodyJoint] = [
+        .leftShoulder, .rightShoulder, .leftElbow, .rightElbow,
+        .leftWrist, .rightWrist, .leftHip, .rightHip,
+    ]
+
+    public var cprLabel: String? {
+        switch self {
+        case .leftShoulder: "L shoulder"
+        case .rightShoulder: "R shoulder"
+        case .leftElbow: "L elbow"
+        case .rightElbow: "R elbow"
+        case .leftWrist: "L wrist"
+        case .rightWrist: "R wrist"
+        case .leftHip: "L hip"
+        case .rightHip: "R hip"
+        default: nil
+        }
+    }
+}
+
+/// Named measurements from one observation; never combines different people or estimates hips.
+struct DetectedSkeleton: Sendable, Equatable {
+    var joints: [BodyJoint: SIMD2<Double>]
+
+    init(joints: [BodyJoint: DetectedPerson.Joint]) {
+        self.joints = [:]
+        for name in BodyJoint.cprJoints {
+            guard let joint = joints[name], joint.confidence >= 0.3,
+                  joint.position.x.isFinite, joint.position.y.isFinite,
+                  (0...1).contains(joint.position.x), (0...1).contains(joint.position.y)
+            else { continue }
+            self.joints[name] = joint.position
+        }
+    }
+
+    init(person: DetectedPerson) {
+        self.init(joints: Dictionary(uniqueKeysWithValues: BodyJoint.cprJoints.compactMap { name in
+            person.joint(name).map { (name, $0) }
+        }))
+    }
 }
 
 struct DetectedPerson: Sendable, Equatable {

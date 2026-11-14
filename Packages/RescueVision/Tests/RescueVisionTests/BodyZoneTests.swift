@@ -451,7 +451,8 @@ private func locate(_ session: VisionSession, _ materials: Set<Material>, pose: 
     let session = makeSession(clock: clock)
     session.apply(.overlay(.padZones))
     await step(session)
-    let expected = lying.visibleJoints.map { portraitMapping.viewPoint(fromImage: $0) }
+    let skeleton = DetectedSkeleton(person: lying)
+    let expected = BodyJoint.cprJoints.compactMap { skeleton.joints[$0] }.map { portraitMapping.viewPoint(fromImage: $0) }
     #expect(!expected.isEmpty)
     #expect(session.overlay().joints == expected)
 
@@ -496,5 +497,71 @@ private func locate(_ session: VisionSession, _ materials: Set<Material>, pose: 
 
     clock.advance(VisionOverlay.maxJointAge + 0.01)
     session.ingest(pixels: makePixels(), pose: cameraPose(), tracking: .normal, imageToView: portraitTransform)
+    #expect(session.overlay().joints.isEmpty)
+}
+
+
+@Test func cprSkeletonKeepsNamedArmsAndTorsoButDropsFaceLegsAndUnreliablePoints() {
+    let measured: [BodyJoint: DetectedPerson.Joint] = [
+        .leftShoulder: .init(position: [0.3, 0.3], confidence: 0.9),
+        .rightShoulder: .init(position: [0.7, 0.3], confidence: 0.9),
+        .leftElbow: .init(position: [0.25, 0.45], confidence: 0.8),
+        .leftWrist: .init(position: [0.4, 0.6], confidence: 0.8),
+        .rightElbow: .init(position: [0.75, 0.45], confidence: 0.1),
+        .rightWrist: .init(position: [.nan, 0.6], confidence: 0.9),
+        .leftHip: .init(position: [0.35, 0.7], confidence: 0.9),
+        .rightHip: .init(position: [1.1, 0.7], confidence: 0.9),
+        .nose: .init(position: [0.5, 0.2], confidence: 1),
+        .leftKnee: .init(position: [0.35, 0.9], confidence: 1),
+    ]
+    let skeleton = DetectedSkeleton(joints: measured)
+    #expect(Set(skeleton.joints.keys) == [.leftShoulder, .rightShoulder, .leftElbow, .leftWrist, .leftHip])
+    #expect(skeleton.joints[.leftWrist] == [0.4, 0.6])
+    #expect(BodyJoint.leftWrist.cprLabel == "L wrist")
+    #expect(BodyJoint.rightWrist.cprLabel == "R wrist")
+    #expect(BodyJoint.nose.cprLabel == nil)
+}
+
+@Test func outlinesNeverConnectDifferentPeopleOrFillMissingJoints() {
+    let one = VisionOverlay.DetectedBody(joints: [.leftShoulder: CGPoint(x: 0.2, y: 0.3)])
+    let two = VisionOverlay.DetectedBody(joints: [.leftElbow: CGPoint(x: 0.8, y: 0.5)])
+    #expect(one.segments.isEmpty)
+    #expect(two.segments.isEmpty)
+    let arm = VisionOverlay.DetectedBody(joints: [
+        .leftShoulder: CGPoint(x: 0.2, y: 0.3),
+        .leftElbow: CGPoint(x: 0.25, y: 0.5),
+        .leftWrist: CGPoint(x: 0.3, y: 0.7),
+        .nose: CGPoint(x: 0.2, y: 0.1),
+    ])
+    #expect(arm.joints[.nose] == nil)
+    #expect(arm.segments.count == 2)
+    #expect(arm.segments[0].from == arm.joints[.leftShoulder])
+    #expect(arm.segments[0].to == arm.joints[.leftElbow])
+    #expect(arm.segments[1].to == arm.joints[.leftWrist])
+}
+
+@Test func namedSkeletonsReachTheOverlayWithoutATorsoAndExpireTogether() async {
+    let clock = TestClock()
+    let skeleton = DetectedSkeleton(joints: [
+        .rightElbow: .init(position: [0.4, 0.4], confidence: 0.9),
+        .rightWrist: .init(position: [0.5, 0.5], confidence: 0.9),
+    ])
+    let session = VisionSession(
+        locator: FixedLocator(box: nil), driver: FakeDriver(surface: wall),
+        detect: { _, _ in [] },
+        detectFrame: { _, _ in PoseDetection(people: [], joints: [], skeletons: [skeleton]) },
+        clock: { clock.now }, runsPump: false
+    )
+    session.viewportSize = portraitMapping.viewSize
+    session.start()
+    await step(session)
+    #expect(session.overlay().bodies.count == 1)
+    #expect(session.overlay().bodies.first?.joints[.rightElbow] == portraitMapping.viewPoint(fromImage: [0.4, 0.4]))
+    #expect(session.overlay().bodies.first?.segments.count == 1)
+    #expect(session.overlay().joints.count == 2)
+    #expect(session.latestTarget == nil)
+    clock.advance(VisionOverlay.maxJointAge + 0.01)
+    session.ingest(pixels: makePixels(), pose: cameraPose(), tracking: .normal, imageToView: portraitTransform)
+    #expect(session.overlay().bodies.isEmpty)
     #expect(session.overlay().joints.isEmpty)
 }

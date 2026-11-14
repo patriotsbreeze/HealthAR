@@ -1,3 +1,4 @@
+import RescueVision
 import SwiftUI
 
 /// Draws a scene into one Canvas. Every stroke is four layers: a wide 40% black under-stroke, the fill,
@@ -13,6 +14,7 @@ enum ARPainter {
         guard scene.hasMarks || scene.hint != nil else { return }
         // Nothing is drawn under the deck. A body zone that runs past the band is cut at its edge.
         context.clip(to: Path(scene.band))
+        paintDetectedBodies(scene, in: &context)
         if let ghost = scene.ghost { paintGhost(ghost, in: &context) }
         if let zone = scene.zone {
             appearing(appear[zone.id], around: zone.center, style: style, in: &context) { layer in
@@ -30,9 +32,40 @@ enum ARPainter {
             context.stroke(dot, with: .color(.black.opacity(0.7)), lineWidth: 3)
             context.fill(dot, with: .color(.blue))
         }
+        for body in scene.bodies {
+            for name in BodyJoint.cprJoints {
+                guard let point = body.joints[name], let label = name.cprLabel else { continue }
+                let text = context.resolve(Text(label).font(.system(size: 10, weight: .semibold)).foregroundStyle(.white))
+                let size = text.measure(in: CGSize(width: 90, height: 20))
+                let frame = CGRect(x: point.x + 7, y: point.y - size.height / 2, width: size.width + 6, height: size.height + 2)
+                context.fill(Path(roundedRect: frame, cornerRadius: 3), with: .color(.black.opacity(0.65)))
+                context.draw(text, at: CGPoint(x: frame.midX, y: frame.midY))
+            }
+        }
         if let zoneChip = scene.zone?.chip { chip(zoneChip, style: style, in: &context) }
         for case let itemChip? in scene.items.map(\.chip) { chip(itemChip, style: style, in: &context) }
         if let hint = scene.hint { chip(hint, style: style, in: &context) }
+    }
+
+    /// Layered round strokes give the measured torso and arms a translucent tube appearance.
+    /// This remains a 2D camera overlay: no invented depth, joints, or compression measurements.
+    private static func paintDetectedBodies(_ scene: ARScene, in context: inout GraphicsContext) {
+        for body in scene.bodies {
+            let shoulders = [body.joints[.leftShoulder], body.joints[.rightShoulder]].compactMap { $0 }
+            let span = shoulders.count == 2
+                ? hypot(shoulders[0].x - shoulders[1].x, shoulders[0].y - shoulders[1].y)
+                : 70
+            let width = min(20, max(7, span * 0.09))
+            for segment in body.segments {
+                var path = Path()
+                path.move(to: segment.from)
+                path.addLine(to: segment.to)
+                context.stroke(path, with: .color(.black.opacity(0.4)), style: solid(width + 3))
+                context.stroke(path, with: .color(.blue.opacity(0.35)), style: solid(width))
+                context.stroke(path, with: .color(.cyan.opacity(0.65)), style: solid(width * 0.45))
+                context.stroke(path, with: .color(.white.opacity(0.5)), style: solid(1))
+            }
+        }
     }
 
     /// First lock only: 0.28 s from a touch larger and clear to in place. Under Reduce Motion it only fades.

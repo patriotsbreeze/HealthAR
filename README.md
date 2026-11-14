@@ -18,6 +18,8 @@ A phone app that guides a bystander through an emergency using voice, camera, an
 
 Everything works offline by taps. The AI adds to the local steps and replaces none of them.
 
+While the camera is active, on-device pose detection shows blue, named dots for shoulders, elbows, wrists, and hips, with a translucent arm-and-torso outline for each person. Left and right are the detected person's sides. Face and leg points are hidden, and missing or uncertain joints leave gaps. The shaded outline follows 2D image points; it is not a depth-accurate 3D body mesh, a sternum detector, or a compression-depth measurement. The existing hand-placement guide remains separate. Test alignment and left/right labels on a device before a demo.
+
 ## Layout
 
 | Path | What it is |

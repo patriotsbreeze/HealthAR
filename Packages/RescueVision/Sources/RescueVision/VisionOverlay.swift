@@ -182,7 +182,32 @@ public struct VisionOverlay: Sendable, Equatable {
         }
     }
 
-    /// Detected joints in normalized view coordinates, origin top-left.
+    /// A camera-aligned body outline, not a depth measurement or a clinical assessment.
+    public struct DetectedBody: Sendable, Equatable {
+        public var joints: [BodyJoint: CGPoint]
+
+        public init(joints: [BodyJoint: CGPoint]) {
+            self.joints = joints.filter { BodyJoint.cprJoints.contains($0.key) }
+        }
+
+        /// Only connect endpoints measured on this person. Missing joints leave gaps.
+        public var segments: [Figure.Segment] {
+            let edges: [(BodyJoint, BodyJoint)] = [
+                (.leftShoulder, .rightShoulder),
+                (.leftShoulder, .leftHip), (.rightShoulder, .rightHip),
+                (.leftHip, .rightHip),
+                (.leftShoulder, .leftElbow), (.leftElbow, .leftWrist),
+                (.rightShoulder, .rightElbow), (.rightElbow, .rightWrist),
+            ]
+            return edges.compactMap { a, b in
+                guard let from = joints[a], let to = joints[b] else { return nil }
+                return Figure.Segment(from: from, to: to)
+            }
+        }
+    }
+
+    public var bodies: [DetectedBody] = []
+    /// Detected CPR joints in normalized view coordinates, origin top-left.
     public var joints: [CGPoint] = []
     public var ring: Ring?
     public var aedArrow: AEDArrow?
@@ -304,7 +329,14 @@ public struct VisionOverlay: Sendable, Equatable {
 
         let detectedJoints = jointPose ?? pose
         if let detectedJoints, (0...maxJointAge).contains(detectedJoints.age(at: now)) {
-            overlay.joints = detectedJoints.joints.map { mapping.viewPoint(fromImage: $0) }
+            overlay.bodies = detectedJoints.skeletons.map { skeleton in
+                DetectedBody(joints: skeleton.joints.mapValues { mapping.viewPoint(fromImage: $0) })
+            }
+            if overlay.bodies.isEmpty {
+                overlay.joints = detectedJoints.joints.map { mapping.viewPoint(fromImage: $0) }
+            } else {
+                overlay.joints = overlay.bodies.flatMap { body in BodyJoint.cprJoints.compactMap { body.joints[$0] } }
+            }
         }
 
         // World points, so only with tracking that holds the world steady.

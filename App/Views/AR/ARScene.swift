@@ -123,6 +123,7 @@ struct ARGhost: Equatable {
 struct ARScene: Equatable {
     var band: CGRect
     var joints: [CGPoint] = []
+    var bodies: [VisionOverlay.DetectedBody] = []
     var zone: ARZone?
     var items: [ARItem] = []
     var pointer: ARPointer?
