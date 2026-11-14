@@ -348,7 +348,7 @@ private func walk(_ fixture: Fixture, to id: String) {
         fixture.run(seconds: 1.2)
         #expect(!coordinator.showsHandsGuide)
         #expect(!coordinator.leavesRoomForCamera, "the full panels come back")
-        #expect(!coordinator.pulseDocked)
+        #expect(coordinator.pulseDocked, "the beat has one place, the corner")
     }
 
     /// The timer out of place_hands has already shown the hands, and says nothing on its edge.

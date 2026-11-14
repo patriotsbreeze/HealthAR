@@ -118,7 +118,7 @@ The fuzz bar (0 illegal transitions) is met by `swift test`. These need a real v
 | 51 | Arrow after a 2 m walk away and back. A scan lasts 20 s, and tapping Scan room again keeps the point | Holds on the AED | ____ | |
 | 52 | AED on a wall, not a table | Note where the arrow lands | ____ | |
 | 53 | Metronome once pads are on, against the trainer's prompts | Off, and the phone doesn't compete | ____ | |
-| 53.1 | Trainer talking with pads on but the **Pads on** tap missed | Model calls `report_finding(aed_prompting)`. Phone goes quiet for 8 s, the pulse hides, and the chip reads "AED talking". Note whether the model reports it reliably, and how often it falsely does during compressions | ____ | |
+| 53.1 | Trainer talking with pads on but the **Pads on** tap missed | Model calls `report_finding(aed_prompting)`. Phone goes quiet for 8 s, the beat's dot hides, and the chip reads "AED talking". Note whether the model reports it reliably, and how often it falsely does during compressions | ____ | |
 | 53.2 | Trainer saying "Analyzing, stand clear" with pads on | Model reports what it likes. The phone says nothing about pushing, stopping, or the AED | ____ | |
 | 54 | No uplink during pads and analysis, checked with a proxy or the socket trace | No frames sent | ____ | |
 | 55 | Coarse pad zones, manikin only | Labeled, and agree with the trainer's pictures | ____ | |
@@ -193,7 +193,7 @@ None of these can run in the Simulator, which has no AR. Layout was only checked
 | 106 | Seated volunteer, plain sleeve, phone 1 m away. Tap the arm, then step 1 m sideways. Again on a phone without LiDAR if there is one | Pin stays on the arm, or the tap says it couldn't place one. Never a pin on the floor behind | ____ / 10 | |
 | 107 | On `limb_wait`, finger on its way to the band as someone says "he's stopped breathing", 10 tries. Screen-record it | Compressions never start from that tap. Note where Start CPR sits against where the band was | ____ / 10 | |
 | 108 | Carried arrow in `compressions`, then the phone face down on the floor for 60 s, then picked up | Following the arrow still leads to the AED. Note how far off it is, in degrees | ____ degrees | |
-| 109 | Carried arrow in `compressions` with the AED above the view, then below it | The pointer sits at the band's edge beside the Push pulse, and "Push" stays readable | ____ | |
+| 109 | Carried arrow in `compressions` with the AED above the view, then below it | The pointer sits at the band's edge, and its words keep off the beat's dot in the top-trailing corner | ____ | |
 | 110 | Carried arrow in `compressions`, then Scan room finding the AED again, then Done | Arrow still present when `compressions` comes back | ____ | |
 | 111 | After `aed_found`, bring the AED to the patient, then a collapse | Arrow reads "AED seen earlier". After AED here, no arrow on any way back to `compressions` | ____ | |
 | 112 | Tap Scan room with the phone pointing at the patient, then pan to the AED | Arrow within the 20 s. Note the time to the arrow, and the locate tries on the HUD | ____ s | |

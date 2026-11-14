@@ -120,19 +120,17 @@ private func inside(_ rect: CGRect, _ band: CGRect) -> Bool {
     /// `aed_found` asks for it to be brought over, so where it was seen may be empty now.
     @Test func aCarriedAEDSaysItWasSeenEarlier() throws {
         let arrow = VisionOverlay.AEDArrow(position: CGPoint(x: 0.92, y: 0.3), isOnScreen: false, angle: 0, distance: 3)
-        let away = build(VisionOverlay(aedArrow: arrow), context: ARContext(carriedAED: true, pulse: .centered))
+        let away = build(VisionOverlay(aedArrow: arrow), context: ARContext(carriedAED: true, pulse: .docked))
         #expect(away.pointer?.chip?.text == "AED seen earlier")
         let near = VisionOverlay.AEDArrow(position: CGPoint(x: 0.1, y: 0.2), isOnScreen: true, angle: 0, distance: 3)
         #expect(build(VisionOverlay(aedArrow: near), context: ARContext(carriedAED: true)).items.first?.chip?.text == "AED seen earlier")
     }
 
-    /// The beat sits mid-band in compressions, and an AED above or below the view would otherwise put
-    /// the pointer on it every time.
-    @Test func aPointerKeepsOffTheBeat() throws {
-        let arrow = VisionOverlay.AEDArrow(position: CGPoint(x: 0.5, y: 0.08), isOnScreen: false, angle: -.pi / 2, distance: 3)
-        let scene = build(VisionOverlay(aedArrow: arrow), context: ARContext(carriedAED: true, pulse: .centered))
+    /// The beat's dot sits top-trailing, and an AED up and to the right puts the pointer right by it.
+    @Test func aPointersWordsKeepOffTheBeat() throws {
+        let arrow = VisionOverlay.AEDArrow(position: CGPoint(x: 0.95, y: 0.08), isOnScreen: false, angle: -.pi / 4, distance: 3)
+        let scene = build(VisionOverlay(aedArrow: arrow), context: ARContext(carriedAED: true, pulse: .docked))
         let pointer = try #require(scene.pointer)
-        #expect(!ARSceneBuilder.pulseColumn(in: band).contains(pointer.center.x) || pointer.center.x == ARSceneBuilder.pulseColumn(in: band).upperBound)
         let beat = try #require(scene.obstacles.first)
         #expect(!(try #require(pointer.chip)).frame.intersects(beat), "the AED's words always show")
     }
@@ -639,5 +637,66 @@ private func inside(_ rect: CGRect, _ band: CGRect) -> Bool {
         #expect(abs(ARGeometry.fingerAngle(torsoAxis: .pi / 2)) < 1e-9, "a torso upright on screen: fingers right")
         let near = ARGeometry.fingerAngle(torsoAxis: 0.09)
         #expect(abs(near - (0.09 - .pi / 2)) < 1e-9)
+    }
+}
+
+// MARK: - The patient's outline
+
+private let patientOutline = VisionOverlay.Outline(
+    torso: [CGPoint(x: 0.3, y: 0.2), CGPoint(x: 0.3, y: 0.35), CGPoint(x: 0.6, y: 0.33), CGPoint(x: 0.6, y: 0.22)],
+    torsoLocked: true,
+    head: .init(center: CGPoint(x: 0.2, y: 0.27), radius: 0.06, isLocked: true),
+    limbs: [
+        .init(from: CGPoint(x: 0.6, y: 0.22), to: CGPoint(x: 0.8, y: 0.22), width: 0.08, isLocked: true),
+        .init(from: CGPoint(x: 0.6, y: 0.33), to: CGPoint(x: 0.8, y: 0.33), width: 0.001, isLocked: false),
+    ]
+)
+
+@MainActor
+@Suite struct AROutlineTests {
+    @Test func theOutlineHasEveryPartInPoints() throws {
+        let scene = build(VisionOverlay(outline: patientOutline), context: ARContext(target: .chestCenter))
+        let outline = try #require(scene.outline)
+        #expect(outline.parts.map(\.kind) == [.torso, .limb, .limb, .head])
+        #expect(scene.hasMarks)
+        #expect(scene.markIDs.first == ARSceneBuilder.outlineID, "it fades in on first lock like the other marks")
+        let torso = outline.parts[0].path.boundingRect
+        #expect(abs(torso.minX - 120) < 0.5 && abs(torso.maxX - 240) < 0.5)
+        #expect(abs(torso.minY - 160) < 0.5 && abs(torso.maxY - 280) < 0.5)
+        let head = outline.parts[3].path.boundingRect
+        #expect(abs(head.width - 48) < 0.5, "radius is a fraction of the view's width")
+    }
+
+    @Test func eachPartKeepsItsOwnLock() throws {
+        let outline = try #require(build(VisionOverlay(outline: patientOutline), context: ARContext(target: .chestCenter)).outline)
+        #expect(outline.parts.map(\.lock) == [.locked, .locked, .estimating, .locked])
+    }
+
+    @Test func aHairlineLimbIsHeldToAWidthThatReads() throws {
+        let outline = try #require(build(VisionOverlay(outline: patientOutline), context: ARContext(target: .chestCenter)).outline)
+        let thin = outline.parts[2].path.boundingRect
+        #expect(thin.height >= DS.AR.Outline.minLimbWidth - 0.5)
+    }
+
+    @Test func insideTheGraceEverythingDrawsDashed() throws {
+        var context = ARContext(target: .chestCenter)
+        context.estimating = true
+        let outline = try #require(build(VisionOverlay(outline: patientOutline), context: context).outline)
+        #expect(outline.parts.allSatisfy { $0.lock == .estimating })
+    }
+
+    @Test func lostTrackingHidesTheOutline() {
+        var context = ARContext(target: .chestCenter)
+        context.trackingLost = true
+        #expect(build(VisionOverlay(outline: patientOutline), context: context).outline == nil)
+    }
+
+    @Test func anOutlineAloneCountsAsMarksSoItIsNotLostTracking() {
+        let memory = ARMemory()
+        let context = ARContext(target: .chestCenter)
+        _ = memory.frame(overlay: VisionOverlay(outline: patientOutline), zones: [], items: [], stateID: "s", context: context, now: 0)
+        let later = memory.frame(overlay: VisionOverlay(outline: patientOutline), zones: [], items: [], stateID: "s", context: context, now: 5)
+        #expect(!later.context.trackingLost)
+        #expect(!later.context.estimating)
     }
 }

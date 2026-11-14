@@ -263,10 +263,9 @@ extension DS {
     }
 
     enum Pulse {
-        /// Centered in compressions. The overlay's keep-off column is sized from this.
-        static let standard: CGFloat = 170
-        /// Top-trailing when the step also draws on the camera, so the body stays clear.
-        static let docked: CGFloat = 96
+        /// The camera's beat: a small dot, top-trailing, so the body and the AR on it stay clear. It shows
+        /// only when the ghost can't be the beat.
+        static let docked: CGFloat = 44
         static let sheet: CGFloat = 44
         static let confirmation: CGFloat = 88
         static let dockedInset: CGFloat = 12
@@ -313,6 +312,20 @@ extension DS {
             /// The hands' press ring, at full strength only on the click.
             static let pressRing: CGFloat = 18
             static let pressRingWidth: CGFloat = 2.5
+        }
+
+        /// The patient pose found, under the step's mark. The ghost patient's own near-white and line
+        /// strength, so the 2D figure and the 3D one read as the same thing.
+        enum Outline {
+            static let color = Color(white: 0.92)
+            static let opacity = 0.85
+            static let fill = 0.08
+            /// The inside half of each is cut away with the parts' insides, so 2 and 4.5 show.
+            static let stroke: CGFloat = 4
+            static let keyline: CGFloat = 9
+            /// Limbs no thinner than this, so a far one is still a shape and not a hairline.
+            static let minLimbWidth: CGFloat = 10
+            static let minHeadRadius: CGFloat = 8
         }
 
         static let underWidth: CGFloat = 13

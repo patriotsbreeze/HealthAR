@@ -14,6 +14,11 @@ enum ARPainter {
         // Nothing is drawn under the deck. A body zone that runs past the band is cut at its edge.
         context.clip(to: Path(scene.band))
         if let ghost = scene.ghost { paintGhost(ghost, in: &context) }
+        if let outline = scene.outline {
+            appearing(appear[ARSceneBuilder.outlineID], around: outline.center, style: style, in: &context) { layer in
+                paintOutline(outline, in: &layer)
+            }
+        }
         if let zone = scene.zone {
             appearing(appear[zone.id], around: zone.center, style: style, in: &context) { layer in
                 paintZone(zone, handsIn3D: scene.handsIn3D, in: &layer)
@@ -106,6 +111,33 @@ enum ARPainter {
             }
         case .limb, .press:
             zoneLayers(zone.path, lock: zone.lock, in: &context)
+        }
+    }
+
+    /// One silhouette, not a pile of shapes: every part's line is drawn, then every part's inside is cut
+    /// out of the lines, so only the body's edge is left, solid or dashed part by part. The fill goes in
+    /// once over the whole body, so where a limb lies on the torso it doesn't read darker.
+    private static func paintOutline(_ outline: AROutline, in context: inout GraphicsContext) {
+        // Opacity on the context a layer is drawn into fades the layer whole. Set inside, it would fade
+        // each shape, and overlaps would stack.
+        var fill = context
+        fill.opacity *= DS.AR.Outline.fill
+        fill.drawLayer { layer in
+            for part in outline.parts { layer.fill(part.path, with: .color(DS.AR.Outline.color)) }
+        }
+        var lines = context
+        lines.opacity *= DS.AR.Outline.opacity
+        lines.drawLayer { layer in
+            for part in outline.parts {
+                layer.stroke(part.path, with: .color(DS.Colors.keyline), style: solid(DS.AR.Outline.keyline))
+            }
+            for part in outline.parts {
+                let style = colorStroke(DS.AR.Outline.stroke, lock: part.lock, size: part.path.boundingRect.size)
+                layer.stroke(part.path, with: .color(DS.AR.Outline.color), style: style)
+            }
+            // Part by part: one path of them all could cancel where two wind opposite ways.
+            layer.blendMode = .destinationOut
+            for part in outline.parts { layer.fill(part.path, with: .color(.black)) }
         }
     }
 

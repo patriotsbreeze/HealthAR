@@ -88,6 +88,46 @@ private func step(_ session: VisionSession, pose: CameraPose = cameraPose(), tra
     #expect(session.overlay() == .empty)
 }
 
+@Test func theOutlineShowsUnderTheChestAndPadsAndAgesOutWithThem() async throws {
+    let clock = TestClock()
+    for target in [OverlayTarget.chestCenter, .padZones] {
+        let session = makeSession(clock: clock, people: Crowd([fullPerson(center: [0.5, 0.6], axisDegrees: 0, aspect: aspect)]))
+        session.apply(.overlay(target))
+        await step(session)
+        let outline = try #require(session.overlay().outline, "\(target)")
+        #expect(outline.torso.count == 4)
+        #expect(outline.head != nil)
+        #expect(outline.limbs.count == 8)
+        #expect(outline.limbs.allSatisfy { $0.width > 0 })
+
+        clock.advance(VisionOverlay.maxZoneAge + 0.01)
+        session.ingest(pixels: makePixels(), pose: cameraPose(), tracking: .normal, imageToView: portraitTransform)
+        #expect(session.overlay().outline == nil, "\(target)")
+    }
+}
+
+@Test func theOutlineLandsWhereTheChestZoneDoes() async throws {
+    let clock = TestClock()
+    let session = makeSession(clock: clock)
+    session.apply(.overlay(.chestCenter))
+    await step(session)
+    let overlay = session.overlay()
+    let outline = try #require(overlay.outline)
+    let chest = try #require(overlay.zones.first)
+    let xs = outline.torso.map(\.x), ys = outline.torso.map(\.y)
+    #expect((xs.min()!...xs.max()!).contains(chest.center.x) && (ys.min()!...ys.max()!).contains(chest.center.y), "the hands sit inside the torso")
+}
+
+@Test func noOutlineOnStepsThatDontLookForSomeoneLying() async throws {
+    let clock = TestClock()
+    for target in [OverlayTarget.aedDevice, .injurySite] {
+        let session = makeSession(clock: clock)
+        session.apply(.overlay(target))
+        await step(session)
+        #expect(session.overlay().outline == nil, "\(target)")
+    }
+}
+
 @Test func padsFromCrossedLabelsLandInTheSamePlaceButDashed() async throws {
     var crossed = lying
     swap(&crossed.leftShoulder, &crossed.rightShoulder)

@@ -122,10 +122,11 @@ struct MainScreen: View {
                 Color.clear
             }
             if coordinator.showsBeatPulse {
-                let docked = coordinator.pulseDocked
-                BeatPulse(diameter: docked ? DS.Pulse.docked : DS.Pulse.standard)
-                    .padding(docked ? DS.Pulse.dockedInset : 0)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: docked ? .topTrailing : .center)
+                // The AR is the beat to follow. This dot is the fallback for when the ghost can't show.
+                BeatPulse(diameter: DS.Pulse.docked, showsLabel: false)
+                    .padding(DS.Pulse.dockedInset)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .allowsHitTesting(false)
             }
             if coordinator.aiTalking || coordinator.aiListening {
                 // Top-leading is the one corner nothing else in the band uses, and a tap goes through it.

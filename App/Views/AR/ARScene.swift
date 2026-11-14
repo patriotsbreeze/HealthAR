@@ -110,6 +110,22 @@ struct ARFigure: Equatable {
     var hands: CGPoint?
 }
 
+/// The patient pose found, in the overlay's own points: each part with its own lock, drawn as one
+/// see-through silhouette.
+struct AROutline: Equatable {
+    struct Part: Equatable {
+        enum Kind: Equatable { case torso, head, limb }
+        var kind: Kind
+        var path: Path
+        var lock: ARLock
+    }
+
+    var parts: [Part]
+
+    var bounds: CGRect { parts.reduce(CGRect.null) { $0.union($1.path.boundingRect) } }
+    var center: CGPoint { CGPoint(x: bounds.midX, y: bounds.midY) }
+}
+
 /// The ghost rescuer to follow in compressions, over the practice patient when one was placed.
 struct ARGhost: Equatable {
     var rescuer: ARFigure
@@ -129,6 +145,8 @@ struct ARScene: Equatable {
     var hint: ARChip?
     /// Drawn under every other mark, and nothing is kept clear of it, since it is see-through.
     var ghost: ARGhost?
+    /// The patient, under the zone. See-through like the ghost, so nothing is kept clear of it either.
+    var outline: AROutline?
     /// The AR view draws realistic hands on the chest, so the zone draws without its flat ones.
     var handsIn3D = false
     /// Where nothing may be laid over: the beat and the guide card.
@@ -136,8 +154,8 @@ struct ARScene: Equatable {
     /// The side each chip took, kept so a chip doesn't hop sides from frame to frame.
     var sides: [String: MarkPlacement.Side] = [:]
 
-    var hasMarks: Bool { !joints.isEmpty || zone != nil || !items.isEmpty || pointer != nil || ghost != nil }
-    var markIDs: [String] { (zone.map { [$0.id] } ?? []) + items.map(\.id) }
+    var hasMarks: Bool { !joints.isEmpty || zone != nil || !items.isEmpty || pointer != nil || ghost != nil || outline != nil }
+    var markIDs: [String] { (outline == nil ? [] : [ARSceneBuilder.outlineID]) + (zone.map { [$0.id] } ?? []) + items.map(\.id) }
 }
 
 // MARK: - What the builder reads
@@ -190,9 +208,7 @@ struct ARItemInput: Equatable {
 struct ARContext: Equatable {
     enum Pulse: Equatable {
         case hidden
-        /// Mid-band, as in compressions, with a column marks keep off.
-        case centered
-        /// Top-trailing, on a step that also draws on the camera.
+        /// A small dot top-trailing, when the ghost can't be the beat.
         case docked
     }
 
@@ -227,6 +243,7 @@ enum ARSceneBuilder {
     static let padsCaption = "Pad zones, coarse. Manikin only."
     /// `aed_found` asks for it to be brought over, so where it was seen may be empty now.
     static let carriedAED = "AED seen earlier"
+    static let outlineID = "outline.patient"
 
     /// Short enough to read mid-push. Never praise: a match only turns the ghost green.
     static func coachingText(_ cue: CompressionFeedback.Cue) -> String {
@@ -265,6 +282,30 @@ enum ARSceneBuilder {
         return ARGhost(rescuer: figure(ghost.rescuer), patient: ghost.patient.map(figure), push: ghost.push, limbWidth: width)
     }
 
+    /// From normalized view coordinates to points. A limb or head too small to read is held to a minimum.
+    /// Inside the lost-tracking grace every part draws as an estimate.
+    static func outline(_ outline: VisionOverlay.Outline, view: CGSize, estimating: Bool) -> AROutline? {
+        let lock = { (locked: Bool) in estimating || !locked ? ARLock.estimating : .locked }
+        let point = { (p: CGPoint) in CGPoint(x: p.x * view.width, y: p.y * view.height) }
+        var parts: [AROutline.Part] = []
+        if outline.torso.count >= 3 {
+            var torso = Path()
+            torso.addLines(outline.torso.map(point))
+            torso.closeSubpath()
+            parts.append(.init(kind: .torso, path: torso, lock: lock(outline.torsoLocked)))
+        }
+        for limb in outline.limbs {
+            let width = max(limb.width * view.width, DS.AR.Outline.minLimbWidth)
+            parts.append(.init(kind: .limb, path: ARGeometry.segmentCapsule(from: point(limb.from), to: point(limb.to), width: width), lock: lock(limb.isLocked)))
+        }
+        if let head = outline.head {
+            let r = max(head.radius * view.width, DS.AR.Outline.minHeadRadius)
+            let c = point(head.center)
+            parts.append(.init(kind: .head, path: Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)), lock: lock(head.isLocked)))
+        }
+        return parts.isEmpty ? nil : AROutline(parts: parts)
+    }
+
     /// Pure: the same overlay, context and band always give the same frame.
     static func build(
         overlay: VisionOverlay,
@@ -280,7 +321,6 @@ enum ARSceneBuilder {
         // With no room in the band, nothing draws at all, rather than sit over the buttons.
         guard band.height >= DS.AR.leastBand, view.width > 0, view.height > 0 else { return scene }
         scene.obstacles = obstacles(context: context, band: band)
-        let column = context.pulse == .centered ? pulseColumn(in: band) : nil
         var taken = scene.obstacles
         var pointers: [PointerSpec] = []
         // Where words that must show go, so they never land on the docked beat.
@@ -297,6 +337,7 @@ enum ARSceneBuilder {
         }
         guard !context.trackingLost else { return scene }
         scene.ghost = overlay.ghost.map { ghost($0, view: view) }
+        scene.outline = overlay.outline.flatMap { outline($0, view: view, estimating: context.estimating) }
         scene.handsIn3D = overlay.handsIn3D
         let lock: (Bool) -> ARLock = { context.estimating || !$0 ? .estimating : .locked }
 
@@ -358,7 +399,7 @@ enum ARSceneBuilder {
         // gives way to the next one, or to none.
         let ranked = pointers.enumerated().sorted { ($0.element.priority, $0.offset) < ($1.element.priority, $1.offset) }.map(\.element)
         for spec in ranked {
-            let placed = pointer(spec, band: band, view: view, column: column, taken: taken, measure: measure)
+            let placed = pointer(spec, band: band, view: view, taken: taken, measure: measure)
             let disc = CGRect(center: placed.center, size: pointerSize)
             if spec.priority > 0, shownItems.contains(where: { $0.frame.intersects(disc) }) { continue }
             scene.pointer = placed
@@ -415,19 +456,10 @@ enum ARSceneBuilder {
         var tone: ARPointer.Tone
     }
 
-    /// The beat sits in the middle of the band. It matters more, so a pointer goes beside it.
-    static func pulseColumn(in band: CGRect) -> ClosedRange<CGFloat> {
-        let half = DS.Pulse.standard / 2 + DS.AR.pointerDisc / 2
-        return (band.midX - half)...(band.midX + half)
-    }
-
     static func obstacles(context: ARContext, band: CGRect) -> [CGRect] {
         var rects: [CGRect] = []
         switch context.pulse {
         case .hidden: break
-        case .centered:
-            let side = min(DS.Pulse.standard, band.height, band.width)
-            rects.append(CGRect(center: CGPoint(x: band.midX, y: band.midY), size: CGSize(width: side, height: side)))
         case .docked:
             let side = DS.Pulse.docked
             rects.append(CGRect(x: band.maxX - DS.Pulse.dockedInset - side, y: band.minY + DS.Pulse.dockedInset, width: side, height: side))
@@ -510,14 +542,13 @@ enum ARSceneBuilder {
         _ spec: PointerSpec,
         band: CGRect,
         view: CGSize,
-        column: ClosedRange<CGFloat>?,
         taken: [CGRect],
         measure: (String) -> CGSize
     ) -> ARPointer {
         // Off the screen's edge and the deck's seam, where it reads as part of neither.
         let room = band.insetBy(dx: min(DS.AR.pointerInset.width, band.width / 4), dy: min(DS.AR.pointerInset.height, band.height / 4))
         let mark = MarkPlacement.place(
-            position: spec.position, isOnScreen: spec.isOnScreen, angle: spec.angle, view: view, free: room, size: pointerSize, keepingOff: column
+            position: spec.position, isOnScreen: spec.isOnScreen, angle: spec.angle, view: view, free: room, size: pointerSize
         )
         let disc = CGRect(center: mark.center, size: pointerSize)
         let size = measure(spec.label)
