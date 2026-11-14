@@ -68,6 +68,9 @@ struct DetectedPerson: Sendable, Equatable {
         return person
     }
 
+    /// The nose, or failing that the middle of the eyes or ears. Nil when Vision saw none of them.
+    var head: Joint? { Self.head(in: extras) }
+
     var allPositions: [BodyJoint: SIMD2<Double>] {
         var positions = extras.mapValues(\.position)
         positions[.leftShoulder] = leftShoulder.position
@@ -118,7 +121,7 @@ extension DetectedPerson {
     }
 
     /// The nose, or failing that the middle of the eyes or ears.
-    private static func head(in joints: [BodyJoint: Joint]) -> Joint? {
+    static func head(in joints: [BodyJoint: Joint]) -> Joint? {
         if let nose = joints[.nose] { return nose }
         for pair in [(BodyJoint.leftEye, BodyJoint.rightEye), (.leftEar, .rightEar)] {
             let found = [joints[pair.0], joints[pair.1]].compactMap { $0 }

@@ -11,15 +11,15 @@ extension AppCoordinator {
             invitesInjuryTap: invitesInjuryTap,
             pinMessage: pinMessage?.text,
             carriedAED: mayShowCarriedAED,
-            pulse: showsBeatPulse ? (pulseDocked ? .docked : .centered) : .hidden,
+            pulse: showsBeatPulse ? .docked : .hidden,
             guideInCorner: definition?.guide != nil,
             handsGuide: showsHandsGuide,
             cameraLive: cameraLive
         )
     }
 
-    /// The beat moves out of the middle on a step that also draws on the camera, so the body stays clear.
-    var pulseDocked: Bool { showsBeatPulse && (overlayTarget != nil || showsHandsGuide) }
+    /// The beat only ever sits in the band's top-trailing corner, so the body and the AR on it stay clear.
+    var pulseDocked: Bool { showsBeatPulse }
 
     /// The pads are drawn on the body where they can be seen, so the diagram can go. Only when the
     /// overlay last drew both inside the band: pads imaged under the deck are cut away and only pointed
@@ -140,7 +140,8 @@ final class ARMemory {
     ) -> Frame {
         if stateID != self.stateID { reset(stateID) }
         var context = context
-        let hasMarks = overlay.ring != nil || overlay.aedArrow != nil || overlay.injuryPin != nil || !zones.isEmpty || !items.isEmpty
+        let hasMarks = overlay.ring != nil || overlay.aedArrow != nil || overlay.injuryPin != nil || overlay.outline != nil
+            || !zones.isEmpty || !items.isEmpty
         // A pin that timed out brings the tap hint back. That's not a loss, so there's nothing to hold.
         if overlay.showsInjuryHint { last = nil }
         if hasMarks {

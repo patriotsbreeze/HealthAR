@@ -73,6 +73,25 @@ struct LimbCapsule: Sendable, Equatable {
     var midpoint: SIMD2<Double> { (from + to) / 2 }
 }
 
+/// The whole patient, for a see-through figure under the step's own mark, so the helper can see who
+/// pose found and that it lines up. In capture image space. It shows where the body is and gates nothing.
+struct BodyOutline: Sendable, Equatable {
+    /// Left shoulder, right shoulder, right hip, left hip: going round, whichever way the labels fall.
+    var torso: [SIMD2<Double>]
+    /// Hips seen, not placed from the head, and every corner well seen.
+    var torsoLocked: Bool
+    var head: Head?
+    /// Every limb segment pose saw well enough to place, each as wide as the limb.
+    var limbs: [LimbCapsule]
+
+    struct Head: Sendable, Equatable {
+        var center: SIMD2<Double>
+        /// In image heights.
+        var radius: Double
+        var isLocked: Bool
+    }
+}
+
 /// What one pose frame lights up.
 struct BodyRegions: Sendable, Equatable {
     var chest: OrientedRect?
@@ -82,6 +101,8 @@ struct BodyRegions: Sendable, Equatable {
     var padTwo: OrientedRect?
     var padsLocked = false
     var limb: LimbCapsule?
+    /// The patient found lying down, on the steps that look for one.
+    var outline: BodyOutline?
 }
 
 /// UNVALIDATED DEMO ESTIMATE, like TorsoMap. Pad and limb geometry are our own fractions of an
@@ -99,16 +120,38 @@ enum BodyRegionMap {
     static let chestHalfWidth = 1.1
     /// Under this, in image heights, a capsule would be a line.
     static let minimumLimbWidth = 0.03
+    /// An adult head is about this wide across, in shoulder widths.
+    static let headRadiusFraction = 0.3
 
     static func lying(_ person: DetectedPerson, imageAspect: Double) -> BodyRegions? {
         guard let chest = chest(torso: person.torso, imageAspect: imageAspect) else { return nil }
-        var regions = BodyRegions(chest: chest, chestLocked: !person.torsoEstimated)
+        var regions = BodyRegions(chest: chest, chestLocked: !person.torsoEstimated, outline: outline(person, imageAspect: imageAspect))
         if let pads = pads(torso: person.torso, imageAspect: imageAspect) {
             regions.padOne = pads.one
             regions.padTwo = pads.two
             regions.padsLocked = pads.labelsAgree && !person.torsoEstimated
         }
         return regions
+    }
+
+    /// The torso as pose has it, the head if a nose, eyes or ears were seen, and the limbs `capsule(for:)`
+    /// finds plausible. The same joints and thresholds as the zones, so the figure and the marks agree.
+    static func outline(_ person: DetectedPerson, imageAspect: Double) -> BodyOutline? {
+        guard imageAspect > 0 else { return nil }
+        let torso = person.torso
+        let iso: (SIMD2<Double>) -> SIMD2<Double> = { [$0.x * imageAspect, $0.y] }
+        let shoulders = simd_distance(iso(torso.leftShoulder), iso(torso.rightShoulder))
+        guard shoulders.isFinite, shoulders > 1e-6 else { return nil }
+        let head = person.head.flatMap { joint -> BodyOutline.Head? in
+            guard joint.confidence >= PatientSelector().minConfidence else { return nil }
+            return BodyOutline.Head(center: joint.position, radius: headRadiusFraction * shoulders, isLocked: joint.confidence >= 0.5)
+        }
+        return BodyOutline(
+            torso: [torso.leftShoulder, torso.rightShoulder, torso.rightHip, torso.leftHip],
+            torsoLocked: !person.torsoEstimated && person.lowestConfidence >= 0.5,
+            head: head,
+            limbs: LimbBone.all.compactMap { capsule(for: $0, person: person, imageAspect: imageAspect) }
+        )
     }
 
     /// Centered where the ring is and laid along the torso. Nil wherever TorsoMap gives no ring.
