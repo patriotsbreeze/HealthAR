@@ -96,6 +96,27 @@ struct OverlayLayer: View {
         // Use the current detections, never ARMemory's held marks after a dropout.
         if coordinator.cameraLive {
             scene.chestEstimateLabel = seen.chestEstimateLabel
+            if let marker = seen.sternumEstimate {
+                let radius = marker.radius * geometry.size.width
+                scene.sternumEstimate = CGRect(
+                    x: marker.center.x * geometry.size.width - radius,
+                    y: marker.center.y * geometry.size.height - radius,
+                    width: radius * 2, height: radius * 2
+                )
+            }
+            if let guide = seen.handGuide {
+                let radius = guide.target.radius * geometry.size.width
+                scene.handGuide = ARHandGuide(
+                    target: CGRect(
+                        x: guide.target.center.x * geometry.size.width - radius,
+                        y: guide.target.center.y * geometry.size.height - radius,
+                        width: radius * 2, height: radius * 2
+                    ),
+                    hand: guide.hand.map { CGPoint(x: $0.x * geometry.size.width, y: $0.y * geometry.size.height) },
+                    text: guide.text,
+                    onTarget: guide.onTarget
+                )
+            }
             scene.patientIn3D = seen.patientIn3D
             if seen.patientIn3D { scene.outline = nil }
             scene.bodies = seen.bodies.map { body in

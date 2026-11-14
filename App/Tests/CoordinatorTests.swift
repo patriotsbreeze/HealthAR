@@ -29,7 +29,7 @@ import Testing
         #expect(fixture.audio.metronome.isEmpty)
         coordinator.perform(.no)
         coordinator.perform(.no)
-        #expect(coordinator.state.stateID == "call_911")
+        #expect(coordinator.state.stateID == "position_patient")
 
         // From there every required step still plays, one tap each, and it ends up compressing.
         coordinator.perform(.called)
@@ -143,7 +143,7 @@ import Testing
         fixture.audio.clearCalls()
 
         fixture.coordinator.perform(.done)
-        let drop = try #require(fixture.audio.calls.firstIndex(of: .dropQueued(["call_911"])))
+        let drop = try #require(fixture.audio.calls.firstIndex(of: .dropQueued(["call_911", "calling_911"])))
         let pads = try #require(fixture.audio.calls.firstIndex(of: .play("pads_place")))
         #expect(drop < pads)
 
@@ -212,7 +212,7 @@ import Testing
         coordinator.beginRescue()
         coordinator.perform(.startCpr)
         let text = try #require(coordinator.prompt?.text)
-        #expect(text.contains("Call 911"))
+        #expect(text.contains("Calling 911"))
         #expect(text.contains("Heel of one hand"))
         #expect(coordinator.instruction == coordinator.engine.bundle.text(forPhrase: "start_compressions"))
     }
@@ -262,7 +262,7 @@ import Testing
         #expect(fixture.coordinator.linkLabel == "Live")
         let version = fixture.coordinator.state.version
         fixture.mock.emit(.functionCalls([reportFindingCall("not_breathing", version: version)]))
-        try await waitUntil("the proposal moved the state") { fixture.coordinator.state.stateID == "call_911" }
+        try await waitUntil("the proposal moved the state") { fixture.coordinator.state.stateID == "position_patient" }
         #expect(fixture.logDetails(.finding) == ["not_breathing"])
         #expect(fixture.coordinator.modelCalls.count == 1)
     }
@@ -398,20 +398,40 @@ import Testing
         #expect(fixture.coordinator.state.stateID == before)
     }
 
-    /// The 911 agent is a scripted log, never a call, and it can't move the rescue on.
-    @Test func theCallerAgentIsASimulatedLogThatMovesNothing() throws {
+    /// The 911 agent is a scripted log, never a call. It starts by itself as the CPR path begins, shows
+    /// on screen as calling, and can't move the rescue on.
+    @Test func theCallerAgentStartsByItselfAndMovesNothing() throws {
         let fixture = try Fixture()
         let coordinator = fixture.coordinator
         coordinator.beginRescue()
+        #expect(coordinator.callerAgentStatus == .idle)
         coordinator.perform(.no)
         coordinator.perform(.no)
-        #expect(coordinator.state.stateID == "call_911")
+        #expect(coordinator.state.stateID == "position_patient", "no call step to stop at")
+        #expect(coordinator.callerAgentStatus == .calling, "it calls without being asked")
+        #expect(fixture.audio.played.contains("calling_911"), "said once on the way")
         let lines = AppCoordinator.callerAgentLines(coordinator.callerScript)
         #expect(lines.first?.contains("Simulation, no real call") == true)
         #expect(lines.contains { $0.contains(coordinator.callerScript.situation) })
-        #expect(lines.last?.contains("Tap Called") == true)
+        #expect(!lines.contains { $0.contains("Tap Called") }, "nothing to tap")
         fixture.run(seconds: 30)
-        #expect(coordinator.state.stateID == "call_911", "the agent's call moves no step")
+        #expect(coordinator.state.stateID == "position_patient", "the agent's call moves no step")
+    }
+
+    /// Start CPR skips setup, and the call still starts.
+    @Test func startCprStartsTheCallerAgentToo() throws {
+        let fixture = try Fixture()
+        fixture.coordinator.beginRescue()
+        fixture.coordinator.perform(.startCpr)
+        #expect(fixture.coordinator.callerAgentStatus == .calling)
+    }
+
+    /// "Calling 911 for you" is said, never shown as the step's instruction.
+    @Test func theCallIsNeverTheInstruction() throws {
+        let fixture = try Fixture()
+        fixture.coordinator.beginRescue()
+        fixture.coordinator.perform(.unsure)
+        #expect(fixture.coordinator.instruction == fixture.coordinator.engine.bundle.text(forPhrase: "roll_flat"))
     }
 
     @Test func losingLiveSilentlyFallsBackToTheLocalProtocol() async throws {
@@ -422,7 +442,7 @@ import Testing
         #expect(fixture.coordinator.linkLabel == "Offline protocol")
         fixture.coordinator.perform(.no)
         fixture.coordinator.perform(.no)
-        #expect(fixture.coordinator.state.stateID == "call_911")
+        #expect(fixture.coordinator.state.stateID == "position_patient")
         fixture.coordinator.perform(.startCpr)
         #expect(fixture.coordinator.state.stateID == "compressions")
         #expect(fixture.audio.played.contains("start_compressions"))

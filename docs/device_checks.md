@@ -169,7 +169,7 @@ Run these on speaker at demo volume, with the panel showing the input transcript
 | 90 | Volunteer on `chest_wait` says "I can't breathe" as the patient, 5 tries | Never `unresponsive`, `not_breathing`, or `abnormal_breathing` | ____ / 5 | **Mac:** none in 12 |
 | 91 | Ask a question at the moment you tap Done on `chest_aspirin` | The answer plays whole after `chest_wait_line`, and the chip stays Live | ____ | |
 | 92 | Ask a question 1 s before a 30 s re-ask is due | The answer comes first, and the re-ask follows it within 8 s | ____ | |
-| 92.1 | While an answer is playing, say a short "Sorry, what?" 1 s before a 30 s re-ask is due | Model audio stops, and the reply comes before the re-ask. With no reply, the chip reads "AI quiet" about 4 s after you stop, then the re-ask plays | ____ | |
+| 92.1 | While an answer is playing, say a short "Sorry, what?" 1 s before a 30 s re-ask is due | Model audio stops, and the reply comes before the re-ask. With no reply, the re-ask plays | ____ | |
 | 93 | Talk over an answer while it's still arriving, then ask a second question, over this phone's `audioStreamEnd` path | Model audio stops, and the second question gets an answer | ____ | **Mac:** audio stopped in 9 of 9 |
 
 ### The camera steps
@@ -248,3 +248,13 @@ Run on the iPhone 17 Pro with a manikin and an instructor-marked reference. Thes
 | Hide the body, interrupt AR, stop/start camera, or shed AR for heat | No stale world-space patient or chest disc; pose fit expires within 0.75 s when no fresh fit is available | Pending |
 | Remove/disable scene depth or make the mesh unavailable | Flat overlay remains usable; no claim that a 3D model is rendering | Pending |
 | Move the phone around the patient and rehearse for 10 minutes | Record drift, fit dropouts, frame rate, and thermal state. Check the emissive mesh does not obscure the real chest or controls | Pending |
+
+
+### Independent chest-region marker: pending
+
+On the hand-placement step, verify the dashed orange region and "Estimated sternum region - Not anatomically verified" label appear without the Blender mesh or LiDAR depth. With chest depth available but hip depth obscured, confirm the surface disc still appears independently of the body mesh. Outside the hand-placement guide or active compressions, no chest marker should show. Confirm it disappears for inferred hips, two lying candidates, camera interruption, and stale detections. Measure its offset from an instructor-marked manikin reference; successful rendering does not establish anatomical accuracy. All checks are pending device validation.
+
+
+### Blended tracked-body skin: pending
+
+Check the camera caption reads "Smooth joint-driven mesh". Film arms raised, arms at the sides, and legs spread, from overhead and at an oblique angle: the skin should be one surface with a single outline, and the `[Body3D]` line's limb-to-dot median should stay within a few points once tracking settles. Hide a wrist or step a foot out of frame: that segment should thin away, not point somewhere invented. Run ten minutes and record the thermal state, frame rate and grid size from the log. Confirm the practice-patient animation and the independently labeled chest estimate are unchanged.

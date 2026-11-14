@@ -77,7 +77,7 @@ import Testing
     /// with it. Either way the step's other lines are required steps of their own.
     @Test(arguments: [
         (HumanAction.called, ["chest_possible", "chest_sit"]),
-        (.done, ["call_911", "chest_possible", "chest_sit"]),
+        (.done, ["call_911", "calling_911", "chest_possible", "chest_sit"]),
     ])
     func aTapKeepsWhatItDidNotAnswer(action: HumanAction, kept: [String]) throws {
         var session = try inFlow()
@@ -467,13 +467,13 @@ import Testing
         session.human(.dispatcherOn)
         session.human(.no)
         session.human(.no)
-        #expect(session.state.stateID == "call_911")
+        #expect(session.state.stateID == "position_patient")
 
         var collapsed = try inFlow()
         collapsed.human(.patientUnresponsive)
         collapsed.human(.dispatcherOn)
         collapsed.human(.no)
-        #expect(collapsed.state.stateID == "call_911")
+        #expect(collapsed.state.stateID == "position_patient")
     }
 
     @Test func aCollapseDoesNotWaitForTheDispatcher() throws {
@@ -639,7 +639,7 @@ import Testing
         session.advance(30)
         #expect(session.state.stateID == "intake_breathing", "no reply keeps asking; only the rescuer moves it on")
         session.human(.no)
-        #expect(session.state.stateID == "call_911")
+        #expect(session.state.stateID == "position_patient")
         #expect(!session.state.breathingAskedAwake)
     }
 
@@ -647,7 +647,7 @@ import Testing
         var session = try inFlow()
         session.modelFinding(.abnormalBreathing)
         session.human(.no)
-        #expect(session.state.stateID == "call_911")
+        #expect(session.state.stateID == "position_patient")
     }
 
     /// "Yes, breathing" can't be the thing that lets the next report through. Nobody tapped that they aren't.
@@ -672,10 +672,10 @@ import Testing
         session.human(.patientUnresponsive)
         session.human(.yes)
         session.advance(10)
-        #expect(session.state.stateID == "call_911", "no breaths marked still gets there")
+        #expect(session.state.stateID == "position_patient", "no breaths marked still gets there")
         #expect(!session.state.breathingAskedAwake)
         for _ in 0..<15 { session.advance(1) }
-        #expect(session.state.stateID == "call_911", "the setup steps wait for a tap")
+        #expect(session.state.stateID == "position_patient", "the setup steps wait for a tap")
         session.human(.called)
         session.human(.done)
         session.human(.done)
@@ -700,7 +700,7 @@ import Testing
         #expect(session.state.stateID == "watch_breathing")
         #expect(!session.state.breathingAskedAwake)
         session.modelFinding(.abnormalBreathing)
-        #expect(session.state.stateID == "call_911")
+        #expect(session.state.stateID == "position_patient")
     }
 
     /// The other side: the arrest path takes the second report at once, as it always has.
@@ -710,7 +710,7 @@ import Testing
         #expect(session.state.stateID == "intake_breathing")
         #expect(!session.state.breathingAskedAwake)
         session.modelFinding(.abnormalBreathing)
-        #expect(session.state.stateID == "call_911")
+        #expect(session.state.stateID == "position_patient")
     }
 
     // MARK: - Arrest prompts stay on the arrest path

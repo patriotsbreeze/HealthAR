@@ -13,6 +13,14 @@ enum ARLock: Equatable {
 
 /// Text on a solid capsule. Laid out here, so the painter only draws, and the words are always given
 /// verbatim: a step's own phrase, a pinned label, or a cue's reviewed callout.
+/// The sternum ring, the heel of the rescuer's hand, and which way to slide it, in view points.
+struct ARHandGuide: Equatable {
+    var target: CGRect
+    var hand: CGPoint?
+    var text: String
+    var onTarget: Bool
+}
+
 struct ARChip: Equatable {
     enum Tone: Equatable { case neutral, caution }
 
@@ -141,6 +149,8 @@ struct ARScene: Equatable {
     var joints: [CGPoint] = []
     var bodies: [VisionOverlay.DetectedBody] = []
     var chestEstimateLabel: String?
+    var sternumEstimate: CGRect?
+    var handGuide: ARHandGuide?
     var patientIn3D = false
     var zone: ARZone?
     var items: [ARItem] = []
@@ -157,7 +167,7 @@ struct ARScene: Equatable {
     /// The side each chip took, kept so a chip doesn't hop sides from frame to frame.
     var sides: [String: MarkPlacement.Side] = [:]
 
-    var hasMarks: Bool { !joints.isEmpty || zone != nil || !items.isEmpty || pointer != nil || ghost != nil || outline != nil }
+    var hasMarks: Bool { sternumEstimate != nil || handGuide != nil || !joints.isEmpty || zone != nil || !items.isEmpty || pointer != nil || ghost != nil || outline != nil }
     var markIDs: [String] { (outline == nil ? [] : [ARSceneBuilder.outlineID]) + (zone.map { [$0.id] } ?? []) + items.map(\.id) }
 }
 

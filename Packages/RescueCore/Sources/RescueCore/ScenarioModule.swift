@@ -40,7 +40,7 @@ public struct ScenarioModule: Sendable, Equatable, Codable {
     /// Every awake state gets these, so a module can't leave a collapse with nowhere to go.
     static func injectedEdges(triageLoaded: Bool) -> [StateDefinition.Transition] {
         var edges: [StateDefinition.Transition] = [
-            .init(on: "human.start_cpr", to: "compressions", phrases: ["call_911", "hands_center"], log: .callPrompted, cutsPhrases: true),
+            .init(on: "human.start_cpr", to: "compressions", phrases: ["calling_911", "hands_center"], log: .callPrompted, cutsPhrases: true),
             .init(on: "human.patient_unresponsive", to: breathingQuestion, cutsPhrases: true),
             .init(on: "human.ems_arrived", to: "handoff"),
             // Yes says the patient is awake, not that they're an adult, and the adult flows end in a dose.
@@ -55,7 +55,22 @@ public struct ScenarioModule: Sendable, Equatable, Codable {
         return edges
     }
 
-    static let injectedKeys = Set(injectedEdges(triageLoaded: true).map(\.on))
+    /// Only assess gets these. A person who taps that the patient isn't breathing, or is only
+    /// gasping, has given the human input the call step needs, as a No at the breathing question would.
+    /// Core's edge, not a module's, since a module's tap may never leave the awake states.
+    static let assessEdges: [StateDefinition.Transition] = [
+        .init(on: "human.patient_not_breathing", to: "position_patient", cutsPhrases: true),
+    ]
+
+    /// On assess the AI's sense that someone is unresponsive or not breathing only suggests: it rings
+    /// the matching button, and a person taps it or says "confirm". Assess opens before anyone has
+    /// looked, and in testing the AI took a person who was simply not answering it, standing up, for
+    /// unresponsive, so a report alone reached compressions about 30 s later with no tap. Every other
+    /// awake state keeps these edges, so once a person has said the patient is awake, a collapse the
+    /// AI hears still moves the flow.
+    public static let assessHeldReports: Set<String> = ["model.unresponsive", "model.not_breathing", "model.abnormal_breathing"]
+
+    static let injectedKeys = Set((injectedEdges(triageLoaded: true) + assessEdges).map(\.on))
 
     public var version: String
     public var status: String
@@ -211,6 +226,10 @@ extension ProtocolBundle {
         next.definition.states += module.states.map { state in
             var state = state
             state.transitions += ScenarioModule.injectedEdges(triageLoaded: triageLoaded)
+            if state.id == ScenarioModule.assessState {
+                state.transitions.removeAll { ScenarioModule.assessHeldReports.contains($0.on) }
+                state.transitions += ScenarioModule.assessEdges
+            }
             return state
         }
         next.phrases.phrases += module.phrases

@@ -95,3 +95,169 @@ private func fixture() -> (camera: CameraPose, depth: BodyDepth, person: Detecte
     session.stop()
     #expect(session.patientBodyPlacement() == nil)
 }
+
+/// One shoulder's depth landing on the floor beside the body, as with arms spread, used to tip the
+/// body's chest direction and draw it rolled onto its side. Gravity sets it now.
+@Test func aShoulderReadingOffTheBodyStillFitsFaceUp() throws {
+    let f = fixture()
+    var depth = f.depth
+    let shoulder = f.person.leftShoulder.position
+    let cx = Int(shoulder.x * Double(depth.width)), cy = Int(shoulder.y * Double(depth.height))
+    // Just the shoulder: wider, it would reach where the chest is read too, which rightly turns down an edge.
+    for y in max(0, cy - 2)...min(depth.height - 1, cy + 2) {
+        for x in max(0, cx - 2)...min(depth.width - 1, cx + 2) {
+            depth.metres[y * depth.width + x] = 1.62
+        }
+    }
+    let fit = try #require(PatientModelFit.fit(person: f.person, depth: depth, camera: f.camera, requireLying: false))
+    // The low shoulder pitches head-to-hips a few degrees, which is fine; it must not roll.
+    #expect(simd_dot(fit.normal, [0, 1, 0]) > 0.99, "face up")
+    #expect(fit.lying)
+    // Its thickness runs up the world, and its width across the floor.
+    let up = simd_normalize(fit.transform.columns.1.xyz), across = simd_normalize(fit.transform.columns.2.xyz)
+    #expect(simd_dot(up, [0, 1, 0]) > 0.99)
+    #expect(abs(across.y) < 0.001, "not rolled: its width lies level across the floor")
+    #expect(simd_determinant(fit.transform) > 0, "never mirrored")
+}
+
+@Test func anUprightPersonFacesTheCamera() throws {
+    // Shoulders over hips, a metre and a half in front of a level camera.
+    let camera = cameraPose()
+    func joint(_ world: SIMD3<Float>) -> DetectedPerson.Joint {
+        guard case let .inFront(image) = camera.project(world) else { fatalError("behind camera") }
+        return .init(position: image, confidence: 0.9)
+    }
+    let person = DetectedPerson(
+        leftShoulder: joint([-0.2, 0.25, -1.5]), rightShoulder: joint([0.2, 0.25, -1.5]),
+        leftHip: joint([-0.12, -0.33, -1.5]), rightHip: joint([0.12, -0.33, -1.5])
+    )
+    let depth = BodyDepth(width: 64, height: 48, metres: Array(repeating: 1.5, count: 64 * 48), confidence: Array(repeating: 2, count: 64 * 48))
+    guard let fit = PatientModelFit.fit(person: person, depth: depth, camera: camera, requireLying: false) else { return }
+    #expect(!fit.lying)
+    #expect(simd_dot(fit.normal, [0, 0, 1]) > 0.9, "toward the camera")
+}
+
+/// What the phone logged: looking down at someone on the floor, the hip depths landed about a quarter
+/// metre beyond the body, which read the hips well below the shoulders, tipped the body toward the
+/// camera and shortened it. The fit now lays the joints at the body's level along their own rays.
+@Test func hipDepthsBeyondTheBodyStillFitFlatAndFullLength() throws {
+    // A phone 1.2 m up, pitched 55 degrees down, looking toward -z at a body on the floor.
+    let pitch = Float(-55 * Double.pi / 180)
+    var transform = simd_float4x4(simd_quatf(angle: pitch, axis: [1, 0, 0]))
+    transform.columns.3 = [0, 1.2, 0, 1]
+    let camera = CameraPose(transform: transform, intrinsics: testIntrinsics, imageResolution: [1920, 1440])
+    let chestTop: Float = 0.2
+    // Lying along z, head away from the camera: shoulders at z -1.15, hips 0.58 m nearer.
+    let world: [BodyJoint: SIMD3<Float>] = [
+        .leftShoulder: [-0.2, chestTop, -1.15], .rightShoulder: [0.2, chestTop, -1.15],
+        .leftHip: [-0.12, chestTop, -0.57], .rightHip: [0.12, chestTop, -0.57],
+    ]
+    func image(_ point: SIMD3<Float>) -> SIMD2<Double> {
+        guard case let .inFront(p) = camera.project(point) else { fatalError("behind camera") }
+        return p
+    }
+    func joint(_ name: BodyJoint) -> DetectedPerson.Joint { .init(position: image(world[name]!), confidence: 0.9) }
+    let person = DetectedPerson(
+        leftShoulder: joint(.leftShoulder), rightShoulder: joint(.rightShoulder),
+        leftHip: joint(.leftHip), rightHip: joint(.rightHip)
+    )
+    // Depth from the true body everywhere, then the hips read 0.25 m too far, as on device.
+    let width = 96, height = 72
+    var metres = [Float](repeating: 0, count: width * height)
+    for y in 0..<height {
+        for x in 0..<width {
+            let ray = camera.ray(throughImagePoint: [(Double(x) + 0.5) / Double(width), (Double(y) + 0.5) / Double(height)])
+            let hit = ray.hittingHorizontalPlane(y: chestTop) ?? ray.origin
+            // ARKit's depth is along the camera's view axis, not the ray.
+            let forward = -simd_normalize(transform.columns.2.xyz)
+            metres[y * width + x] = simd_dot(hit - ray.origin, forward)
+        }
+    }
+    for name in [BodyJoint.leftHip, .rightHip] {
+        let p = image(world[name]!)
+        let cx = Int(p.x * Double(width)), cy = Int(p.y * Double(height))
+        for y in (cy - 2)...(cy + 2) { for x in (cx - 2)...(cx + 2) { metres[y * width + x] += 0.25 } }
+    }
+    let depth = BodyDepth(width: width, height: height, metres: metres, confidence: .init(repeating: 2, count: width * height))
+    #expect(PatientModelFit.looksDown(camera))
+    let fit = try #require(PatientModelFit.fit(person: person, depth: depth, camera: camera, requireLying: false))
+    #expect(fit.lying, "flat on the floor, not tipped toward the camera")
+    #expect(simd_dot(fit.normal, [0, 1, 0]) > 0.99)
+    let headward = simd_normalize(fit.transform.columns.0.xyz)
+    #expect(abs(headward.y) < 0.01, "head and hips level")
+    let length = simd_length(fit.transform.columns.0.xyz) * (PatientModelFit.shouldersX - PatientModelFit.hipsX)
+    #expect(abs(length - 0.58) < 0.05, "full torso length, not shortened by the bad hips")
+}
+
+private func spreadBody() -> (camera: CameraPose, depth: BodyDepth, person: DetectedPerson) {
+    var f = fixture()
+    let points: [BodyJoint: SIMD3<Float>] = [
+        .leftElbow: [-0.5, 0, -0.25], .leftWrist: [-0.75, 0, -0.25],
+        .rightElbow: [0.5, 0, -0.25], .rightWrist: [0.75, 0, -0.25],
+        .leftKnee: [-0.4, 0, 0.65], .leftAnkle: [-0.65, 0, 1.05],
+        .rightKnee: [0.4, 0, 0.65], .rightAnkle: [0.65, 0, 1.05],
+    ]
+    for (name, point) in points {
+        guard case let .inFront(image) = f.camera.project(point) else { fatalError("fixture behind camera") }
+        f.person.extras[name] = .init(position: image, confidence: 0.9)
+    }
+    return f
+}
+
+@Test func spreadArmsAndLegsUseMeasuredEndpointsInsteadOfTheTemplatePose() throws {
+    let f = spreadBody()
+    let placement = try #require(PatientModelFit.fit(person: f.person, depth: f.depth, camera: f.camera))
+    #expect(placement.limbs.count == 8)
+    let arm = try #require(placement.limbs.first { $0.from == .leftElbow && $0.to == .leftWrist })
+    #expect(simd_distance(arm.start, [-0.5, 0, -0.25]) < 0.0001)
+    #expect(simd_distance(arm.end, [-0.75, 0, -0.25]) < 0.0001)
+    let leg = try #require(placement.limbs.first { $0.from == .rightKnee && $0.to == .rightAnkle })
+    #expect(simd_distance(leg.end, [0.65, 0, 1.05]) < 0.0001)
+}
+
+@Test func bendingAnArmMovesItsGeometryWithoutRescalingTheTorso() throws {
+    var f = spreadBody()
+    let before = try #require(PatientModelFit.fit(person: f.person, depth: f.depth, camera: f.camera))
+    let bent = SIMD3<Float>(-0.35, 0, -0.05)
+    guard case let .inFront(image) = f.camera.project(bent) else { Issue.record("fixture behind camera"); return }
+    f.person.extras[.leftElbow] = .init(position: image, confidence: 0.9)
+    let after = try #require(PatientModelFit.fit(person: f.person, depth: f.depth, camera: f.camera))
+    #expect(after.transform == before.transform)
+    let upper = try #require(after.limbs.first { $0.from == .leftShoulder && $0.to == .leftElbow })
+    let lower = try #require(after.limbs.first { $0.from == .leftElbow && $0.to == .leftWrist })
+    #expect(simd_distance(upper.end, bent) < 0.0001)
+    #expect(upper.end == lower.start)
+}
+
+@Test func hiddenWristsAndImpossibleLimbLengthsNeverProduceAFixedPoseFallback() throws {
+    var f = spreadBody()
+    f.person.extras[.leftWrist]?.confidence = 0.1
+    let hidden = try #require(PatientModelFit.fit(person: f.person, depth: f.depth, camera: f.camera))
+    #expect(hidden.limbs.count == 7)
+    #expect(!hidden.limbs.contains { $0.to == .leftWrist })
+    #expect(hidden.limbs.contains { $0.to == .leftElbow })
+    guard case let .inFront(far) = f.camera.project(SIMD3<Float>(1, 0, -0.25)) else { Issue.record("fixture behind camera"); return }
+    f.person.extras[.leftWrist] = .init(position: far, confidence: 0.9)
+    let impossible = try #require(PatientModelFit.fit(person: f.person, depth: f.depth, camera: f.camera))
+    #expect(!impossible.limbs.contains { $0.to == .leftWrist })
+}
+
+@Test func aWristReadingOnTheWallBehindKeepsTheArmAtTheElbowsDepth() throws {
+    var f = spreadBody()
+    let wrist = try #require(f.person.extras[.leftWrist]).position
+    let cx = Int(wrist.x * Double(f.depth.width)), cy = Int(wrist.y * Double(f.depth.height))
+    for y in (cy - 2)...(cy + 2) {
+        for x in (cx - 2)...(cx + 2) { f.depth.metres[y * f.depth.width + x] = 3.2 }
+    }
+    let placement = try #require(PatientModelFit.fit(person: f.person, depth: f.depth, camera: f.camera))
+    let arm = try #require(placement.limbs.first { $0.from == .leftElbow && $0.to == .leftWrist })
+    #expect(simd_distance(arm.end, [-0.75, 0, -0.25]) < 0.0001)
+}
+
+@Test func anAnkleGuessedOutsideThePictureIsNotDrawn() throws {
+    var f = spreadBody()
+    f.person.extras[.leftAnkle] = .init(position: [0.5, 1.04], confidence: 0.6)
+    let placement = try #require(PatientModelFit.fit(person: f.person, depth: f.depth, camera: f.camera))
+    #expect(!placement.limbs.contains { $0.to == .leftAnkle })
+    #expect(placement.limbs.contains { $0.to == .leftKnee })
+}

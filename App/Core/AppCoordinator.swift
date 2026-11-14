@@ -144,6 +144,18 @@ final class AppCoordinator {
     private(set) var dispatcherOpen = false
     /// The latest read of the scene. It only informs, and goes when the session or the rescue does.
     private(set) var sceneRead: SituationAssessment?
+    /// On assess, the voice AI's sense of a collapse, held as a suggestion: core moves nothing on it
+    /// there, and a person taps the ringed button or says "confirm".
+    private(set) var voiceSuggestion: SituationAssessment.Suggestion?
+
+    /// The one button the AI points to on assess, from the voice AI's report first, else the scene read
+    /// at medium or high confidence. It only ever rings a button; nothing moves until a person acts.
+    var assessSuggestion: SituationAssessment.Suggestion? {
+        guard state.stateID == ScenarioModule.assessState else { return nil }
+        if let voiceSuggestion { return voiceSuggestion }
+        guard let read = sceneRead, read.confidence != .low else { return nil }
+        return read.suggests
+    }
     /// Everything the voice AI saw, did, heard and said, newest first, for the drop-down under the read.
     private(set) var assessmentLog: [AssessmentLogEntry] = []
     private(set) var assessing = false
@@ -209,8 +221,7 @@ final class AppCoordinator {
     /// The simulated 911 agent's call, played into the log once a rescue. Cancelled on reset.
     @ObservationIgnored private var callerAgentTask: Task<Void, Never>?
     @ObservationIgnored private var callerAgentRan = false
-    /// The simulated 911 agent's call is playing into the log now.
-    private(set) var callerAgentActive = false
+    private(set) var callerAgentStatus = CallerAgentStatus.idle
     /// What the rescuer said since the log last took it, so it goes in as one line and not word by word.
     @ObservationIgnored private var heardPending = ""
     /// When the read behind the scene lines on screen started, so an older reply can't overwrite them.
@@ -426,15 +437,20 @@ final class AppCoordinator {
 
     /// The step on screen, always from the phrase file. A state with no phrase of its own keeps
     /// showing the last thing said, so the screen is never blank if audio is down.
+    /// The step's own lines, less what's only said on the way, like "Calling 911 for you".
+    private var instructionLines: [String] {
+        (definition?.entryPhrases ?? []).filter { !Self.announcementPhraseIDs.contains($0) }
+    }
+
     var instruction: String {
-        let id = definition?.entryPhrases.first ?? lastPhraseID ?? definition?.allowedSay.first
+        let id = instructionLines.first ?? lastPhraseID ?? definition?.allowedSay.first
         return id.flatMap(engine.bundle.text(forPhrase:)) ?? ""
     }
 
     /// The rest of this step's own lines. They stay up as long as the step, because an open state
     /// has no timer to move it on, and the audio can be down.
     var stepDetail: String? {
-        let lines = definition?.entryPhrases.dropFirst().compactMap(engine.bundle.text(forPhrase:)) ?? []
+        let lines = instructionLines.dropFirst().compactMap(engine.bundle.text(forPhrase:))
         return lines.isEmpty ? nil : lines.joined(separator: " ")
     }
 
@@ -630,6 +646,7 @@ final class AppCoordinator {
     func dispatch(_ event: RescueEvent, seeded: Bool = false) {
         let now = clock()
         commit(engine.reduce(state, event, at: now), at: now, seeded: seeded)
+        if case let .model(proposal) = event { holdAsSuggestion(proposal) }
     }
 
     /// Runs the time-based rules. The loop calls this, and so do the tests with their own clock.
@@ -642,6 +659,7 @@ final class AppCoordinator {
         if status != visionStatus { visionStatus = status }
         if let until = handsGuideUntil, now >= until { handsGuideUntil = nil }
         if let until = gripReminderUntil, now >= until { gripReminderUntil = nil }
+        if case let .done(at) = callerAgentStatus, now - at >= Self.callerAgentDoneSeconds { callerAgentStatus = .idle }
         let ghost = showsPulse && cameraLive && metronomeOn && vision.showsGhost
         if ghost != ghostShowsBeat { ghostShowsBeat = ghost }
         let talking = liveConnected && audio.modelAudioPending
@@ -685,6 +703,9 @@ final class AppCoordinator {
             locateAED(at: now)
         }
         if enters {
+            voiceSuggestion = nil
+            // The moment the CPR path begins, so the call shows with the step, not a tick later.
+            startCallerAgentIfDue()
             // Vision ends its guide on every overlay change, so this follows it.
             handsGuideUntil = nil
             if opensHandsGuide(result.effects) { beginHandsGuide(at: now) }
@@ -1120,6 +1141,7 @@ final class AppCoordinator {
         case let .inputTranscript(text):
             heardTranscript = trimmed(heardTranscript + text)
             heardPending += text
+            confirmIfSaid()
         case let .outputTranscript(text):
             saidTranscript = trimmed(saidTranscript + text)
             // The AI answering closes what the rescuer said, so the log keeps the order they spoke in.
@@ -1260,7 +1282,18 @@ final class AppCoordinator {
     // MARK: - The 911 agent, simulated
 
     static let callerAgentStepSeconds: TimeInterval = 2.5
-    static let callerAgentState = "call_911"
+    /// The CPR path's steps. Entering any of them starts the call once, in the background, so the
+    /// rescuer is never stopped to dial: "Calling 911 for you" is said on the way, not asked for.
+    static let callerAgentStates: Set<String> = ["position_patient", "place_hands", "compressions"]
+    /// How long "911 notified" stays up after the call ends.
+    static let callerAgentDoneSeconds: TimeInterval = 15
+
+    /// The background 911 call, for the pill on screen.
+    enum CallerAgentStatus: Equatable {
+        case idle
+        case calling
+        case done(at: TimeInterval)
+    }
 
     /// A scripted call between an AI agent and a mock dispatcher, built from the caller script, so the
     /// log shows what an agent would say. Nothing is dialed, it's labeled a simulation, and it moves
@@ -1276,21 +1309,21 @@ final class AppCoordinator {
             "Dispatcher: Is anyone helping the patient right now?",
             "Agent: \(done)",
             "Dispatcher: Help is on the way. Stay with them and keep following the app.",
-            "911 agent: call ended. Help dispatched (simulated). Tap Called when you're ready.",
+            "911 agent: call ended. Help dispatched (simulated).",
         ]
     }
 
     private func startCallerAgentIfDue() {
-        guard state.stateID == Self.callerAgentState, !callerAgentRan else { return }
+        guard Self.callerAgentStates.contains(state.stateID), !callerAgentRan else { return }
         spawnCallerAgent()
     }
 
-    /// Starts the simulated 911 agent's call now, from the Spawn 911 agent button or the call step.
-    /// One at a time; it moves no step, and nothing is dialed.
+    /// Starts the simulated 911 agent's call now, from the Spawn 911 agent button or on the way to
+    /// CPR. One at a time; it moves no step, and nothing is dialed.
     func spawnCallerAgent() {
-        guard !callerAgentActive else { return }
+        guard callerAgentStatus != .calling else { return }
         callerAgentRan = true
-        callerAgentActive = true
+        callerAgentStatus = .calling
         let lines = Self.callerAgentLines(callerScript)
         let round = assessRound
         callerAgentTask = Task { [weak self] in
@@ -1299,7 +1332,8 @@ final class AppCoordinator {
                 self.appendLog(.call, line)
                 try? await Task.sleep(for: .seconds(Self.callerAgentStepSeconds))
             }
-            if let self, round == self.assessRound { self.callerAgentActive = false }
+            guard let self, !Task.isCancelled, round == self.assessRound else { return }
+            self.callerAgentStatus = .done(at: self.clock())
         }
     }
 
@@ -1327,6 +1361,28 @@ final class AppCoordinator {
         if assessmentLog.count > Self.maxLogEntries { assessmentLog.removeLast(assessmentLog.count - Self.maxLogEntries) }
     }
 
+    /// A collapse report on assess, which core held, becomes the ringed button.
+    private func holdAsSuggestion(_ proposal: ModelProposal) {
+        guard state.stateID == ScenarioModule.assessState,
+              case let .reportFinding(finding, _, confidence) = proposal.action, confidence != .low else { return }
+        switch finding {
+        case .unresponsive: voiceSuggestion = .notResponding
+        case .notBreathing, .abnormalBreathing: voiceSuggestion = .notBreathing
+        default: break
+        }
+    }
+
+    /// "Confirm" from the rescuer presses the ringed button, as a tap would. Their own words, from the
+    /// live transcript of the mic: the AI's speech is a separate transcript and can't confirm anything.
+    private func confirmIfSaid() {
+        guard let suggestion = assessSuggestion, let action = suggestion.confirmAction,
+              heardPending.range(of: #"\bconfirm(ed)?\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+        else { return }
+        flushHeard()
+        appendLog(.heard, "Confirmed by voice: \(suggestion.rawValue.replacingOccurrences(of: "_", with: " "))")
+        perform(action)
+    }
+
     private func flushHeard() {
         appendLog(.heard, heardPending)
         heardPending = ""
@@ -1335,6 +1391,7 @@ final class AppCoordinator {
     private func clearAssessment() {
         assessRound += 1
         sceneRead = nil
+        voiceSuggestion = nil
         assessmentLog = []
         assessmentFailed = false
         assessing = false
@@ -1343,8 +1400,8 @@ final class AppCoordinator {
         lastEmergency = nil
         callerAgentTask?.cancel()
         callerAgentTask = nil
+        callerAgentStatus = .idle
         callerAgentRan = false
-        callerAgentActive = false
         lastQuickAt = -.infinity
         lastLiveSceneAt = -.infinity
         assessmentSource = nil
@@ -1448,5 +1505,18 @@ final class AppCoordinator {
 
     private func trimmed(_ text: String) -> String {
         String(text.suffix(Self.maxTranscriptCharacters))
+    }
+}
+
+extension SituationAssessment.Suggestion {
+    /// The tap "confirm" stands in for. None for the 911 agent, which starts a simulated call rather than a step.
+    var confirmAction: HumanAction? {
+        switch self {
+        case .startCpr: .startCpr
+        case .notResponding: .patientUnresponsive
+        case .notBreathing: .patientNotBreathing
+        case .awake: .patientAwake
+        case .callForHelp: nil
+        }
     }
 }

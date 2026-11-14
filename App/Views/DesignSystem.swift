@@ -281,9 +281,6 @@ extension DS {
 
     /// The AI's read of the scene, beside the orb. Narrow, so the band keeps the patient in view.
     enum Assessment {
-        static let maxWidth: CGFloat = 210
-        /// The drop-down under the pill is a little wider, so the reasoning wraps less.
-        static let panelWidth: CGFloat = 220
         static let radius: CGFloat = 14
         /// Under the frost, so the words keep their contrast over a bright floor or window.
         static let glassFloor = Color(hex: 0x0E1117, opacity: 0.22)

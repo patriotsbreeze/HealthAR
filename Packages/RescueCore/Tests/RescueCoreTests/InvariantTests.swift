@@ -1,5 +1,9 @@
 import Foundation
 import Testing
+/// What counts as telling someone 911 is on the way: the prompt to call, on the awake steps, and on
+/// the arrest path the line said on the way while the 911 agent calls in the background.
+private let callLines: Set<String> = ["call_911", "calling_911"]
+
 @testable import RescueCore
 
 /// Numbers match the invariants in SAFETY.md.
@@ -105,9 +109,8 @@ import Testing
         session.human(.no)
         #expect(session.phrases == ["ask_breathing"])
         session.human(.no)
-        #expect(session.phrases == ["call_911"])
-        session.human(.called)
-        #expect(session.phrases == ["roll_flat"])
+        // No call step: the call is said on the way, and positioning is the next thing to do.
+        #expect(session.phrases == ["calling_911", "roll_flat"])
         session.human(.done)
         #expect(session.phrases == ["hands_center"])
         session.human(.done)
@@ -178,9 +181,9 @@ import Testing
                 s.human(.no); s.human(.yes); s.human(.breathMarked); s.human(.breathMarked); s.advance(10)
             }),
             ("responsive_patient", { $0.human(.yes) }),
-            ("call_911", { $0.human(.unsure) }),
-            ("position_patient", { $0.human(.unsure); $0.human(.called) }),
-            ("place_hands", { $0.human(.unsure); $0.human(.called); $0.human(.done) }),
+            // No call step to stop at: unsure goes straight to positioning, with the call said on the way.
+            ("position_patient", { $0.human(.unsure) }),
+            ("place_hands", { $0.human(.unsure); $0.human(.done) }),
         ]
         let withStartCpr = try loadBundle().definition.states.filter { $0.transition(on: "human.start_cpr") != nil }.map(\.id)
         #expect(Set(withStartCpr) == Set(walks.map(\.0)))
@@ -192,7 +195,7 @@ import Testing
             session.human(.startCpr)
             #expect(session.state.stateID == "compressions", "\(id)")
             #expect(session.state.metronomeOn, "\(id): the beat doesn't wait for the talking")
-            #expect(session.allPhrases.contains("call_911"), "\(id)")
+            #expect(session.allPhrases.contains(where: callLines.contains), "\(id)")
             #expect(session.allPhrases.contains("hands_center"), "\(id)")
             #expect(!session.entries(.callPrompted).isEmpty, "\(id)")
         }
@@ -201,7 +204,7 @@ import Testing
     @Test func aStartCprThatPromptsTheCallDoesSoBeforeTheBeatInstruction() throws {
         var session = Session(engine: try engine())
         session.goToCompressions()
-        #expect(session.phrases == ["call_911", "hands_center", "start_compressions"])
+        #expect(session.phrases == ["calling_911", "hands_center", "start_compressions"])
     }
 
     @Test func resumingCprFromTheCardPromptsTheCall() throws {
@@ -210,7 +213,7 @@ import Testing
         session.human(.emsArrived)
         session.human(.resumeCpr)
         #expect(session.state.stateID == "compressions")
-        #expect(session.phrases.contains("call_911"))
+        #expect(session.phrases.contains(where: callLines.contains))
         #expect(!session.entries(.callPrompted).isEmpty)
     }
 
@@ -228,7 +231,7 @@ import Testing
                     session.advance(Double.random(in: 0...15, using: &rng))
                 }
                 if states[session.state.stateID]!.kind == .cpr {
-                    #expect(session.allPhrases.contains("call_911"), "\(session.state.stateID)")
+                    #expect(session.allPhrases.contains(where: callLines.contains), "\(session.state.stateID)")
                     #expect(!session.entries(.callPrompted).isEmpty, "\(session.state.stateID)")
                 }
             }
@@ -244,7 +247,7 @@ import Testing
         #expect(session.phrases == ["watch_intro"])
 
         session.advance(10)
-        #expect(session.state.stateID == "call_911", "no marked breaths means CPR path")
+        #expect(session.state.stateID == "position_patient", "no marked breaths means CPR path")
     }
 
     @Test func enteringAWatchStatePromptsTheCall() throws {
@@ -340,7 +343,7 @@ import Testing
         session.human(.yes)
         session.human(.breathMarked)
         session.advance(10)
-        #expect(session.state.stateID == "call_911")
+        #expect(session.state.stateID == "position_patient")
     }
 
     @Test func markedBreathsLeadToAReaskThatWaitsForTheRescuer() throws {
@@ -355,7 +358,7 @@ import Testing
         #expect(session.state.stateID == "watch_reask", "no reply keeps asking, and never moves on")
         #expect(session.allPhrases.filter { $0 == "ask_still_breathing" }.count >= 6)
         session.human(.no)
-        #expect(session.state.stateID == "call_911")
+        #expect(session.state.stateID == "position_patient")
     }
 
     @Test func watchLoopRestartsTheCount() throws {
@@ -369,7 +372,7 @@ import Testing
         #expect(session.state.stateID == "watch_breathing")
         #expect(session.state.breathsMarked == 0)
         session.advance(10)
-        #expect(session.state.stateID == "call_911")
+        #expect(session.state.stateID == "position_patient")
     }
 
     // 6. Uncertainty, or no reply in 10 s, goes to CPR.
@@ -397,12 +400,12 @@ import Testing
     @Test func uncertaintyTakesTheCprPath() throws {
         var first = Session(engine: try engine())
         first.human(.unsure)
-        #expect(first.state.stateID == "call_911")
+        #expect(first.state.stateID == "position_patient")
 
         var second = Session(engine: try engine())
         second.human(.no)
         second.human(.unsure)
-        #expect(second.state.stateID == "call_911")
+        #expect(second.state.stateID == "position_patient")
     }
 
     /// A question waits at most 30 s for an answer, and says itself again every 10 s while it waits.
@@ -423,8 +426,8 @@ import Testing
     @Test func gaspingGoesToCprFromTheModelToo() throws {
         var session = Session(engine: try engine())
         session.modelFinding(.abnormalBreathing)
-        #expect(session.state.stateID == "call_911")
-        #expect(session.phrases == ["gasping_not_normal", "call_911"])
+        #expect(session.state.stateID == "position_patient")
+        #expect(session.phrases == ["gasping_not_normal", "calling_911", "roll_flat"])
     }
 
     @Test func noPhraseAsksForAPulseCheck() throws {

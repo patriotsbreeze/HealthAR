@@ -128,11 +128,21 @@ private func declaredFindings(_ contract: Data) throws -> Set<Finding> {
         #expect(turns == [LiveTextTurn(role: "user", text: SystemPrompt.awakeKick)])
     }
 
+    /// Open eyes aren't unresponsive. From the camera alone it takes eyes closed and no movement.
+    @Test func everyPromptNeedsClosedEyesToSeeUnresponsive() {
+        let prompts = [SystemPrompt.text, SystemPrompt.awake(pack: nil), SystemPrompt.awake(pack: nil, appLines: ["x"])]
+        for prompt in prompts {
+            let text = prompt.lowercased()
+            #expect(text.contains("eyes are closed"))
+            #expect(text.contains("open eyes, blinking, or any movement"))
+        }
+    }
+
     @Test func theKickDoesNotAskWhatTriageAskJustAsked() {
         let text = SystemPrompt.awakeKick.lowercased()
         #expect(text.hasPrefix("app cue"))
         #expect(text.contains("do not ask that again"))
-        #expect(text.contains("you are an ai"))
+        #expect(text.contains("do not introduce yourself"), "the first line is about the emergency, not the app")
         #expect(text.contains("what they can see"))
         #expect(text.contains("one short sentence"))
     }

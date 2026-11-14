@@ -149,9 +149,11 @@ struct MainScreen: View {
                     .allowsHitTesting(false)
                     .transition(.opacity)
             }
-            if showsVoice || showsAssessment {
+            if showsVoice || showsAssessment || showsCallerAgent {
                 // Top-leading is the one corner nothing else in the band uses. A tap goes through the
-                // orb; the read beside it opens on one.
+                // orb; the read beside it opens on one. The 911 call sits under them, so the two stack
+                // rather than overlap while the rescuer gets on with CPR.
+                VStack(alignment: .leading, spacing: DS.Space.xs) {
                 HStack(alignment: .top, spacing: DS.Space.xs) {
                     if showsVoice {
                         ListeningBubble(mode: coordinator.aiTalking ? .talking : .listening)
@@ -171,9 +173,15 @@ struct MainScreen: View {
                         .transition(.opacity)
                     }
                 }
+                if showsCallerAgent {
+                    CallerAgentPill(status: coordinator.callerAgentStatus) { present(.dispatcher) }
+                        .transition(.opacity)
+                }
+                }
                 .padding(DS.Space.m)
-                // Clear of a docked beat in the other corner.
-                .padding(.trailing, coordinator.showsBeatPulse && coordinator.pulseDocked ? DS.Pulse.docked + DS.Pulse.dockedInset : 0)
+                // Out to the right edge, but clear of whatever holds the other corner: the beat's dot, or the
+                // grip reminder while it shows.
+                .padding(.trailing, assessmentTrailingClearance)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
             if coordinator.offersPracticePatient {
@@ -216,6 +224,14 @@ struct MainScreen: View {
     private var showsVoice: Bool { coordinator.aiTalking || coordinator.aiListening }
 
     /// A read only with the AI up, since one from a session that's gone would be about another scene.
+    private var showsCallerAgent: Bool { coordinator.callerAgentStatus != .idle }
+
+    private var assessmentTrailingClearance: CGFloat {
+        if coordinator.showsGripReminder { return GripReminderCard.size + DS.Space.m }
+        if coordinator.showsBeatPulse { return DS.Pulse.docked + DS.Pulse.dockedInset }
+        return 0
+    }
+
     private var showsAssessment: Bool {
         // The log shows on its own too, so the 911 agent's call is seen even with the AI offline.
         !coordinator.assessmentLog.isEmpty

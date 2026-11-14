@@ -211,7 +211,7 @@ private struct AgentsStrip: View {
             Slot(symbol: "checkmark.shield.fill", name: "Safety checker", status: live ? "Checking" : "Off", activity: live ? .running : .off),
             Slot(symbol: "eye.fill", name: "Scene reader", status: scene.0, activity: scene.1),
             Slot(symbol: "bolt.heart.fill", name: "AED finder", status: aed.0, activity: aed.1),
-            Slot(symbol: "phone.fill", name: "911 agent", status: c.callerAgentActive ? "On call" : "Ready", activity: c.callerAgentActive ? .busy : .off),
+            Slot(symbol: "phone.fill", name: "911 agent", status: c.callerAgentStatus == .calling ? "Calling" : "Ready", activity: c.callerAgentStatus == .calling ? .busy : .off),
         ]
     }
 }

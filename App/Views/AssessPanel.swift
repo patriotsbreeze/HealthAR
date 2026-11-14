@@ -1,4 +1,5 @@
 import RescueCore
+import RescueLive
 import SwiftUI
 
 /// The opening screen when there's an AI: the camera, one line, and what the AI thinks so far. Start
@@ -57,6 +58,7 @@ struct AssessPanel: View {
                 status
             }
             if showsNotes { thinking(showsLine: showsLine) }
+            if let suggestion { suggestionLine(suggestion) }
             controls
             if tapping { tapRow.transition(.opacity) }
         }
@@ -130,8 +132,10 @@ struct AssessPanel: View {
                 .padding(.horizontal, 11)
                 .frame(minHeight: DS.Height.camera)
                 .background(DS.Colors.criticalFill, in: Capsule(style: .continuous))
+                .suggested(suggestion == .startCpr, Capsule(style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityHint(suggestion == .startCpr ? "The AI suggests this" : "")
     }
 
     private var dispatcher: some View {
@@ -145,9 +149,11 @@ struct AssessPanel: View {
                 .frame(minHeight: DS.Height.camera)
                 .background(DS.Glass.fill, in: Capsule(style: .continuous))
                 .overlay(Capsule(style: .continuous).strokeBorder(DS.Glass.edge, lineWidth: 1))
+                .suggested(suggestion == .callForHelp, Capsule(style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Spawn 911 agent. A simulated call in the log. Places no call.")
+        .accessibilityHint(suggestion == .callForHelp ? "The AI suggests this" : "")
     }
 
     /// An icon, so it shares the row with Start CPR and the dispatcher instead of taking its own.
@@ -162,33 +168,68 @@ struct AssessPanel: View {
             .foregroundStyle(DS.Colors.textSecondary)
             .frame(minWidth: DS.Height.camera, minHeight: DS.Height.camera)
             .contentShape(Rectangle())
+            .suggested(!tapping && suggestion?.isTapChoice == true, RoundedRectangle(cornerRadius: DS.Radius.row, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(tapping ? "Hide tap choices" : "Tap instead")
         .accessibilityHint("Say what's happening with a tap instead of talking")
     }
 
-    /// Only the two things a person can say that the AI may not: awake, or not.
+    /// The things a person can say that the AI may not: whether they respond, whether they're
+    /// breathing normally, and whether they're awake. Always these three, in this order.
     private var tapRow: some View {
         HStack(spacing: DS.Space.s) {
-            tapChoice("Not responding", .patientUnresponsive)
-            tapChoice("Awake and talking", .patientAwake)
+            tapChoice("Not responding", .patientUnresponsive, suggested: suggestion == .notResponding)
+            tapChoice("Not breathing or gasping", .patientNotBreathing, suggested: suggestion == .notBreathing)
+            tapChoice("Awake and talking", .patientAwake, suggested: suggestion == .awake)
         }
     }
 
-    private func tapChoice(_ title: String, _ action: HumanAction) -> some View {
-        Button { coordinator.perform(action) } label: {
+    private func tapChoice(_ title: String, _ action: HumanAction, suggested: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: DS.Radius.row, style: .continuous)
+        return Button { coordinator.perform(action) } label: {
             Text(title)
                 .dsFont(DS.Fonts.buttonCompact)
                 .foregroundStyle(DS.Colors.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+                .padding(.horizontal, 4)
                 .frame(maxWidth: .infinity, minHeight: DS.Height.camera)
-                .background(DS.Glass.fill, in: RoundedRectangle(cornerRadius: DS.Radius.row, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: DS.Radius.row, style: .continuous).strokeBorder(DS.Glass.edge, lineWidth: 1))
+                .background(DS.Glass.fill, in: shape)
+                .overlay(shape.strokeBorder(DS.Glass.edge, lineWidth: 1))
+                .suggested(suggested, shape)
         }
         .buttonStyle(.plain)
+        .accessibilityHint(suggested ? "The AI suggests this" : "")
     }
+
+    /// The button the scene read points to, at medium or high confidence. It only ever highlights
+    /// one of the fixed buttons, which stay where they are; nothing happens until a person taps.
+    private var suggestion: SituationAssessment.Suggestion? { coordinator.assessSuggestion }
+
+    private func suggestionLine(_ suggestion: SituationAssessment.Suggestion) -> some View {
+        let reason = coordinator.sceneRead?.sees ?? coordinator.sceneRead?.headline
+        return HStack(spacing: 4) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Self.suggestColor)
+            Text("AI suggests \(suggestion.buttonTitle)").font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(DS.Colors.textPrimary)
+            if suggestion.confirmAction != nil {
+                Text("· say \u{201C}confirm\u{201D} or tap").font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Self.suggestColor)
+            }
+            if let reason {
+                Text("· \(reason)").font(.system(size: 12))
+                    .foregroundStyle(DS.Colors.textSecondary)
+            }
+        }
+        .lineLimit(1)
+        .accessibilityElement(children: .combine)
+    }
+
+    static let suggestColor = Color.yellow
 }
 
 private struct NoteRow: View {
@@ -231,5 +272,33 @@ private struct CappedHeight: Layout {
 
     private func capped(_ proposal: ProposedViewSize) -> ProposedViewSize {
         ProposedViewSize(width: proposal.width, height: min(proposal.height ?? cap, cap))
+    }
+}
+
+private extension SituationAssessment.Suggestion {
+    var buttonTitle: String {
+        switch self {
+        case .startCpr: "Start CPR"
+        case .notResponding: "Not responding"
+        case .notBreathing: "Not breathing"
+        case .awake: "Awake and talking"
+        case .callForHelp: "Spawn 911 agent"
+        }
+    }
+
+    /// Behind Tap instead, so the toggle glows while the row is shut.
+    var isTapChoice: Bool { self == .notResponding || self == .notBreathing || self == .awake }
+}
+
+private extension View {
+    /// A yellow ring round the one button the AI points to. It never moves or resizes the button.
+    func suggested(_ on: Bool, _ shape: some InsettableShape) -> some View {
+        overlay {
+            if on {
+                shape.strokeBorder(AssessPanel.suggestColor, lineWidth: 2.5)
+                    .shadow(color: AssessPanel.suggestColor.opacity(0.7), radius: 6)
+                    .allowsHitTesting(false)
+            }
+        }
     }
 }

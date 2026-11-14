@@ -125,7 +125,7 @@ import Testing
     @Test func aTapDropsStaleQueuedPhrasesButNotTheCallBeforeTheNewOnes() throws {
         var session = Session(engine: try engine())
         session.human(.no)
-        let drop = try #require(session.effects.firstIndex(of: .dropQueuedPhrases(keeping: ["call_911"])))
+        let drop = try #require(session.effects.firstIndex(of: .dropQueuedPhrases(keeping: ["call_911", "calling_911"])))
         let ask = try #require(session.effects.firstIndex(of: .playPhrase("ask_breathing")))
         #expect(drop < ask)
     }
@@ -133,35 +133,35 @@ import Testing
     @Test func aStartCprDropsBeforeItsCallPrompt() throws {
         var session = Session(engine: try engine())
         session.human(.startCpr)
-        let drop = try #require(session.effects.firstIndex(of: .dropQueuedPhrases(keeping: ["call_911"])))
-        let call = try #require(session.effects.firstIndex(of: .playPhrase("call_911")))
+        let drop = try #require(session.effects.firstIndex(of: .dropQueuedPhrases(keeping: ["call_911", "calling_911"])))
+        let call = try #require(session.effects.firstIndex(of: .playPhrase("calling_911")))
         #expect(drop < call)
     }
 
-    @Test func answeringTheCallStepLetsItsPromptGo() throws {
-        for action in [HumanAction.called, .done] {
-            var session = Session(engine: try engine())
-            session.human(.unsure)
-            #expect(session.state.stateID == "call_911")
-            session.human(action)
-            #expect(session.effects.contains(.dropQueuedPhrases(keeping: [])), "\(action)")
-        }
+    /// Positioning only announces the call, which the 911 agent places in the background, so Done there
+    /// answers "Roll them flat": that line goes, and the short announcement may finish.
+    @Test func doneOnPositioningDropsItsOwnLineButNotTheCall() throws {
+        var session = Session(engine: try engine())
+        session.human(.unsure)
+        #expect(session.state.stateID == "position_patient")
+        session.human(.done)
+        #expect(session.effects.contains(.dropQueuedPhrases(keeping: ["call_911", "calling_911"])))
     }
 
     @Test func tappingPastTheStepAfterTheCallKeepsItsPrompt() throws {
         var session = Session(engine: try engine())
         session.human(.unsure)
-        session.human(.called)
         session.human(.done)
-        #expect(session.effects.contains(.dropQueuedPhrases(keeping: ["call_911"])))
+        session.human(.done)
+        #expect(session.effects.contains(.dropQueuedPhrases(keeping: ["call_911", "calling_911"])))
     }
 
     @Test func aModelTransitionDropsStaleQuestions() throws {
         var session = Session(engine: try engine())
         session.modelFinding(.notBreathing)
-        #expect(session.state.stateID == "call_911")
-        let drop = try #require(session.effects.firstIndex(of: .dropQueuedPhrases(keeping: ["call_911"])))
-        let call = try #require(session.effects.firstIndex(of: .playPhrase("call_911")))
+        #expect(session.state.stateID == "position_patient")
+        let drop = try #require(session.effects.firstIndex(of: .dropQueuedPhrases(keeping: ["call_911", "calling_911"])))
+        let call = try #require(session.effects.firstIndex(of: .playPhrase("calling_911")))
         #expect(drop < call)
     }
 

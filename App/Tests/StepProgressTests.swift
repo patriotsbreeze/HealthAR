@@ -17,17 +17,16 @@ import Testing
         fixture.coordinator.stepProgress?.text
     }
 
-    @Test func theSetupChainCountsToThree() throws {
+    /// No call step to tap through: the 911 agent calls in the background, so setup is two steps.
+    @Test func theSetupChainCountsToTwo() throws {
         let fixture = try begun()
         let coordinator = fixture.coordinator
         coordinator.perform(.unsure)
-        #expect(coordinator.state.stateID == "call_911")
-        #expect(progress(fixture) == "Step 1 of 3")
-        coordinator.perform(.done)
-        #expect(progress(fixture) == "Step 2 of 3")
+        #expect(coordinator.state.stateID == "position_patient")
+        #expect(progress(fixture) == "Step 1 of 2")
         coordinator.perform(.done)
         #expect(coordinator.state.stateID == "place_hands")
-        #expect(progress(fixture) == "Step 3 of 3")
+        #expect(progress(fixture) == "Step 2 of 2")
     }
 
     /// A flow branches, so only how far someone has come is honest.

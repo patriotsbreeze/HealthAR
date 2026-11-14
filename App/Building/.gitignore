@@ -1,0 +1,3 @@
+# CoStar and venue data that must not go in a public repo. See BuildingBriefStore.localResource.
+building_briefs.local.json
+locator/

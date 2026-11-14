@@ -117,3 +117,15 @@ import Testing
         }
     }
 }
+
+/// Gemini cuts the AI off when it hears speech start, and by default nearly any sound counts. The
+/// setup turns that down, in a form the API accepts.
+@Test func theSetupTurnsDownSpeechSensitivitySoNoiseDoesntCutTheAIOff() throws {
+    let setup = LiveSetup(model: "gemini-3.8-live", systemInstruction: "x", functionDeclarations: [], resumeHandle: nil, seedsHistory: false)
+    let data = try JSONEncoder().encode(setup.jsonValue)
+    let text = try #require(String(data: data, encoding: .utf8))
+    #expect(text.contains("\"startOfSpeechSensitivity\":\"START_SENSITIVITY_LOW\""))
+    // An int32 field: a decimal point could be refused.
+    #expect(text.contains("\"prefixPaddingMs\":400"))
+    #expect(!text.contains("\"prefixPaddingMs\":400."))
+}
