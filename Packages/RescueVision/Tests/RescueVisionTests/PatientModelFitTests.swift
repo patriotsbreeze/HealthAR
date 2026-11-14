@@ -95,3 +95,44 @@ private func fixture() -> (camera: CameraPose, depth: BodyDepth, person: Detecte
     session.stop()
     #expect(session.patientBodyPlacement() == nil)
 }
+
+/// One shoulder's depth landing on the floor beside the body, as with arms spread, used to tip the
+/// body's chest direction and draw it rolled onto its side. Gravity sets it now.
+@Test func aShoulderReadingOffTheBodyStillFitsFaceUp() throws {
+    let f = fixture()
+    var depth = f.depth
+    let shoulder = f.person.leftShoulder.position
+    let cx = Int(shoulder.x * Double(depth.width)), cy = Int(shoulder.y * Double(depth.height))
+    // Just the shoulder: wider, it would reach where the chest is read too, which rightly turns down an edge.
+    for y in max(0, cy - 2)...min(depth.height - 1, cy + 2) {
+        for x in max(0, cx - 2)...min(depth.width - 1, cx + 2) {
+            depth.metres[y * depth.width + x] = 1.62
+        }
+    }
+    let fit = try #require(PatientModelFit.fit(person: f.person, depth: depth, camera: f.camera, requireLying: false))
+    // The low shoulder pitches head-to-hips a few degrees, which is fine; it must not roll.
+    #expect(simd_dot(fit.normal, [0, 1, 0]) > 0.99, "face up")
+    #expect(fit.lying)
+    // Its thickness runs up the world, and its width across the floor.
+    let up = simd_normalize(fit.transform.columns.1.xyz), across = simd_normalize(fit.transform.columns.2.xyz)
+    #expect(simd_dot(up, [0, 1, 0]) > 0.99)
+    #expect(abs(across.y) < 0.001, "not rolled: its width lies level across the floor")
+    #expect(simd_determinant(fit.transform) > 0, "never mirrored")
+}
+
+@Test func anUprightPersonFacesTheCamera() throws {
+    // Shoulders over hips, a metre and a half in front of a level camera.
+    let camera = cameraPose()
+    func joint(_ world: SIMD3<Float>) -> DetectedPerson.Joint {
+        guard case let .inFront(image) = camera.project(world) else { fatalError("behind camera") }
+        return .init(position: image, confidence: 0.9)
+    }
+    let person = DetectedPerson(
+        leftShoulder: joint([-0.2, 0.25, -1.5]), rightShoulder: joint([0.2, 0.25, -1.5]),
+        leftHip: joint([-0.12, -0.33, -1.5]), rightHip: joint([0.12, -0.33, -1.5])
+    )
+    let depth = BodyDepth(width: 64, height: 48, metres: Array(repeating: 1.5, count: 64 * 48), confidence: Array(repeating: 2, count: 64 * 48))
+    guard let fit = PatientModelFit.fit(person: person, depth: depth, camera: camera, requireLying: false) else { return }
+    #expect(!fit.lying)
+    #expect(simd_dot(fit.normal, [0, 0, 1]) > 0.9, "toward the camera")
+}

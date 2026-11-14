@@ -30,6 +30,8 @@ final class GhostRenderer {
     private let detectedFill = Entity()
     private let detectedShell = Entity()
     private let chestEstimate = Entity()
+    /// The head, apart from the body, so it can sit where depth found the real one.
+    private let detectedHead = Entity()
     private var patientLoaded = false
 
     init(arView: ARView, vision: VisionSession) {
@@ -58,6 +60,7 @@ final class GhostRenderer {
         detectedModel.addChild(detectedFill)
         detectedModel.addChild(detectedShell)
         detectedAnchor.addChild(chestEstimate)
+        detectedAnchor.addChild(detectedHead)
         // A coarse surface disc, not a pin claiming to identify a bone.
         let disc = ModelEntity(
             mesh: .generateCylinder(height: 0.004, radius: 0.045),
@@ -104,12 +107,27 @@ final class GhostRenderer {
         var line = UnlitMaterial(color: Self.patientColor)
         line.faceCulling = .front
         apply(line, to: patientOutline)
-        detectedFill.addChild(patient.clone(recursive: true))
-        detectedShell.addChild(outline.clone(recursive: true))
+        // A headless body and a head on its own, so the head can go where depth found the real one.
+        // A model without them falls back to the whole template patient.
+        let headFill = Entity(), headShell = Entity()
+        if let body = root.findEntity(named: "TrackedBody"), let bodyOutline = root.findEntity(named: "TrackedBodyOutline"),
+           let head = root.findEntity(named: "TrackedHead"), let headOutline = root.findEntity(named: "TrackedHeadOutline") {
+            detectedFill.addChild(body.clone(recursive: true))
+            detectedShell.addChild(bodyOutline.clone(recursive: true))
+            headFill.addChild(head.clone(recursive: true))
+            headShell.addChild(headOutline.clone(recursive: true))
+            detectedHead.addChild(headFill)
+            detectedHead.addChild(headShell)
+        } else {
+            detectedFill.addChild(patient.clone(recursive: true))
+            detectedShell.addChild(outline.clone(recursive: true))
+        }
         apply(Self.patientGlow(opacity: 0.048), to: detectedFill)
+        apply(Self.patientGlow(opacity: 0.048), to: headFill)
         var glow = Self.patientGlow(opacity: 0.48)
         glow.faceCulling = .front
         apply(glow, to: detectedShell)
+        apply(glow, to: headShell)
         patientLoaded = true
         vision.patientModelDidLoad()
         tone = nil
@@ -132,6 +150,7 @@ final class GhostRenderer {
                 detectedModel.transform = target
                 chestEstimate.position = placement.chest
             }
+            placeHead(placement)
             detectedAnchor.isEnabled = true
             chestEstimate.isEnabled = placement.showsChestEstimate
             chestEstimate.orientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: placement.normal)
@@ -162,6 +181,22 @@ final class GhostRenderer {
         // The depth-fitted real body replaces the older rigid ghost-patient shell.
         patientOutline.isEnabled = placement.practice || trackedBody == nil
         patientOutline.components.set(OpacityComponent(opacity: GhostPlacement.outlineOpacity))
+    }
+
+    /// The head where depth found it, or where the fitted body's own head would be when no face was
+    /// seen. It turns and sizes with the body, but isn't stretched by the torso's own length and width.
+    private func placeHead(_ placement: PatientBodyPlacement) {
+        guard !detectedHead.children.isEmpty else { return }
+        let template = placement.transform * SIMD4(PatientModelFit.headCenter, 1)
+        let target = placement.head ?? SIMD3(template.x, template.y, template.z)
+        let body = detectedModel.transform
+        let size = (body.scale.x + body.scale.y + body.scale.z) / 3
+        detectedHead.orientation = body.rotation
+        detectedHead.scale = SIMD3(repeating: size)
+        detectedHead.position = detectedAnchor.isEnabled && detectedHead.isEnabled
+            ? simd_mix(detectedHead.position, target, SIMD3(repeating: Self.bodyEasing))
+            : target
+        detectedHead.isEnabled = true
     }
 
     private func paint(_ entity: Entity, color: UIColor) {

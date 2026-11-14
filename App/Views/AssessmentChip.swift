@@ -30,11 +30,13 @@ struct AssessmentChip: View {
                     .padding(.horizontal, DS.Space.s + 2)
                     .padding(.vertical, 6)
                     .frame(minHeight: DS.Height.control)
+                    // Out to the band's edge, glass and all, so the read has the whole row.
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .frostedGlass(RoundedRectangle(cornerRadius: DS.Assessment.radius, style: .continuous))
                     .contentShape(RoundedRectangle(cornerRadius: DS.Assessment.radius, style: .continuous))
             }
             .buttonStyle(.plain)
-            .frame(maxWidth: DS.Assessment.maxWidth, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(accessibilityText)
             .accessibilityHint(log.isEmpty ? "" : (isOpen ? "Hides the live log." : "Shows the live log."))
@@ -42,7 +44,7 @@ struct AssessmentChip: View {
                 // Its own pane under the pill, dropping down from it, so the pill stays two lines.
                 details(assessment)
                     .padding(DS.Space.s)
-                    .frame(maxWidth: DS.Assessment.panelWidth, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .frostedGlass(RoundedRectangle(cornerRadius: DS.Assessment.radius, style: .continuous))
                     .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.96, anchor: .top)))
             } else if let latest = log.first {
@@ -52,7 +54,7 @@ struct AssessmentChip: View {
                     .transition(.opacity)
                     .padding(.horizontal, DS.Space.s)
                     .padding(.vertical, 4)
-                    .frame(maxWidth: DS.Assessment.maxWidth, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .frostedGlass(Capsule(style: .continuous))
                     .onTapGesture { expanded = true }
                     .accessibilityHint("Shows the live log.")

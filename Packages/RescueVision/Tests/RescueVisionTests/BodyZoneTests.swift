@@ -541,7 +541,7 @@ private func locate(_ session: VisionSession, _ materials: Set<Material>, pose: 
 }
 
 
-@Test func cprSkeletonKeepsNamedArmsAndTorsoButDropsFaceLegsAndUnreliablePoints() {
+@Test func cprSkeletonKeepsTheHeadArmsTorsoAndLegsButDropsUnreliablePoints() {
     let measured: [BodyJoint: DetectedPerson.Joint] = [
         .leftShoulder: .init(position: [0.3, 0.3], confidence: 0.9),
         .rightShoulder: .init(position: [0.7, 0.3], confidence: 0.9),
@@ -555,11 +555,25 @@ private func locate(_ session: VisionSession, _ materials: Set<Material>, pose: 
         .leftKnee: .init(position: [0.35, 0.9], confidence: 1),
     ]
     let skeleton = DetectedSkeleton(joints: measured)
-    #expect(Set(skeleton.joints.keys) == [.leftShoulder, .rightShoulder, .leftElbow, .leftWrist, .leftHip])
+    #expect(Set(skeleton.joints.keys) == [.leftShoulder, .rightShoulder, .leftElbow, .leftWrist, .leftHip, .nose, .leftKnee])
     #expect(skeleton.joints[.leftWrist] == [0.4, 0.6])
     #expect(BodyJoint.leftWrist.cprLabel == "L wrist")
     #expect(BodyJoint.rightWrist.cprLabel == "R wrist")
-    #expect(BodyJoint.nose.cprLabel == nil)
+    #expect(BodyJoint.nose.cprLabel == "Head")
+    #expect(BodyJoint.leftKnee.cprLabel == "L knee")
+    #expect(BodyJoint.rightAnkle.cprLabel == "R ankle")
+    #expect(BodyJoint.neck.cprLabel == nil, "the neck joins the head on, unlabelled")
+}
+
+@Test func theOutlineJoinsTheLegsAndTheHead() {
+    let body = VisionOverlay.DetectedBody(joints: [
+        .neck: CGPoint(x: 0.5, y: 0.2), .nose: CGPoint(x: 0.5, y: 0.1),
+        .leftHip: CGPoint(x: 0.4, y: 0.5), .leftKnee: CGPoint(x: 0.4, y: 0.7), .leftAnkle: CGPoint(x: 0.4, y: 0.9),
+    ])
+    let pairs = body.segments.map { [$0.from, $0.to] }
+    #expect(pairs.contains([CGPoint(x: 0.4, y: 0.5), CGPoint(x: 0.4, y: 0.7)]), "hip to knee")
+    #expect(pairs.contains([CGPoint(x: 0.4, y: 0.7), CGPoint(x: 0.4, y: 0.9)]), "knee to ankle")
+    #expect(pairs.contains([CGPoint(x: 0.5, y: 0.2), CGPoint(x: 0.5, y: 0.1)]), "neck to head")
 }
 
 @Test func outlinesNeverConnectDifferentPeopleOrFillMissingJoints() {
@@ -571,9 +585,9 @@ private func locate(_ session: VisionSession, _ materials: Set<Material>, pose: 
         .leftShoulder: CGPoint(x: 0.2, y: 0.3),
         .leftElbow: CGPoint(x: 0.25, y: 0.5),
         .leftWrist: CGPoint(x: 0.3, y: 0.7),
-        .nose: CGPoint(x: 0.2, y: 0.1),
+        .leftEar: CGPoint(x: 0.2, y: 0.1),
     ])
-    #expect(arm.joints[.nose] == nil)
+    #expect(arm.joints[.leftEar] == nil, "only the body's own joints, never the ears")
     #expect(arm.segments.count == 2)
     #expect(arm.segments[0].from == arm.joints[.leftShoulder])
     #expect(arm.segments[0].to == arm.joints[.leftElbow])

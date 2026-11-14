@@ -13,10 +13,13 @@ public enum BodyJoint: String, CaseIterable, Sendable, Hashable {
 }
 
 extension BodyJoint {
-    /// Torso alignment and the rescuer's arm chain. The sternum is not a detected joint.
+    /// The whole body, so the outline reads as a person: the head, the torso, the rescuer's arm chain,
+    /// and the legs. The sternum is not a detected joint. The neck only joins the head to the shoulders.
     public static let cprJoints: [BodyJoint] = [
+        .nose, .neck,
         .leftShoulder, .rightShoulder, .leftElbow, .rightElbow,
         .leftWrist, .rightWrist, .leftHip, .rightHip,
+        .leftKnee, .rightKnee, .leftAnkle, .rightAnkle,
     ]
 
     public var cprLabel: String? {
@@ -29,6 +32,11 @@ extension BodyJoint {
         case .rightWrist: "R wrist"
         case .leftHip: "L hip"
         case .rightHip: "R hip"
+        case .leftKnee: "L knee"
+        case .rightKnee: "R knee"
+        case .leftAnkle: "L ankle"
+        case .rightAnkle: "R ankle"
+        case .nose: "Head"
         default: nil
         }
     }
