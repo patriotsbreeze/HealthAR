@@ -285,6 +285,7 @@ final class AppCoordinator {
         if showsCamera { vision.stop() }
         audio.setMetronome(on: false)
         vision.setGhostBeat(on: false)
+        gripReminderUntil = nil
         metronomeOn = false
         vision.clearPracticePatient()
         practicePatientPlaced = false
@@ -374,6 +375,13 @@ final class AppCoordinator {
     private(set) var practicePatientPlaced = false
     /// The ghost is on screen pushing on the beat, read each tick.
     private(set) var ghostShowsBeat = false
+    /// The grip reminder's window after the beat starts.
+    private(set) var gripReminderUntil: TimeInterval?
+    nonisolated static let gripReminderSeconds: TimeInterval = 8
+
+    /// The looping grip in the corner: on place_hands, and for the first seconds after the beat
+    /// starts, whichever way compressions were reached and with or without a camera. It only shows.
+    var showsGripReminder: Bool { overlayTarget == .chestCenter || gripReminderUntil != nil }
 
     /// The Push pulse, unless the ghost is up to follow instead. Whenever the ghost can't show, for no
     /// camera, lost tracking, nothing placed or the AED talking, the pulse comes straight back, so
@@ -631,6 +639,7 @@ final class AppCoordinator {
         let status = vision.status
         if status != visionStatus { visionStatus = status }
         if let until = handsGuideUntil, now >= until { handsGuideUntil = nil }
+        if let until = gripReminderUntil, now >= until { gripReminderUntil = nil }
         let ghost = showsPulse && cameraLive && metronomeOn && vision.showsGhost
         if ghost != ghostShowsBeat { ghostShowsBeat = ghost }
         let talking = liveConnected && audio.modelAudioPending
@@ -693,6 +702,9 @@ final class AppCoordinator {
         case let .metronome(on):
             audio.setMetronome(on: on)
             vision.setGhostBeat(on: on)
+            // The beat starting is compressions starting, so the grip shows for its first seconds.
+            if on, !metronomeOn { gripReminderUntil = clock() + Self.gripReminderSeconds }
+            if !on { gripReminderUntil = nil }
             metronomeOn = on
         case let .overlay(target):
             overlayTarget = target

@@ -533,6 +533,7 @@ public final class VisionSession: Sendable {
         let aedPoint = objects.worldPoint(.aed)
         let carriedPoint = objects.carriedPoint(.aed)
         let callouts = objects.callouts()
+        let holdsLimb = pose.holdsLimb
         var overlay = state.withLock { state in
             VisionOverlay.compose(
                 target: state.overlayTarget,
@@ -544,6 +545,8 @@ public final class VisionSession: Sendable {
                 injuryPin: state.injuryPin,
                 pose: latestPose,
                 jointPose: pose.jointPose,
+                // Pose runs while the camera is live, for the joints, or while the step wants it.
+                posing: state.arActive || state.poseDemand(at: now, holdsLimb: holdsLimb) != .none,
                 items: callouts.filter { state.wanted.contains($0.key) },
                 handsGuide: state.showsHandsGuide(at: now),
                 ghost: state.ghostAnchor.flatMap { anchor in

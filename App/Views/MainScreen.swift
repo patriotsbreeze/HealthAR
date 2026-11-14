@@ -16,6 +16,8 @@ struct MainScreen: View {
     @State private var pendingStop: RescueControl?
     @State private var freeArea = CGRect.zero
     @State private var guideHeight: CGFloat = 0
+    /// The whole screen's height, for the assess panel's cap.
+    @State private var screenHeight: CGFloat = 0
 
     var body: some View {
         ZStack {
@@ -45,7 +47,7 @@ struct MainScreen: View {
                 }
                 // Sized first, so the band gets what's left, and never less than its least.
                 if coordinator.isAssessing {
-                    AssessPanel(coordinator: coordinator) { present(.dispatcher) }
+                    AssessPanel(coordinator: coordinator, onDispatcher: { present(.dispatcher) }, screenHeight: screenHeight)
                         .layoutPriority(1)
                 } else {
                     CommandDeck(coordinator: coordinator, onStopRequested: { pendingStop = $0 })
@@ -78,6 +80,7 @@ struct MainScreen: View {
                 }
             }
         }
+        .onGeometryChange(for: CGFloat.self, of: \.size.height) { screenHeight = $0 }
         // Past this the step alone would fill the screen and push the way out off it.
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .sensoryFeedback(DS.Haptics.compressions, trigger: coordinator.state.stateID) { _, new in new == "compressions" }
@@ -136,6 +139,16 @@ struct MainScreen: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                     .allowsHitTesting(false)
             }
+            if coordinator.showsGripReminder {
+                // Top-trailing, under the beat's dot when it shows, clear of the read in the top-leading corner.
+                let below = coordinator.showsBeatPulse ? DS.Pulse.docked + DS.Pulse.dockedInset : 0
+                GripReminderCard()
+                    .padding(.top, DS.Space.m + below)
+                    .padding(.trailing, DS.Space.m)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
             if showsVoice || showsAssessment {
                 // Top-leading is the one corner nothing else in the band uses. A tap goes through the
                 // orb; the read beside it opens on one.
@@ -159,8 +172,9 @@ struct MainScreen: View {
                     }
                 }
                 .padding(DS.Space.m)
-                // Clear of a docked beat in the other corner.
-                .padding(.trailing, coordinator.showsBeatPulse && coordinator.pulseDocked ? DS.Pulse.docked + DS.Pulse.dockedInset : 0)
+                // Out to the right edge, but clear of whatever holds the other corner: the beat's dot, or the
+                // grip reminder while it shows.
+                .padding(.trailing, assessmentTrailingClearance)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
             if coordinator.offersPracticePatient {
@@ -203,6 +217,12 @@ struct MainScreen: View {
     private var showsVoice: Bool { coordinator.aiTalking || coordinator.aiListening }
 
     /// A read only with the AI up, since one from a session that's gone would be about another scene.
+    private var assessmentTrailingClearance: CGFloat {
+        if coordinator.showsGripReminder { return GripReminderCard.size + DS.Space.m }
+        if coordinator.showsBeatPulse { return DS.Pulse.docked + DS.Pulse.dockedInset }
+        return 0
+    }
+
     private var showsAssessment: Bool {
         // The log shows on its own too, so the 911 agent's call is seen even with the AI offline.
         !coordinator.assessmentLog.isEmpty

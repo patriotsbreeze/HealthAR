@@ -198,6 +198,9 @@ public struct VisionOverlay: Sendable, Equatable {
                 (.leftHip, .rightHip),
                 (.leftShoulder, .leftElbow), (.leftElbow, .leftWrist),
                 (.rightShoulder, .rightElbow), (.rightElbow, .rightWrist),
+                (.leftHip, .leftKnee), (.leftKnee, .leftAnkle),
+                (.rightHip, .rightKnee), (.rightKnee, .rightAnkle),
+                (.neck, .nose),
             ]
             return edges.compactMap { a, b in
                 guard let from = joints[a], let to = joints[b] else { return nil }
@@ -320,6 +323,7 @@ public struct VisionOverlay: Sendable, Equatable {
         injuryPin: PlacedPin? = nil,
         pose: TimedPose? = nil,
         jointPose: TimedPose? = nil,
+        posing: Bool = true,
         items: [Material: PlacedObject] = [:],
         handsGuide: Bool = false,
         ghost: (anchor: GhostAnchor, push: Double, practice: Bool)? = nil,
@@ -387,7 +391,9 @@ public struct VisionOverlay: Sendable, Equatable {
             overlay.outline = mapping.outline(outline)
         }
 
-        let detectedJoints = jointPose ?? pose
+        // Only while the step has pose running: a frame left over from a step that stopped looking, as
+        // the hands guide ending, mustn't hang a body on screen after the camera's done with it.
+        let detectedJoints = posing ? (jointPose ?? pose) : nil
         if let detectedJoints, (0...maxJointAge).contains(detectedJoints.age(at: now)) {
             overlay.bodies = detectedJoints.skeletons.map { skeleton in
                 DetectedBody(joints: skeleton.joints.mapValues { mapping.viewPoint(fromImage: $0) })

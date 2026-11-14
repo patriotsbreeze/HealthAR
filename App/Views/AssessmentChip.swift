@@ -17,33 +17,47 @@ struct AssessmentChip: View {
     var source: String?
     let assessing: Bool
     var failed = false
-    /// Open by default: the log drops down by itself once there's a line in it. A tap only puts it away.
-    @State private var collapsed = false
-    private var isOpen: Bool { !collapsed && !log.isEmpty }
+    /// Shut, only the newest line shows, as a one-row ticker, so the camera stays clear. A tap on the
+    /// read opens the whole log, and another puts it back to the ticker.
+    @State private var expanded = false
+    private var isOpen: Bool { expanded && !log.isEmpty }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DS.Space.s) {
-            Button { if !log.isEmpty { collapsed.toggle() } } label: {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
+            Button { if !log.isEmpty { expanded.toggle() } } label: {
                 summary
-                    .padding(.horizontal, DS.Space.m)
-                    .padding(.vertical, DS.Space.s)
+                    .padding(.horizontal, DS.Space.s + 2)
+                    .padding(.vertical, 6)
                     .frame(minHeight: DS.Height.control)
+                    // Out to the band's edge, glass and all, so the read has the whole row.
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .frostedGlass(RoundedRectangle(cornerRadius: DS.Assessment.radius, style: .continuous))
                     .contentShape(RoundedRectangle(cornerRadius: DS.Assessment.radius, style: .continuous))
             }
             .buttonStyle(.plain)
-            .frame(maxWidth: DS.Assessment.maxWidth, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(accessibilityText)
             .accessibilityHint(log.isEmpty ? "" : (isOpen ? "Hides the live log." : "Shows the live log."))
             if isOpen {
                 // Its own pane under the pill, dropping down from it, so the pill stays two lines.
                 details(assessment)
-                    .padding(DS.Space.s + 2)
-                    .frame(maxWidth: DS.Assessment.panelWidth, alignment: .leading)
+                    .padding(DS.Space.s)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .frostedGlass(RoundedRectangle(cornerRadius: DS.Assessment.radius, style: .continuous))
                     .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.96, anchor: .top)))
+            } else if let latest = log.first {
+                // The newest line only, so the agent can be seen working without covering the patient.
+                LogRow(entry: latest, oneLine: true)
+                    .id(latest.id)
+                    .transition(.opacity)
+                    .padding(.horizontal, DS.Space.s)
+                    .padding(.vertical, 4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frostedGlass(Capsule(style: .continuous))
+                    .onTapGesture { expanded = true }
+                    .accessibilityHint("Shows the live log.")
             }
         }
         .fixedSize(horizontal: false, vertical: true)
@@ -61,7 +75,7 @@ struct AssessmentChip: View {
                         // Red, and first, because it's the one line that should stop someone.
                         Label(emergency, systemImage: "exclamationmark.triangle.fill")
                             .labelStyle(TightLabel(iconColor: DS.Colors.critical))
-                            .dsFont(DS.Fonts.label)
+                            .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(DS.Colors.critical)
                             .lineLimit(2)
                             .transition(.opacity)
@@ -72,25 +86,25 @@ struct AssessmentChip: View {
                         if assessment.sees != nil { Image(systemName: "eye") }
                     }
                     .labelStyle(TightLabel())
-                    .dsFont(DS.Fonts.label)
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(DS.Colors.textPrimary)
                     .lineLimit(2)
                     Text("\(assessment.prediction) · \(assessment.confidence.rawValue)")
-                        .dsFont(DS.Fonts.caption)
+                        .font(.system(size: 11))
                         .foregroundStyle(DS.Colors.textSecondary)
                         .lineLimit(1)
                 }
                 .contentTransition(.opacity)
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(DS.Colors.textPrimary)
-                    .frame(width: 22, height: 22)
+                    .frame(width: 18, height: 18)
                     .background(DS.Glass.fill, in: Circle())
                     .rotationEffect(.degrees(isOpen ? 180 : 0))
             } else {
                 Text(failed && !assessing ? Self.failedText : Self.pendingText)
-                    .dsFont(DS.Fonts.label)
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(DS.Colors.textSecondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -99,18 +113,18 @@ struct AssessmentChip: View {
     }
 
     private func details(_ assessment: SituationAssessment?) -> some View {
-        VStack(alignment: .leading, spacing: DS.Space.s) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 5) {
                 Circle()
                     .fill(source == AppCoordinator.AssessmentSource.live.rawValue ? DS.Colors.ok : DS.Assessment.tint)
-                    .frame(width: 7, height: 7)
+                    .frame(width: 6, height: 6)
                 Text("Live log")
-                    .dsFont(DS.Fonts.meta)
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(DS.Colors.textPrimary)
                 Spacer(minLength: 0)
                 if let source {
                     Text(source)
-                        .dsFont(DS.Fonts.badge)
+                        .font(.system(size: 9))
                         .foregroundStyle(DS.Colors.textTertiary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
@@ -119,11 +133,11 @@ struct AssessmentChip: View {
             if let watch = assessment?.watchFor {
                 Label(watch, systemImage: "exclamationmark.triangle")
                     .labelStyle(TightLabel())
-                    .dsFont(DS.Fonts.caption)
+                    .font(.system(size: 11))
                     .foregroundStyle(DS.Colors.textPrimary)
             }
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 5) {
+                LazyVStack(alignment: .leading, spacing: 3) {
                     ForEach(log) { LogRow(entry: $0) }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -132,8 +146,10 @@ struct AssessmentChip: View {
             .frame(maxHeight: DS.Assessment.openMaxHeight)
             .animation(DS.Motion.alert, value: log)
             Text(Self.footnote)
-                .dsFont(DS.Fonts.caption)
+                .font(.system(size: 9))
                 .foregroundStyle(DS.Colors.textTertiary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
     }
 
@@ -223,26 +239,30 @@ private extension View {
 /// One line of the live log: when, what kind, and the words, with the AI's reason under a scene line.
 private struct LogRow: View {
     let entry: AppCoordinator.AssessmentLogEntry
+    /// The ticker under the read: one line, no note under it.
+    var oneLine = false
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
             Text(elapsedText(entry.at))
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .foregroundStyle(DS.Colors.textTertiary)
             Image(systemName: symbol)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(tint)
-                .frame(width: 14)
+                .frame(width: 11)
             VStack(alignment: .leading, spacing: 1) {
                 Text(entry.text)
-                    .font(entry.kind == .tool ? .system(size: 12, weight: .regular, design: .monospaced) : nil)
+                    // An explicit size: nil here would reset it to body size, and the log would balloon.
+                    .font(entry.kind == .tool ? .system(size: 10, weight: .regular, design: .monospaced) : .system(size: 11))
+                    .lineLimit(oneLine ? 1 : 2)
                     .foregroundStyle(entry.kind == .alert ? DS.Colors.critical : [.saw, .call].contains(entry.kind) ? DS.Colors.textPrimary : DS.Colors.textSecondary)
                     .fontWeight(entry.kind == .alert ? .semibold : nil)
-                if let detail = entry.detail {
-                    Text(detail).foregroundStyle(DS.Colors.textTertiary)
+                if !oneLine, let detail = entry.detail {
+                    Text(detail).font(.system(size: 10)).foregroundStyle(DS.Colors.textTertiary).lineLimit(1)
                 }
             }
-            .font(.system(size: 12))
+            .font(.system(size: 11))
             .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)

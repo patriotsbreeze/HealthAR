@@ -2,6 +2,7 @@ import CoreGraphics
 import Foundation
 import RescueCore
 import Testing
+import AVFoundation
 import RealityKit
 import simd
 @testable import RescueVision
@@ -366,4 +367,15 @@ private func frame(_ session: VisionSession, tracking: TrackingQuality = .normal
     #expect(bounds.min.z < -0.12, "fingers reach away from the rescuer")
     #expect(bounds.max.z < 0.06, "only a stub of wrist toward them")
     #expect(bounds.max.x - bounds.min.x < 0.22, "about a hand wide, with the lower thumb resting out to the side")
+}
+
+@Test func theGripReminderIsATwoSecondSquareClip() async throws {
+    let url = try #require(GripReminder.video)
+    let asset = AVURLAsset(url: url)
+    let duration = try await asset.load(.duration).seconds
+    #expect(abs(duration - 2) < 0.1, "two seconds, the grip and a beat on it")
+    let track = try #require(try await asset.loadTracks(withMediaType: .video).first)
+    let size = try await track.load(.naturalSize)
+    #expect(size.width == size.height, "square, for a corner card")
+    #expect(GripReminder.still != nil)
 }
