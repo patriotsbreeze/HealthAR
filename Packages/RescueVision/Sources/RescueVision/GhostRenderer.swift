@@ -275,7 +275,6 @@ extension PhysicallyBasedMaterial {
         return material
     }
 }
-#endif
 
 /// Thighs and shins as glowing tubes between the hips, knees and ankles, with a ball at each knee
 /// and ankle so the bends stay round. A joint that wasn't seen hangs from the one above it along the
@@ -340,3 +339,4 @@ private final class TrackedLegs {
         }
     }
 }
+#endif
