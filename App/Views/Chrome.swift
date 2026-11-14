@@ -119,9 +119,9 @@ private struct ElapsedPill: View {
     }
 }
 
-/// Every agent, one fixed slot each in a fixed order, so the row never moves: only the dot changes,
-/// grey when it's off, green when it's running, blue when it's busy this moment. The words are in
-/// the agents sheet, which a tap still opens, and in VoiceOver.
+/// The AI agents as one team in a single capsule: each a fixed icon in a fixed place, lit when running,
+/// faded when off, pulsing when busy, with the busy one's word in a slot that's always there, so the
+/// capsule never moves. A tap still opens the agents sheet for the detail.
 private struct AgentsStrip: View {
     let coordinator: AppCoordinator
     let action: () -> Void
@@ -131,71 +131,64 @@ private struct AgentsStrip: View {
     struct Slot: Identifiable, Equatable {
         var id: String { name }
         var symbol: String
-        /// A word or two under the icon, so which agent it is never needs guessing.
-        var tag: String
         var name: String
         var status: String
         var activity: Activity
     }
 
-    static let slotWidth: CGFloat = 40
+    static let iconWidth: CGFloat = 22
+    /// Room for the busy agent's word, kept even when nothing is busy, so the capsule never resizes.
+    static let busyWidth: CGFloat = 58
 
     var body: some View {
         Button(action: action) {
             // Vision's statuses change without telling anyone, so it looks again twice a second.
             TimelineView(.periodic(from: .now, by: 0.5)) { _ in
-                // Named as a group, so the row reads as the AI agents at work and not as settings.
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        ForEach(Self.slots(coordinator)) { slot($0) }
-                    }
-                    HStack(spacing: 3) {
+                let slots = Self.slots(coordinator)
+                let busy = slots.first { $0.activity == .busy }
+                // One capsule for the whole team, so it reads as the AI agents and not as settings.
+                HStack(spacing: 0) {
+                    HStack(spacing: 2) {
                         Image(systemName: "sparkles")
-                            .font(.system(size: 7, weight: .bold))
-                        Text("AI AGENTS")
                             .font(.system(size: 8, weight: .bold))
-                            .tracking(0.6)
+                        Text("AGENTS")
+                            .font(.system(size: 9, weight: .bold))
+                            .tracking(0.5)
                     }
                     .foregroundStyle(DS.Assessment.tint)
-                    .padding(.leading, 2)
+                    .padding(.trailing, 6)
+                    ForEach(slots) { icon($0) }
+                    Text(busy?.status.lowercased() ?? "")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(DS.Assessment.tint)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(width: Self.busyWidth, alignment: .leading)
+                        .padding(.leading, 3)
+                        .contentTransition(.opacity)
+                        .animation(DS.Motion.alert, value: busy?.status)
                 }
+                .padding(.leading, 10)
+                .frame(height: 30)
+                .glassSurface(Capsule(style: .continuous))
             }
             .frame(minHeight: DS.Height.control)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Agents: " + Self.slots(coordinator).map { "\($0.name), \($0.status)" }.joined(separator: "; "))
-        .accessibilityHint("Shows what each part of the app is doing")
+        .accessibilityLabel("AI agents: " + Self.slots(coordinator).map { "\($0.name), \($0.status)" }.joined(separator: "; "))
+        .accessibilityHint("Shows what each agent is doing")
     }
 
-    private func slot(_ slot: Slot) -> some View {
-        VStack(spacing: 1) {
-            Image(systemName: slot.symbol)
-                .font(.system(size: 12, weight: .semibold))
-            Text(slot.tag)
-                .font(.system(size: 8, weight: .bold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-        .foregroundStyle(slot.activity == .off ? DS.Colors.textTertiary : DS.Colors.textPrimary)
-        .frame(width: Self.slotWidth, height: 32)
-        .glassSurface(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(alignment: .topTrailing) {
-                Circle()
-                    .fill(color(slot.activity))
-                    .frame(width: 6, height: 6)
-                    .offset(x: -4, y: 4)
-            }
-            .opacity(slot.activity == .off ? 0.55 : 1)
+    /// Lit when running, faded when off, and pulsing in the AI's blue when busy.
+    private func icon(_ slot: Slot) -> some View {
+        Image(systemName: slot.symbol)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(slot.activity == .busy ? DS.Assessment.tint : slot.activity == .running ? DS.Colors.textPrimary : DS.Colors.textTertiary)
+            .opacity(slot.activity == .off ? 0.4 : 1)
+            .symbolEffect(.pulse, isActive: slot.activity == .busy)
+            .frame(width: Self.iconWidth)
             .animation(DS.Motion.alert, value: slot.activity)
-    }
-
-    private func color(_ activity: Activity) -> Color {
-        switch activity {
-        case .off: DS.Colors.textTertiary
-        case .running: DS.Colors.ok
-        case .busy: DS.Assessment.tint
-        }
     }
 
     /// The same five, always, in this order.
@@ -214,11 +207,11 @@ private struct AgentsStrip: View {
             }
         }
         return [
-            Slot(symbol: "mic.fill", tag: "VOICE", name: "Voice guide", status: voice.0, activity: voice.1),
-            Slot(symbol: "checkmark.shield.fill", tag: "SAFETY", name: "Safety checker", status: live ? "Checking" : "Off", activity: live ? .running : .off),
-            Slot(symbol: "eye.fill", tag: "SCENE", name: "Scene reader", status: scene.0, activity: scene.1),
-            Slot(symbol: "bolt.heart.fill", tag: "AED", name: "AED finder", status: aed.0, activity: aed.1),
-            Slot(symbol: "phone.fill", tag: "911", name: "911 agent", status: c.callerAgentActive ? "On call" : "Ready", activity: c.callerAgentActive ? .busy : .off),
+            Slot(symbol: "mic.fill", name: "Voice guide", status: voice.0, activity: voice.1),
+            Slot(symbol: "checkmark.shield.fill", name: "Safety checker", status: live ? "Checking" : "Off", activity: live ? .running : .off),
+            Slot(symbol: "eye.fill", name: "Scene reader", status: scene.0, activity: scene.1),
+            Slot(symbol: "bolt.heart.fill", name: "AED finder", status: aed.0, activity: aed.1),
+            Slot(symbol: "phone.fill", name: "911 agent", status: c.callerAgentActive ? "On call" : "Ready", activity: c.callerAgentActive ? .busy : .off),
         ]
     }
 }
