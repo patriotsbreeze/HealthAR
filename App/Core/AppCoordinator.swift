@@ -143,7 +143,7 @@ final class AppCoordinator {
     private(set) var operatorUsed = false
     private(set) var dispatcherOpen = false
     /// The latest read of the scene. It only informs, and goes when the session or the rescue does.
-    private(set) var assessment: SituationAssessment?
+    private(set) var sceneRead: SituationAssessment?
     /// Everything the voice AI saw, did, heard and said, newest first, for the drop-down under the read.
     private(set) var assessmentLog: [AssessmentLogEntry] = []
     private(set) var assessing = false
@@ -1212,7 +1212,7 @@ final class AppCoordinator {
             assessmentStats.quick = Array((assessmentStats.quick + [clock() - startedAt]).suffix(20))
             // A live report that landed while this was out is newer, and keeps the screen.
             guard startedAt >= sceneStartedAt else { return }
-            assessment = merged(result, startedAt: startedAt, source: .quickLook)
+            sceneRead = merged(result, startedAt: startedAt, source: .quickLook)
             noteEmergency(result.emergency)
             appendLog(.look, result.sees ?? result.headline, detail: result.prediction)
         } else if outcome.problem != "no camera frame" {
@@ -1221,7 +1221,7 @@ final class AppCoordinator {
             assessmentStats.failures += 1
             assessmentStats.lastProblem = outcome.problem
             SituationAssessor.log("quick backing off \(Int(quickBackoff))s after \(outcome.problem ?? "?")")
-            if assessment == nil { assessmentFailed = true }
+            if sceneRead == nil { assessmentFailed = true }
         }
     }
 
@@ -1237,7 +1237,7 @@ final class AppCoordinator {
         }
         lastLiveSceneAt = now
         SituationAssessor.log("live scene: \(screened.sees ?? "-") | \(screened.headline) | \(screened.prediction) (\(screened.confidence.rawValue)) note=\(report.note)")
-        assessment = merged(screened, startedAt: now, source: .live)
+        sceneRead = merged(screened, startedAt: now, source: .live)
         noteEmergency(screened.emergency)
         let note = SituationAssessor.screenNote(report.note, mode: liveMode)
         appendLog(.saw, screened.sees ?? screened.headline, detail: [note, screened.prediction].compactMap { $0 }.joined(separator: " · "))
@@ -1311,7 +1311,7 @@ final class AppCoordinator {
 
     private func clearAssessment() {
         assessRound += 1
-        assessment = nil
+        sceneRead = nil
         assessmentLog = []
         assessmentFailed = false
         assessing = false

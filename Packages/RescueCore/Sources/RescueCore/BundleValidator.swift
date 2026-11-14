@@ -127,21 +127,16 @@ public enum BundleValidator {
         for state in owned {
             let phrases = state.entryPhrases + state.allowedSay + state.repeating.map(\.phrase) + (state.timeout?.phrases ?? [])
             if let missing = phrases.first(where: { !phraseIDs.contains($0) }) { return "dangling phrase \(missing): \(state.id)" }
-            // Nobody has said the patient is awake, so silence here has to reach the arrest path, and soon.
-            if state.id == ScenarioModule.assessState {
-                guard let timeout = state.timeout, timeout.to == ScenarioModule.assessFallback, timeout.ifBreathsAtLeast == nil else {
-                    return "assess must time out to \(ScenarioModule.assessFallback): \(state.id)"
-                }
-                guard timeout.seconds <= ScenarioModule.maxAssessSeconds else {
-                    return "assess waits over \(Int(ScenarioModule.maxAssessSeconds)) s: \(state.id)"
-                }
+            // Only the rescuer moves the rescue on, so assess waits for a tap or their words. Start CPR
+            // and Not responding are always on its panel.
+            if state.id == ScenarioModule.assessState, state.timeout != nil {
+                return "assess must wait for the rescuer, with no timeout: \(state.id)"
             }
 
             for target in [state.timeout?.to, state.timeout?.ifBreathsAtLeast?.to].compactMap({ $0 }) {
                 guard let to = states[target] else { return "dangling timeout to \(target): \(state.id)" }
                 if let reason = refusal(from: state, to: to, in: states) { return "\(reason.rawValue): timeout \(state.id) to \(target)" }
                 for landing in landings(of: to, in: states) {
-                    if state.id == ScenarioModule.assessState, landing.id == ScenarioModule.assessFallback { continue }
                     guard !landing.kind.isArrestPath else { return "timeout into the arrest path: \(state.id) to \(landing.id)" }
                     guard landing.kind.isAwake else { return "timeout onto a card: \(state.id) to \(landing.id)" }
                     guard !isHumanOnly(landing) else { return "timeout into a human-only state: \(state.id) to \(landing.id)" }

@@ -22,12 +22,6 @@ public struct ScenarioModule: Sendable, Equatable, Codable {
     /// The first step when there's an AI to do the assessing: the camera and the bystander's words
     /// decide where the rescue goes, and nobody has said yet whether the patient is awake.
     public static let assessState = "assess"
-    /// Where assess goes with no route, the arrest path's first question, which is how a rescue opened
-    /// before there was an assess step. It's the one awake timeout the validator lets into that path.
-    static let assessFallback = "intake_responsive"
-    /// Long enough for a bystander to say what happened, and short enough that a silent collapse
-    /// still reaches the arrest path's questions quickly.
-    static let maxAssessSeconds: TimeInterval = 20
     /// Where an AED found in an awake scan shows after a collapse. It has no overlay of its own, and
     /// core's file can't give it one.
     public static let carriedAEDState = "compressions"

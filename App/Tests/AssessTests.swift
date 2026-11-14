@@ -51,9 +51,12 @@ import Testing
         #expect(!fixture.coordinator.isAssessing)
     }
 
-    @Test func aSeenCollapseGoesToTheBreathingQuestion() throws {
+    /// The AI seeing a collapse notes it and waits; the rescuer saying so moves it on.
+    @Test func aSeenCollapseWaitsAndAHeardOneGoesToTheBreathingQuestion() throws {
         let fixture = try begun()
-        report(.unresponsive, .medium, fixture)
+        report(.unresponsive, .medium, source: .seen, fixture)
+        #expect(fixture.coordinator.state.stateID == "assess")
+        report(.unresponsive, .medium, source: .heard, fixture)
         #expect(fixture.coordinator.state.stateID == "intake_breathing")
     }
 
@@ -71,13 +74,11 @@ import Testing
         #expect(awake.coordinator.state.stateID == "triage")
     }
 
-    @Test func withNothingWorkedOutItAsksTheArrestQuestion() throws {
+    @Test func withNothingWorkedOutItKeepsWatchingAndWaits() throws {
         let fixture = try begun()
-        fixture.run(seconds: 19.6)
+        fixture.run(seconds: 60)
         #expect(fixture.coordinator.isAssessing)
-        fixture.run(seconds: 0.6)
-        #expect(fixture.coordinator.state.stateID == "intake_responsive")
-        #expect(fixture.audio.played == ["assess_intro", "ask_responsive"])
+        #expect(fixture.audio.played == ["assess_intro"])
     }
 
     @Test func theStatusSaysWhenTheAIIsOff() throws {

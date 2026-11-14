@@ -29,13 +29,12 @@
       "metronome": "off",
       "frame_uplink": true,
       "allowed_say": ["assign_helper"],
-      "timeout": { "seconds": 20, "to": "intake_responsive" },
       "transitions": [
         { "on": "human.patient_awake", "to": "triage" },
         { "on": "model.other_concern", "to": "general_talk", "min_confidence": "medium" },
         { "on": "model.choking", "to": "choking_talk", "min_confidence": "medium" }
       ],
-      "citation": "Project design. The AI looks and listens before anything is assumed, and with no route in 20 s the arrest path's first question asks. Needs clinician approval"
+      "citation": "Project design. The AI looks and listens before anything is assumed, and the step waits for the rescuer: Start CPR, Not responding, Awake and talking, or what they say. Needs clinician approval"
     },
     {
       "id": "triage",

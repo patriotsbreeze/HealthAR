@@ -146,7 +146,7 @@ struct MainScreen: View {
                     }
                     if showsAssessment {
                         AssessmentChip(
-                            assessment: coordinator.assessment,
+                            assessment: coordinator.sceneRead,
                             log: coordinator.assessmentLog,
                             source: coordinator.assessmentSource?.rawValue,
                             assessing: coordinator.assessing,
@@ -205,7 +205,7 @@ struct MainScreen: View {
     private var showsAssessment: Bool {
         // The log shows on its own too, so the 911 agent's call is seen even with the AI offline.
         !coordinator.assessmentLog.isEmpty
-            || coordinator.liveConnected && (coordinator.assessing || coordinator.assessment != nil || coordinator.assessmentFailed)
+            || coordinator.liveConnected && (coordinator.assessing || coordinator.sceneRead != nil || coordinator.assessmentFailed)
     }
 
     /// Only a camera step's is a promise to someone aiming, the arrest path's hands and pads among

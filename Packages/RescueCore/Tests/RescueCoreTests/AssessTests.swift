@@ -8,7 +8,8 @@ import Testing
         ProtocolEngine(bundle: try loadMergedBundle().startingWithAssessment())
     }
 
-    private func report(_ finding: Finding, _ confidence: Confidence, source: ObservationSource = .seen, in session: inout Session) {
+    /// What the rescuer says routes; what the AI only sees is noted. Heard by default, as routing is.
+    private func report(_ finding: Finding, _ confidence: Confidence, source: ObservationSource = .heard, in session: inout Session) {
         session.model(.reportFinding(finding, source: source, confidence: confidence))
     }
 
@@ -52,7 +53,7 @@ import Testing
     @Test(arguments: [Finding.chestPain, .limbInjury, .choking, .otherConcern])
     func aLowReportIsOnlyNoted(finding: Finding) throws {
         var session = Session(engine: try engine())
-        report(finding, .low, in: &session)
+        report(finding, .low, source: .seen, in: &session)
         #expect(session.state.stateID == "assess")
         #expect(session.entries(.observation).last?.detail == "\(finding.rawValue),seen,low")
     }
@@ -87,42 +88,34 @@ import Testing
 
     // MARK: - Silence
 
-    /// With nothing worked out, it asks what a rescue always opened with, and still never starts CPR
-    /// without a tap.
-    @Test func silenceGoesToTheArrestQuestionsAndNeverToCPR() throws {
+    /// Only the rescuer moves the rescue on: silence keeps watching, and Start CPR is one tap.
+    @Test func silenceWaitsAndStartCprIsOneTap() throws {
         var session = Session(engine: try engine())
-        session.advance(19.8)
+        for _ in 0..<120 { session.advance(1) }
         #expect(session.state.stateID == "assess")
-        session.advance(0.4)
-        #expect(session.state.stateID == "intake_responsive")
-        #expect(session.phrases == ["ask_responsive"])
-        for _ in 0..<300 { session.advance(1) }
-        #expect(session.state.stateID == "call_911")
         #expect(!session.state.metronomeOn)
         session.human(.startCpr)
         #expect(session.state.stateID == "compressions")
     }
 
-    /// Someone describing what happened is the assessment working, so it waits for them, to a cap.
-    @Test func itWaitsWhileSomeoneIsDescribingButNotForever() throws {
+    /// The AI seeing it, however sure, notes it on the panel and waits for the rescuer.
+    @Test(arguments: [Finding.unresponsive, .chestPain, .heavyBleeding])
+    func whatTheAIOnlySeesMovesNothing(finding: Finding) throws {
         var session = Session(engine: try engine())
-        session.send(.modelTurn(active: true))
-        session.advance(25)
+        report(finding, .high, source: .seen, in: &session)
         #expect(session.state.stateID == "assess")
-        session.advance(9.8)
-        #expect(session.state.stateID == "assess")
-        session.advance(0.4)
-        #expect(session.state.stateID == "intake_responsive", "a turn that never ends can't hold it")
+        #expect(session.entries(.observation).last?.detail == "\(finding.rawValue),seen,high")
+        session.human(.patientUnresponsive)
+        #expect(session.state.stateID == "intake_breathing")
     }
 
-    @Test func aTurnThatEndsLetsTheFallbackGoAtOnce() throws {
+    @Test func aLongDescriptionNeverPushesItOn() throws {
         var session = Session(engine: try engine())
         session.send(.modelTurn(active: true))
-        session.advance(22)
-        #expect(session.state.stateID == "assess")
+        session.advance(60)
         session.send(.modelTurn(active: false))
-        session.advance(0.1)
-        #expect(session.state.stateID == "intake_responsive")
+        session.advance(5)
+        #expect(session.state.stateID == "assess")
     }
 
     // MARK: - What the loader holds it to
@@ -147,19 +140,14 @@ import Testing
         #expect(try refusal(try triage { _ in }) == nil)
     }
 
-    @Test func itMustFallBackToTheArrestQuestions() throws {
-        let elsewhere = try triage { $0["timeout"] = ["seconds": 20, "to": "general_talk"] }
-        #expect(try refusal(elsewhere)?.contains("assess must time out to intake_responsive") == true)
-        let never = try triage { $0.removeValue(forKey: "timeout") }
-        #expect(try refusal(never)?.contains("assess must time out to intake_responsive") == true)
+    @Test func itMayNotTimeOut() throws {
+        for target in ["intake_responsive", "general_talk"] {
+            let timed = try triage { $0["timeout"] = ["seconds": 20, "to": target] }
+            #expect(try refusal(timed)?.contains("assess must wait for the rescuer") == true, "\(target)")
+        }
     }
 
-    @Test func itMayNotWaitLong() throws {
-        let slow = try triage { $0["timeout"] = ["seconds": 45, "to": "intake_responsive"] }
-        #expect(try refusal(slow)?.contains("assess waits over 20 s") == true)
-    }
-
-    /// The exception is for assess alone: any other awake step timing out into the arrest path is refused.
+    /// No awake step may time out into the arrest path.
     @Test func noOtherAwakeStepMayTimeOutIntoTheArrestPath() throws {
         let url = repoRoot().appendingPathComponent("clinical/modules/triage.v1.json")
         var module = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
