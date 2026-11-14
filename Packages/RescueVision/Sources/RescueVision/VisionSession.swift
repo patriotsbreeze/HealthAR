@@ -123,6 +123,11 @@ public final class VisionSession: Sendable {
             injuryPin.map { now - $0.placedAt < VisionOverlay.pinSeconds } ?? false
         }
 
+        func showsChestEstimate(at now: TimeInterval) -> Bool {
+            overlayTarget == .chestCenter || showsHandsGuide(at: now)
+                || (overlayTarget == nil && ghostBeatStart != nil)
+        }
+
         func showsHandsGuide(at now: TimeInterval) -> Bool {
             overlayTarget == nil && (handsGuide?.contains(now) ?? false)
         }
@@ -508,6 +513,19 @@ public final class VisionSession: Sendable {
         }
     }
 
+    /// The 3D surface marker works independently of the Blender asset and body fit.
+    public func chestSurfacePlacement() -> ChestSurfacePlacement? {
+        let now = clock()
+        guard let estimate = pose.chestEstimate,
+              (0...VisionOverlay.maxJointAge).contains(now - estimate.capturedAt) else { return nil }
+        return state.withLock { state in
+            guard state.arActive, state.showsChestEstimate(at: now), !state.ghostPractice,
+                  let camera = state.ledger.latest, camera.tracking == .normal,
+                  (0...VisionOverlay.maxCameraAge).contains(now - camera.timestamp), state.mapping != nil else { return nil }
+            return estimate.surface
+        }
+    }
+
     /// The overlay for this instant, cheap enough to call every display frame.
     public func overlay() -> VisionOverlay {
         let now = clock()
@@ -544,7 +562,19 @@ public final class VisionSession: Sendable {
                 ? "Estimated hand placement - Not a sternum detection"
                 : "3D body fit - Template estimate"
         }
-        overlay.handsIn3D = (overlay.patientIn3D && patientBody?.showsChestEstimate == true) || handsPlacement() != nil
+        let chest = pose.chestEstimate
+        if let chest, (0...VisionOverlay.maxJointAge).contains(now - chest.capturedAt) {
+            overlay.sternumEstimate = state.withLock { state in
+                guard state.arActive, state.showsChestEstimate(at: now), !state.ghostPractice,
+                      let camera = state.ledger.latest, camera.tracking == .normal,
+                      (0...VisionOverlay.maxCameraAge).contains(now - camera.timestamp), let mapping = state.mapping else { return nil }
+                return mapping.ring(for: chest.target)
+            }
+        }
+        if overlay.sternumEstimate != nil {
+            overlay.chestEstimateLabel = "Estimated sternum region - Not anatomically verified"
+        }
+        overlay.handsIn3D = chestSurfacePlacement() != nil || handsPlacement() != nil
         return overlay
     }
 

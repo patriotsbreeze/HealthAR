@@ -248,3 +248,8 @@ Run on the iPhone 17 Pro with a manikin and an instructor-marked reference. Thes
 | Hide the body, interrupt AR, stop/start camera, or shed AR for heat | No stale world-space patient or chest disc; pose fit expires within 0.75 s when no fresh fit is available | Pending |
 | Remove/disable scene depth or make the mesh unavailable | Flat overlay remains usable; no claim that a 3D model is rendering | Pending |
 | Move the phone around the patient and rehearse for 10 minutes | Record drift, fit dropouts, frame rate, and thermal state. Check the emissive mesh does not obscure the real chest or controls | Pending |
+
+
+### Independent chest-region marker: pending
+
+On the hand-placement step, verify the dashed orange region and "Estimated sternum region - Not anatomically verified" label appear without the Blender mesh or LiDAR depth. With chest depth available but hip depth obscured, confirm the surface disc still appears independently of the body mesh. Outside the hand-placement guide or active compressions, no chest marker should show. Confirm it disappears for inferred hips, two lying candidates, camera interruption, and stale detections. Measure its offset from an instructor-marked manikin reference; successful rendering does not establish anatomical accuracy. All checks are pending device validation.

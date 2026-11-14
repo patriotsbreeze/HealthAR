@@ -29,6 +29,7 @@ final class GhostRenderer {
     private let detectedModel = Entity()
     private let detectedFill = Entity()
     private let detectedShell = Entity()
+    private let chestAnchor = AnchorEntity(world: .zero)
     private let chestEstimate = Entity()
     private var patientLoaded = false
 
@@ -57,7 +58,9 @@ final class GhostRenderer {
         detectedAnchor.addChild(detectedModel)
         detectedModel.addChild(detectedFill)
         detectedModel.addChild(detectedShell)
-        detectedAnchor.addChild(chestEstimate)
+        chestAnchor.isEnabled = false
+        chestAnchor.addChild(chestEstimate)
+        arView.scene.addAnchor(chestAnchor)
         // A coarse surface disc, not a pin claiming to identify a bone.
         let disc = ModelEntity(
             mesh: .generateCylinder(height: 0.004, radius: 0.045),
@@ -127,18 +130,22 @@ final class GhostRenderer {
                 eased.scale = simd_mix(eased.scale, target.scale, SIMD3(repeating: Self.bodyEasing))
                 eased.rotation = simd_slerp(eased.rotation, target.rotation, Self.bodyEasing)
                 detectedModel.transform = eased
-                chestEstimate.position = simd_mix(chestEstimate.position, placement.chest, SIMD3(repeating: Self.bodyEasing))
             } else {
                 detectedModel.transform = target
-                chestEstimate.position = placement.chest
             }
             detectedAnchor.isEnabled = true
-            chestEstimate.isEnabled = placement.showsChestEstimate
-            chestEstimate.orientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: placement.normal)
         } else {
             detectedAnchor.isEnabled = false
         }
-        if handsLoaded, !(patientLoaded && trackedBody?.showsChestEstimate == true), let placement = vision.handsPlacement() {
+        let surface = vision.chestSurfacePlacement()
+        if let surface {
+            chestAnchor.isEnabled = true
+            chestEstimate.position = surface.center
+            chestEstimate.orientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: surface.normal)
+        } else {
+            chestAnchor.isEnabled = false
+        }
+        if handsLoaded, surface == nil, let placement = vision.handsPlacement() {
             handsAnchor.isEnabled = true
             hands.transform = Transform(matrix: placement.transform)
         } else {

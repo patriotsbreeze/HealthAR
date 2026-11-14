@@ -141,6 +141,7 @@ struct ARScene: Equatable {
     var joints: [CGPoint] = []
     var bodies: [VisionOverlay.DetectedBody] = []
     var chestEstimateLabel: String?
+    var sternumEstimate: CGRect?
     var patientIn3D = false
     var zone: ARZone?
     var items: [ARItem] = []
@@ -157,7 +158,7 @@ struct ARScene: Equatable {
     /// The side each chip took, kept so a chip doesn't hop sides from frame to frame.
     var sides: [String: MarkPlacement.Side] = [:]
 
-    var hasMarks: Bool { !joints.isEmpty || zone != nil || !items.isEmpty || pointer != nil || ghost != nil || outline != nil }
+    var hasMarks: Bool { sternumEstimate != nil || !joints.isEmpty || zone != nil || !items.isEmpty || pointer != nil || ghost != nil || outline != nil }
     var markIDs: [String] { (outline == nil ? [] : [ARSceneBuilder.outlineID]) + (zone.map { [$0.id] } ?? []) + items.map(\.id) }
 }
 
