@@ -271,6 +271,8 @@ public struct VisionOverlay: Sendable, Equatable {
     static let pinSeconds: TimeInterval = 20
     /// Pads and limbs run at a capped pose rate, so they get a little longer than the ring's 0.2 s.
     static let maxZoneAge: TimeInterval = 0.35
+    /// Allow on-device inference latency without holding old dots indefinitely.
+    static let maxJointAge: TimeInterval = 0.75
 
     /// - Parameters:
     ///   - pose: Body regions from the latest pose frame. The chest zone shows only with the ring,
@@ -287,6 +289,7 @@ public struct VisionOverlay: Sendable, Equatable {
         carriedAED: SIMD3<Float>? = nil,
         injuryPin: PlacedPin? = nil,
         pose: TimedPose? = nil,
+        jointPose: TimedPose? = nil,
         items: [Material: PlacedObject] = [:],
         handsGuide: Bool = false,
         ghost: (anchor: GhostAnchor, push: Double, practice: Bool)? = nil,
@@ -354,8 +357,9 @@ public struct VisionOverlay: Sendable, Equatable {
             overlay.outline = mapping.outline(outline)
         }
 
-        if zoneFresh, let pose {
-            overlay.joints = pose.joints.map { mapping.viewPoint(fromImage: $0) }
+        let detectedJoints = jointPose ?? pose
+        if let detectedJoints, (0...maxJointAge).contains(detectedJoints.age(at: now)) {
+            overlay.joints = detectedJoints.joints.map { mapping.viewPoint(fromImage: $0) }
         }
 
         // World points, so only with tracking that holds the world steady.

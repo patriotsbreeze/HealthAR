@@ -160,7 +160,7 @@ public final class VisionSession: Sendable {
         }
 
         func needsPixels(at now: TimeInterval, holdsLimb: Bool) -> Bool {
-            poseDemand(at: now, holdsLimb: holdsLimb) != .none || uplink.isOpen || !pendingLocate.isEmpty
+            arActive || poseDemand(at: now, holdsLimb: holdsLimb) != .none || uplink.isOpen || !pendingLocate.isEmpty
         }
 
         /// The pin in this frame's capture image, while it lasts and is in front of the camera.
@@ -207,6 +207,7 @@ public final class VisionSession: Sendable {
             locator: locator,
             driver: driver,
             detect: { await detector.detect($0, rotation: $1) },
+            detectFrame: { await detector.detectFrame($0, rotation: $1) },
             clock: { ProcessInfo.processInfo.systemUptime },
             runsPump: true
         )
@@ -220,6 +221,7 @@ public final class VisionSession: Sendable {
         locator: any ObjectLocating,
         driver: any CameraDriver,
         detect: @escaping PoseDetector,
+        detectFrame: PoseFrameDetector? = nil,
         clock: @escaping @Sendable () -> TimeInterval,
         runsPump: Bool,
         encode: (@Sendable (CapturedFrame, CaptureRotation) async -> Data?)? = nil
@@ -228,7 +230,7 @@ public final class VisionSession: Sendable {
         self.clock = clock
         let encoder = FrameEncoder()
         self.encode = encode ?? { await encoder.encode($0, rotation: $1) }
-        pose = PoseWorker(detect: detect)
+        pose = PoseWorker(detect: detect, detectFrame: detectFrame)
         objects = ObjectLocator(locator: locator, clock: clock) { [driver] ray in
             await driver.surfacePoint(along: ray)
         }
@@ -478,6 +480,7 @@ public final class VisionSession: Sendable {
                 carriedAED: state.showsCarriedAED ? carriedPoint : nil,
                 injuryPin: state.injuryPin,
                 pose: latestPose,
+                jointPose: pose.jointPose,
                 items: callouts.filter { state.wanted.contains($0.key) },
                 handsGuide: state.showsHandsGuide(at: now),
                 ghost: state.ghostAnchor.flatMap { anchor in
@@ -757,12 +760,16 @@ public final class VisionSession: Sendable {
                 state.pendingLocate.subtract(locate)
             }
             let demand = state.poseDemand(at: now, holdsLimb: holdsLimb)
-            let rate = demand.framesPerSecond(load: state.load, now: now)
+            // Joint visualization runs locally whenever the camera is active, including intake
+            // and an untapped injury view. It never opens either network gate.
+            let rate = demand == .none && state.arActive
+                ? min(state.load.poseFramesPerSecond, 10)
+                : demand.framesPerSecond(load: state.load, now: now)
             var request: PoseRequest?
             if rate > 0, now - state.lastPoseAt >= 1 / rate {
                 state.lastPoseAt = now
                 switch demand {
-                case .none: break
+                case .none: request = .joints
                 case .lying: request = .lying
                 case .nearPin: request = .nearPin(anchor: state.pinAnchor(in: record, at: now))
                 case .rescuer: request = .rescuer

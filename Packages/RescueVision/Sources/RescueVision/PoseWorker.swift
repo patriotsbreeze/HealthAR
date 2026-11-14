@@ -33,6 +33,13 @@ struct PoseOrientationScan: Sendable {
     }
 }
 
+struct PoseDetection: Sendable {
+    var people: [DetectedPerson]
+    var joints: [SIMD2<Double>]
+}
+
+typealias PoseFrameDetector = @Sendable (CapturedFrame, CaptureRotation) async -> PoseDetection
+
 struct VisionPoseDetector: Sendable {
     private let request: DetectHumanBodyPoseRequest = {
         var request = DetectHumanBodyPoseRequest()
@@ -41,13 +48,18 @@ struct VisionPoseDetector: Sendable {
     }()
 
     func detect(_ frame: CapturedFrame, rotation: CaptureRotation) async -> [DetectedPerson] {
+        await detectFrame(frame, rotation: rotation).people
+    }
+
+    func detectFrame(_ frame: CapturedFrame, rotation: CaptureRotation) async -> PoseDetection {
         // A failed request is the same as seeing nobody: no ring, and voice carries on.
         guard let observations = try? await request.perform(on: frame.pixels, orientation: rotation.cgOrientation) else {
-            return []
+            return PoseDetection(people: [], joints: [])
         }
         // Capture image space is the buffer as captured, so its aspect is the buffer's.
         let aspect = Double(CVPixelBufferGetWidth(frame.pixels)) / Double(max(1, CVPixelBufferGetHeight(frame.pixels)))
-        return observations.compactMap { observation in
+        var visible: [SIMD2<Double>] = []
+        let people = observations.compactMap { observation -> DetectedPerson? in
             var joints: [BodyJoint: DetectedPerson.Joint] = [:]
             for (name, joint) in observation.allJoints() {
                 guard let body = BodyJoint(name) else { continue }
@@ -56,8 +68,17 @@ struct VisionPoseDetector: Sendable {
                     confidence: Double(joint.confidence)
                 )
             }
+            // Display all measured body joints, even when a torso cannot be selected for guidance.
+            for name in BodyJoint.allCases {
+                guard let joint = joints[name], joint.confidence >= 0.3,
+                      joint.position.x.isFinite, joint.position.y.isFinite,
+                      (0...1).contains(joint.position.x), (0...1).contains(joint.position.y)
+                else { continue }
+                visible.append(joint.position)
+            }
             return DetectedPerson(joints: joints, imageAspect: aspect)
         }
+        return PoseDetection(people: people, joints: visible)
     }
 }
 
@@ -91,6 +112,8 @@ extension BodyJoint {
 
 /// What pose is asked to find in a frame.
 enum PoseRequest: Sendable, Equatable {
+    /// Display joints without selecting a patient or changing guidance.
+    case joints
     case lying
     /// `anchor` is the pin in this frame's capture image, or nil once it is gone or out of sight.
     case nearPin(anchor: SIMD2<Double>?)
@@ -124,6 +147,7 @@ final class PoseWorker: Sendable {
         var scan = PoseOrientationScan()
         var latest: TimedTorsoTarget?
         var latestPose: TimedPose?
+        var jointPose: TimedPose?
         var lastNoTargetReason: NoTargetReason?
         var smoother = JointSmoother()
         var lastBone: LimbBone?
@@ -136,12 +160,17 @@ final class PoseWorker: Sendable {
     static let heldLimbGrace: TimeInterval = 0.5
 
     private let state = Mutex(State())
-    private let detect: PoseDetector
+    private let detect: PoseFrameDetector
     private let selector = PatientSelector()
 
-    init(detect: @escaping PoseDetector) {
-        self.detect = detect
+    init(detect: @escaping PoseDetector, detectFrame: PoseFrameDetector? = nil) {
+        self.detect = detectFrame ?? { frame, rotation in
+            let people = await detect(frame, rotation)
+            return PoseDetection(people: people, joints: people.flatMap(\.visibleJoints))
+        }
     }
+
+    var jointPose: TimedPose? { state.withLock { $0.jointPose } }
 
     var latest: TimedTorsoTarget? { state.withLock { $0.latest } }
     var latestPose: TimedPose? { state.withLock { $0.latestPose } }
@@ -157,6 +186,7 @@ final class PoseWorker: Sendable {
             state.generation += 1
             state.latest = nil
             state.latestPose = nil
+            state.jointPose = nil
             state.lastNoTargetReason = nil
             state.smoother.reset()
             state.lastBone = nil
@@ -166,17 +196,24 @@ final class PoseWorker: Sendable {
 
     /// The person compressing, upright in the portrait-locked app, so no rotation scan.
     @concurrent func rescuer(_ frame: CapturedFrame, record: FrameRecord) async -> CompressionSample? {
-        let people = await detect(frame, .right)
+        let generation = state.withLock { $0.generation }
+        let detection = await detect(frame, .right)
+        publishJoints(detection.joints, record: record, generation: generation)
+        let people = detection.people
         let gravity = record.tracking == .notAvailable ? nil : record.pose.gravityInImage
         return CompressionSignal.sample(people: people, gravity: gravity, imageAspect: record.pose.imageAspect)
     }
 
     @concurrent func process(_ frame: CapturedFrame, record: FrameRecord, request: PoseRequest = .lying) async {
         let (rotation, generation) = state.withLock { ($0.scan.current, $0.generation) }
-        let people = await detect(frame, rotation)
+        let detection = await detect(frame, rotation)
+        publishJoints(detection.joints, record: record, generation: generation)
+        let people = detection.people
         state.withLock { state in
             guard state.generation == generation else { return }
             switch request {
+            case .joints:
+                state.scan.record(foundTarget: !detection.joints.isEmpty)
             case .lying:
                 findLying(people, record: record, in: &state)
             case let .nearPin(anchor):
@@ -184,6 +221,13 @@ final class PoseWorker: Sendable {
             case .rescuer:
                 break
             }
+        }
+    }
+
+    private func publishJoints(_ joints: [SIMD2<Double>], record: FrameRecord, generation: UInt64) {
+        state.withLock { state in
+            guard state.generation == generation else { return }
+            state.jointPose = TimedPose(regions: BodyRegions(), joints: joints, frameID: record.id, capturedAt: record.timestamp)
         }
     }
 
