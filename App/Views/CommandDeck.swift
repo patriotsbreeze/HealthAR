@@ -6,7 +6,6 @@ import SwiftUI
 struct CommandDeck: View {
     let coordinator: AppCoordinator
     let onStopRequested: (RescueControl) -> Void
-    let onDispatcher: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var bottomInset: CGFloat = 0
     @State private var contentHeight: CGFloat = 2000
@@ -40,9 +39,9 @@ struct CommandDeck: View {
                         }
                         Group {
                             if awake {
-                                AwakeRows(coordinator: coordinator, compact: camera, onDispatcher: onDispatcher)
+                                AwakeRows(coordinator: coordinator, compact: camera)
                             } else {
-                                ArrestRows(coordinator: coordinator, onStopRequested: onStopRequested, onDispatcher: onDispatcher)
+                                ArrestRows(coordinator: coordinator, onStopRequested: onStopRequested)
                             }
                         }
                         .padding(.top, camera ? DS.Space.m : DS.Space.l)
@@ -71,7 +70,7 @@ struct CommandDeck: View {
             }
         }
         .padding(.horizontal, DS.Space.deckPadding)
-        .padding(.top, camera ? DS.Space.m : DS.Space.deckPadding)
+        .padding(.top, DS.Space.m)
         // The home indicator's strip is already clear, so the deck only needs its own margin where there isn't one.
         .padding(.bottom, bottomInset > 0 ? DS.Space.xs : DS.Space.l)
         // Exactly the width it's given. A row a fraction wider would otherwise widen the whole screen.
@@ -83,13 +82,14 @@ struct CommandDeck: View {
     }
 }
 
-/// Inset from the edges, with corners that follow the display's where it meets them.
+/// Frosted glass, inset from the edges, with corners that follow the display's where it meets them.
+/// The camera shows through as a hint; the dark tint keeps the step readable over a bright scene.
 private struct DeckSurface: View {
     var body: some View {
-        let shape = ConcentricRectangle(uniformTopCorners: .fixed(DS.Radius.deck), uniformBottomCorners: .concentric(minimum: .fixed(DS.Radius.deck)))
-        shape
-            .fill(DS.Colors.surface)
-            .overlay(shape.stroke(DS.Colors.hairline, lineWidth: 1))
+        let shape = ConcentricRectangle(uniformTopCorners: .fixed(DS.Glass.deckRadius), uniformBottomCorners: .concentric(minimum: .fixed(DS.Glass.deckRadius)))
+        Color.clear
+            .glassSurface(shape, tint: DS.Glass.deckTint)
+            .shadow(color: .black.opacity(0.35), radius: 24, y: 12)
             .padding(.bottom, DS.Space.deckInset)
             .ignoresSafeArea(.container, edges: .bottom)
     }
@@ -194,7 +194,7 @@ private struct WhyDisclosure: View {
                 }
                 .padding(.horizontal, DS.Space.m)
                 .frame(minHeight: DS.Height.control)
-                .background(DS.Colors.surfaceRaised, in: RoundedRectangle(cornerRadius: DS.Radius.row, style: .continuous))
+                .background(DS.Glass.fill, in: RoundedRectangle(cornerRadius: DS.Radius.row, style: .continuous))
                 .contentShape(RoundedRectangle(cornerRadius: DS.Radius.row, style: .continuous))
             }
             .buttonStyle(.plain)

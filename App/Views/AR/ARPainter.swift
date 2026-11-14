@@ -16,7 +16,7 @@ enum ARPainter {
         if let ghost = scene.ghost { paintGhost(ghost, in: &context) }
         if let zone = scene.zone {
             appearing(appear[zone.id], around: zone.center, style: style, in: &context) { layer in
-                paintZone(zone, in: &layer)
+                paintZone(zone, handsIn3D: scene.handsIn3D, in: &layer)
             }
         }
         for item in scene.items {
@@ -76,10 +76,11 @@ enum ARPainter {
         return StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round, dash: [max(0.5, looks[0] - width), looks[1] + width])
     }
 
-    private static func paintZone(_ zone: ARZone, in context: inout GraphicsContext) {
+    private static func paintZone(_ zone: ARZone, handsIn3D: Bool, in context: inout GraphicsContext) {
         switch zone.shape {
         case let .chest(center, _, _, _, palm, fingers):
             zoneLayers(zone.path, lock: zone.lock, in: &context)
+            if handsIn3D { break }
             let hands = ARGeometry.ghostHands(heel: center, fingerAngle: fingers, palmRadius: palm)
             // The lower hand whole, then the upper one on a solid base, so where they overlap the upper
             // hand lies on top and the pair reads as two hands stacked.

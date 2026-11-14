@@ -7,7 +7,7 @@ let package = Package(
     products: [.library(name: "RescueVision", targets: ["RescueVision"])],
     dependencies: [.package(path: "../RescueCore")],
     targets: [
-        .target(name: "RescueVision", dependencies: ["RescueCore"], resources: [.copy("Resources/Ghost.usdz")]),
+        .target(name: "RescueVision", dependencies: ["RescueCore"], resources: [.copy("Resources/Ghost.usdz"), .copy("Resources/Hands.usdz")]),
         .testTarget(name: "RescueVisionTests", dependencies: ["RescueVision"]),
     ]
 )

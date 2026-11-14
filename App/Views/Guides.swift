@@ -69,8 +69,7 @@ private struct StepGuide<Picture: View>: View {
         }
         .padding(10)
         .frame(maxWidth: pictureOnly ? nil : .infinity)
-        .background(DS.Colors.surface, in: RoundedRectangle(cornerRadius: DS.Radius.row, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: DS.Radius.row, style: .continuous).strokeBorder(DS.Colors.hairline, lineWidth: 1))
+        .glassSurface(RoundedRectangle(cornerRadius: DS.Radius.row + 4, style: .continuous))
         .accessibilityElement()
         .accessibilityLabel(detail.map { "\(title) \($0)" } ?? title)
     }
@@ -123,8 +122,7 @@ struct PadZonesGuide: View {
         }
         .frame(maxWidth: 150)
         .padding(10)
-        .background(DS.Colors.surface, in: RoundedRectangle(cornerRadius: DS.Radius.row, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: DS.Radius.row, style: .continuous).strokeBorder(DS.Colors.hairline, lineWidth: 1))
+        .glassSurface(RoundedRectangle(cornerRadius: DS.Radius.row + 4, style: .continuous))
         .accessibilityElement()
         .accessibilityLabel("Coarse pad zones: upper right chest and lower left side. Manikin only.")
     }

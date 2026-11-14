@@ -101,6 +101,7 @@ final class FakeVision: VisionPort, @unchecked Sendable {
         var practicePlacements: [CGPoint?] = []
         var practicePlaces = true
         var practiceClears = 0
+        var showsGhost = false
     }
 
     private let state = Mutex(State())
@@ -185,6 +186,8 @@ final class FakeVision: VisionPort, @unchecked Sendable {
         }
     }
     func clearPracticePatient() { state.withLock { $0.practiceClears += 1 } }
+    var showsGhost: Bool { state.withLock { $0.showsGhost } }
+    func setShowsGhost(_ shows: Bool) { state.withLock { $0.showsGhost = shows } }
 }
 
 func shippedBundle() throws -> ProtocolBundle {

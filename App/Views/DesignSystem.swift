@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Clinical night. The camera first, a near-black deck, white type, and one meaning per color. Every
+/// Clinical night, in glass. The camera first, a frosted dark deck, white type, and one meaning per color. Every
 /// color, size and timing a view uses comes from here, so a view that needs something missing here is
 /// asking for a new meaning. That's a design decision before it's a code one.
 enum DS {}
@@ -116,8 +116,9 @@ struct DSFont: Equatable, Sendable {
 
 extension DS {
     enum Fonts {
-        /// The step. Never shrinks past 0.85, so it stays readable at a glance.
-        static let command = DSFont(size: 34, weight: .bold, relativeTo: .largeTitle)
+        /// The step. 26 so a long one takes three lines, not four, and the camera keeps the screen.
+        /// Never shrinks past 0.85, so it stays readable at a glance.
+        static let command = DSFont(size: 26, weight: .bold, relativeTo: .largeTitle)
         /// A camera step's step. SAFETY.md holds it at 24 pt, so the band keeps its room.
         static let commandCompact = DSFont(size: 24, weight: .bold, relativeTo: .title)
         static let confirm = DSFont(size: 34, weight: .bold, relativeTo: .largeTitle)
@@ -195,22 +196,56 @@ extension DS {
         static let row: CGFloat = 14
     }
 
-    /// Minimum heights. These are the pinned gloved-hand sizes, and a label that needs more grows the button.
+    /// Frosted panels over the camera. Each one carries a dark tint, so white type on it reads over a
+    /// bright scene too, and Reduce Transparency swaps every one for its solid twin.
+    enum Glass {
+        /// Under the deck and the sheets. Strong enough that the camera is a hint, not a backdrop to text.
+        static let deckTint = Color(hex: 0x14161C, opacity: 0.42)
+        /// Under a pill or a chip, where a few words sit over the picture.
+        static let chipTint = Color(hex: 0x16181E, opacity: 0.40)
+        /// A secondary or answer button on glass, and its edge.
+        static let fill = Color.white.opacity(0.12)
+        /// The lit top of that fill, so a button reads as a pane of glass and not a grey shape.
+        static let fillTop = Color.white.opacity(0.26)
+        static let edge = Color.white.opacity(0.28)
+        /// The deck's own rim, which catches the light along the top.
+        static let rim = Color.white.opacity(0.18)
+        /// Light catches the top edge brightest and fades down the sides.
+        static let rimLight = LinearGradient(
+            colors: [Color.white.opacity(0.55), Color.white.opacity(0.08), Color.white.opacity(0.22)],
+            startPoint: .top, endPoint: .bottom
+        )
+        /// A faint sheen down the top of a panel, under its text.
+        static let sheen = LinearGradient(colors: [Color.white.opacity(0.12), .clear], startPoint: .top, endPoint: .center)
+        /// Start CPR, lit from above. The bottom stop is `criticalFill`, so white on it keeps its ratio.
+        static let criticalTop = Color(hex: 0xFF4D45)
+        /// Not responding now and the held stops: the red meaning, as a wash under the stroke.
+        static let criticalWash = Color(hex: Hex.critical, opacity: 0.14)
+        /// The deck floats: off the sides, and off the bottom by the same amount.
+        static let deckRadius: CGFloat = 32
+        static let deckGap: CGFloat = 10
+        /// With no camera up, the screen is this dusk instead of flat black, so the glass has depth.
+        static let backdropTop = Color(hex: 0x3A4458)
+        static let backdropBottom = Color(hex: 0x0E1117)
+    }
+
+    /// Minimum heights. Compact so the camera keeps the screen, and never under 44, the least a finger
+    /// is given. A label that needs more grows the button.
     enum Height {
         /// Start CPR and Resume CPR on the arrest path.
-        static let arrestPrimary: CGFloat = 84
-        static let arrest: CGFloat = 68
+        static let arrestPrimary: CGFloat = 64
+        static let arrest: CGFloat = 54
         /// No, keep pushing.
         static let stopCancel: CGFloat = 96
         /// Yes, stop CPR.
         static let stopConfirm: CGFloat = 84
         /// Answers, triage and steps when someone is awake.
-        static let awake: CGFloat = 56
-        static let awakeHold: CGFloat = 58
+        static let awake: CGFloat = 50
+        static let awakeHold: CGFloat = 50
         /// Start CPR and Not responding now, outside the scroll.
-        static let awakeWayOut: CGFloat = 60
+        static let awakeWayOut: CGFloat = 52
         /// Holds on a camera step, and the standing row.
-        static let camera: CGFloat = 48
+        static let camera: CGFloat = 44
         static let strip: CGFloat = 28
         static let rail: CGFloat = 44
         static let pill: CGFloat = 28
@@ -330,5 +365,35 @@ extension AnyTransition {
                 insertion: .opacity.combined(with: .offset(y: DS.Motion.stepRise)),
                 removal: .opacity.animation(DS.Motion.stepOut)
             )
+    }
+}
+
+/// A frosted panel in the given shape, with a rim along its edge. Reduce Transparency, or a test host
+/// with no glass, gets the solid surface it stands in for.
+struct GlassSurface<S: Shape>: ViewModifier {
+    let shape: S
+    var tint = DS.Glass.chipTint
+    var solid = DS.Colors.surface
+    var interactive = false
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if reduceTransparency {
+            content
+                .background(solid, in: shape)
+                .overlay(shape.stroke(DS.Colors.hairline, lineWidth: 1))
+        } else {
+            content
+                // Under the text, over the glass: the sheen is part of the panel, not a wash on the words.
+                .background(DS.Glass.sheen, in: shape)
+                .glassEffect(interactive ? .regular.tint(tint).interactive() : .regular.tint(tint), in: shape)
+                .overlay(shape.stroke(DS.Glass.rimLight, lineWidth: 1))
+        }
+    }
+}
+
+extension View {
+    func glassSurface<S: Shape>(_ shape: S, tint: Color = DS.Glass.chipTint, solid: Color = DS.Colors.surface, interactive: Bool = false) -> some View {
+        modifier(GlassSurface(shape: shape, tint: tint, solid: solid, interactive: interactive))
     }
 }

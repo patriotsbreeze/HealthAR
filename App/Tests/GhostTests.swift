@@ -30,6 +30,35 @@ import Testing
         #expect(fixture.vision.practiceClears == 1)
     }
 
+    @Test func theGhostStandsInForThePushPulseAndThePulseComesBackWithoutIt() throws {
+        let fixture = try Fixture(arSupported: true, cameraAllowed: true)
+        let coordinator = fixture.coordinator
+        coordinator.beginRescue()
+        coordinator.perform(.startCpr)
+        #expect(coordinator.showsBeatPulse, "nothing placed yet, so the pulse")
+
+        fixture.vision.setShowsGhost(true)
+        fixture.run(seconds: 0.4)
+        #expect(!coordinator.showsBeatPulse, "the ghost is the beat")
+        #expect(coordinator.showsPulse, "the step still has a beat")
+        #expect(!coordinator.pulseDocked)
+        #expect(coordinator.arContext.pulse == .hidden)
+
+        fixture.vision.setShowsGhost(false)
+        fixture.run(seconds: 0.4)
+        #expect(coordinator.showsBeatPulse, "lost tracking brings the pulse straight back")
+    }
+
+    @Test func noCameraKeepsThePushPulse() throws {
+        let fixture = try Fixture()
+        fixture.vision.setShowsGhost(true)
+        let coordinator = fixture.coordinator
+        coordinator.beginRescue()
+        coordinator.perform(.startCpr)
+        fixture.run(seconds: 0.4)
+        #expect(coordinator.showsBeatPulse)
+    }
+
     @Test func thePracticePatientIsOfferedInCompressionsWithTheCameraUp() throws {
         let fixture = try Fixture(arSupported: true, cameraAllowed: true)
         let coordinator = fixture.coordinator
@@ -175,4 +204,17 @@ private let rescuer = VisionOverlay.Figure(segments: [segment], head: CGPoint(x:
         view: CGSize(width: 400, height: 800)
     )
     #expect(scene.ghost == nil)
+}
+
+@Test func realisticHandsTakeOverFromTheFlatOnes() {
+    var overlay = VisionOverlay.empty
+    overlay.handsIn3D = true
+    let scene = ARSceneBuilder.build(
+        overlay: overlay,
+        context: ARContext(),
+        band: CGRect(x: 0, y: 100, width: 400, height: 300),
+        view: CGSize(width: 400, height: 800)
+    )
+    #expect(scene.handsIn3D)
+    #expect(!ARSceneBuilder.build(overlay: .empty, context: ARContext(), band: CGRect(x: 0, y: 100, width: 400, height: 300), view: CGSize(width: 400, height: 800)).handsIn3D)
 }

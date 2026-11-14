@@ -138,6 +138,19 @@ public final class VisionSession: Sendable {
             )
         }
 
+        func handsPlacement(at now: TimeInterval) -> HandsPlacement? {
+            guard overlayTarget == .chestCenter || showsHandsGuide(at: now), let anchor = ghostAnchor,
+                  let camera = ledger.latest, camera.tracking == .normal,
+                  now - camera.timestamp <= VisionOverlay.maxCameraAge
+            else { return nil }
+            return HandsPlacement(transform: simd_float4x4(columns: (
+                SIMD4(anchor.headward, 0),
+                SIMD4(GhostAnchor.up, 0),
+                SIMD4(anchor.side, 0),
+                SIMD4(anchor.chest, 1)
+            )))
+        }
+
         /// The ghost is up and pushing, so the person compressing is measured against it.
         var coaching: Bool { overlayTarget == nil && ghostAnchor != nil && ghostBeatStart != nil }
 
@@ -376,7 +389,7 @@ public final class VisionSession: Sendable {
     /// on the phone. A chest found later by pose takes over from it.
     @discardableResult
     public func placePracticePatient(atViewPoint point: CGPoint? = nil) async -> Bool {
-        let request: (id: UInt64, ray: WorldRay, camera: SIMD3<Float>, epoch: UInt64)? = state.withLock { state in
+        let request: (id: UInt64, ray: WorldRay, camera: CameraPose, epoch: UInt64)? = state.withLock { state in
             guard let camera = state.ledger.latest, camera.tracking == .normal,
                   clock() - camera.timestamp <= VisionOverlay.maxCameraAge,
                   let mapping = state.mapping
@@ -384,10 +397,10 @@ public final class VisionSession: Sendable {
             let screen = point ?? CGPoint(x: state.viewport.width / 2, y: state.viewport.height / 2)
             guard let image = mapping.imagePoint(fromScreen: screen) else { return nil }
             state.practiceRequestID += 1
-            return (state.practiceRequestID, camera.pose.ray(throughImagePoint: image), camera.pose.position, state.worldEpoch)
+            return (state.practiceRequestID, camera.pose.ray(throughImagePoint: image), camera.pose, state.worldEpoch)
         }
         guard let request, let floor = await driver.surfacePoint(along: request.ray),
-              let anchor = GhostAnchor(floor: floor, camera: request.camera)
+              let anchor = GhostAnchor(floor: floor, camera: request.camera.position, cameraDown: request.camera.screenDown)
         else { return false }
         return state.withLock { state in
             guard state.practiceRequestID == request.id, state.worldEpoch == request.epoch else { return false }
@@ -455,7 +468,7 @@ public final class VisionSession: Sendable {
         let aedPoint = objects.worldPoint(.aed)
         let carriedPoint = objects.carriedPoint(.aed)
         let callouts = objects.callouts()
-        return state.withLock { state in
+        var overlay = state.withLock { state in
             VisionOverlay.compose(
                 target: state.overlayTarget,
                 ring: state.ring.output(latest: latest, at: now),
@@ -475,6 +488,9 @@ public final class VisionSession: Sendable {
                 now: now
             )
         }
+        // The 3D hands take over from the flat ones wherever they show.
+        overlay.handsIn3D = handsPlacement() != nil
+        return overlay
     }
 
     /// Maps capture image space to the screen for the latest frame. Nil before a viewport is
@@ -658,6 +674,17 @@ public final class VisionSession: Sendable {
         }
     }
 
+    /// The ghost is on screen and pushing on the beat, so it can stand in for the Push pulse.
+    public var showsGhost: Bool { ghostPlacement() != nil }
+
+    /// The stacked hands on the chest, while the step shows where they go: place_hands, or the hands
+    /// guide at the start of compressions. Needs the chest placed in the world and a fresh camera
+    /// with normal tracking, like every world mark.
+    public func handsPlacement() -> HandsPlacement? {
+        let now = clock()
+        return state.withLock { $0.handsPlacement(at: now) }
+    }
+
     /// How the person compressing compares with the ghost, or nil while there's no ghost to follow or
     /// nobody has been seen compressing lately.
     public func compressionFeedback() -> CompressionFeedback? {
@@ -694,7 +721,9 @@ public final class VisionSession: Sendable {
             if let image = latest.hips {
                 hips = await driver.surfaceHit(along: camera.ray(throughImagePoint: image))
             }
-            guard let anchor = GhostAnchor(chest: chest, shoulders: shoulders, hips: hips, camera: camera.position) else { return }
+            guard let anchor = GhostAnchor(
+                chest: chest, shoulders: shoulders, hips: hips, camera: camera.position, cameraDown: camera.screenDown
+            ) else { return }
             self?.state.withLock { state in
                 guard state.worldEpoch == epoch else { return }
                 state.ghostAnchor = anchor

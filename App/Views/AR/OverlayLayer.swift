@@ -11,7 +11,7 @@ extension AppCoordinator {
             invitesInjuryTap: invitesInjuryTap,
             pinMessage: pinMessage?.text,
             carriedAED: mayShowCarriedAED,
-            pulse: showsPulse ? (pulseDocked ? .docked : .centered) : .hidden,
+            pulse: showsBeatPulse ? (pulseDocked ? .docked : .centered) : .hidden,
             guideInCorner: definition?.guide != nil,
             handsGuide: showsHandsGuide,
             cameraLive: cameraLive
@@ -19,7 +19,7 @@ extension AppCoordinator {
     }
 
     /// The beat moves out of the middle on a step that also draws on the camera, so the body stays clear.
-    var pulseDocked: Bool { showsPulse && (overlayTarget != nil || showsHandsGuide) }
+    var pulseDocked: Bool { showsBeatPulse && (overlayTarget != nil || showsHandsGuide) }
 
     /// The pads are drawn on the body where they can be seen, so the diagram can go. Only when the
     /// overlay last drew both inside the band: pads imaged under the deck are cut away and only pointed

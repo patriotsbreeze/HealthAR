@@ -66,6 +66,9 @@ struct CameraPose: Sendable, Equatable {
 
     var position: SIMD3<Float> { transform.columns.3.xyz }
 
+    /// The bottom of the portrait screen, in the world: capture image +x runs down the view.
+    var screenDown: SIMD3<Float> { transform.columns.0.xyz }
+
     /// World down in capture image axes. Assumes gravity world alignment, where -y is down.
     var gravityInImage: SIMD2<Double> {
         [Double(-transform.columns.0.y), Double(transform.columns.1.y)]

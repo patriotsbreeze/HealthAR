@@ -19,11 +19,14 @@ struct MainScreen: View {
 
     var body: some View {
         ZStack {
-            DS.Colors.canvas.ignoresSafeArea()
+            // Dusk, not flat black, so the glass has something to sit on when no camera is up. The
+            // camera covers it whenever one is.
+            LinearGradient(colors: [DS.Glass.backdropTop, DS.Glass.backdropBottom], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
             cameraLayer
             VStack(spacing: 0) {
                 SimulationStrip(operatorUsed: coordinator.operatorUsed) { present(.operatorPanel) }
-                StatusRail(coordinator: coordinator, showsHUD: $showsHUD, onAgents: { present(.agents) }) { present(.sentinel) }
+                StatusRail(coordinator: coordinator, showsHUD: $showsHUD, onAgents: { present(.agents) }, onDispatcher: { present(.dispatcher) }) { present(.sentinel) }
                 if showsHUD { LatencyHUD(coordinator: coordinator) }
                 if coordinator.isHandoff {
                     HandoffCardView(coordinator: coordinator)
@@ -38,10 +41,8 @@ struct MainScreen: View {
                         .preference(key: FreeCameraArea.self, value: freeArea)
                 }
                 // Sized first, so the band gets what's left, and never less than its least.
-                CommandDeck(coordinator: coordinator, onStopRequested: { pendingStop = $0 }) {
-                    present(.dispatcher)
-                }
-                .layoutPriority(1)
+                CommandDeck(coordinator: coordinator, onStopRequested: { pendingStop = $0 })
+                    .layoutPriority(1)
             }
             // Above the panels, or a chest outside the band would hide behind them. The marks themselves
             // stay inside the band.
@@ -120,11 +121,19 @@ struct MainScreen: View {
             } else {
                 Color.clear
             }
-            if coordinator.showsPulse {
+            if coordinator.showsBeatPulse {
                 let docked = coordinator.pulseDocked
                 BeatPulse(diameter: docked ? DS.Pulse.docked : DS.Pulse.standard)
                     .padding(docked ? DS.Pulse.dockedInset : 0)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: docked ? .topTrailing : .center)
+            }
+            if coordinator.aiTalking || coordinator.aiListening {
+                // Top-leading is the one corner nothing else in the band uses, and a tap goes through it.
+                ListeningBubble(mode: coordinator.aiTalking ? .talking : .listening)
+                    .padding(DS.Space.m)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
             }
             if coordinator.offersPracticePatient {
                 // Bottom-trailing is free in compressions. The patient lands where the band's middle meets the floor.
@@ -137,14 +146,6 @@ struct MainScreen: View {
                 }
                 .padding(DS.Space.m)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-            }
-            if coordinator.aiTalking || coordinator.aiListening {
-                // Top-leading is the one corner nothing else in the band uses, and a tap goes through it.
-                ListeningBubble(mode: coordinator.aiTalking ? .talking : .listening)
-                    .padding(DS.Space.m)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
             }
             if coordinator.overlayTarget == .padZones {
                 // Vision finds the body some frames in, and nothing here would redraw when it does.

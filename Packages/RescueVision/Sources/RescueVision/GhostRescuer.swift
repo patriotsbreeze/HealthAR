@@ -59,6 +59,16 @@ public struct GhostPlacement: Sendable, Equatable {
     public static let outlineOpacity: Float = 0.85
 }
 
+/// Where to draw the stacked hands on the chest: hand space, from tools/make_ghost_model.py, to world.
+/// Heel of the lower hand on the chest, +z toward the rescuer, fingers away from them.
+public struct HandsPlacement: Sendable, Equatable {
+    public var transform: simd_float4x4
+
+    /// Blue glass, see-through so the chest shows under them. Each hand is one closed skin, so nothing
+    /// inside it shows through.
+    public static let opacity: Float = 0.6
+}
+
 /// Where the ghost kneels, in world coordinates with gravity along -y.
 struct GhostAnchor: Sendable, Equatable {
     var chest: SIMD3<Float>
@@ -77,10 +87,16 @@ struct GhostAnchor: Sendable, Equatable {
     static let up = SIMD3<Float>(0, 1, 0)
 
     /// The ghost kneels on the patient's far side from the camera, facing it, so its body never
-    /// stands between the phone and the chest. Nil when the camera is right above the chest, where
-    /// no side reads as far.
-    init?(chest: SIMD3<Float>, shoulders: SIMD3<Float>?, hips: SIMD3<Float>? = nil, camera: SIMD3<Float>) {
-        let away = Self.level(chest - camera)
+    /// stands between the phone and the chest. From a phone held over the chest no side reads as
+    /// far, so the rescuer is taken to be at the bottom of the screen, `cameraDown`, where the person
+    /// holding it kneels. Nil overhead without it.
+    init?(chest: SIMD3<Float>, shoulders: SIMD3<Float>?, hips: SIMD3<Float>? = nil, camera: SIMD3<Float>, cameraDown: SIMD3<Float>? = nil) {
+        var away = Self.level(chest - camera)
+        let height = abs(camera.y - chest.y)
+        // Steeper than about 70 degrees down, the camera's position says little about which side is which.
+        if simd_length(away) < max(0.05, 0.35 * height), let down = cameraDown.map(Self.level), simd_length(down) > 0.1 {
+            away = down
+        }
         guard simd_length(away) > 0.05 else { return nil }
         let awayUnit = simd_normalize(away)
         var headward = shoulders.map { Self.level($0 - chest) } ?? .zero
@@ -99,8 +115,8 @@ struct GhostAnchor: Sendable, Equatable {
     }
 
     /// A practice patient placed on the floor: lying across the view, chest at manikin height.
-    init?(floor: SIMD3<Float>, camera: SIMD3<Float>) {
-        self.init(chest: floor + Self.up * GhostRescuer.chestHeight, shoulders: nil, camera: camera)
+    init?(floor: SIMD3<Float>, camera: SIMD3<Float>, cameraDown: SIMD3<Float>? = nil) {
+        self.init(chest: floor + Self.up * GhostRescuer.chestHeight, shoulders: nil, camera: camera, cameraDown: cameraDown)
     }
 
     private static func level(_ v: SIMD3<Float>) -> SIMD3<Float> { [v.x, 0, v.z] }

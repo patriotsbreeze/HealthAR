@@ -20,8 +20,9 @@ struct BeatPulse: View {
             GeometryReader { geometry in
                 let side = min(geometry.size.width, geometry.size.height)
                 ZStack {
-                    Circle().fill(DS.Colors.surface)
-                    Circle().strokeBorder(DS.Colors.hairline, lineWidth: 1)
+                    // A tinted disc, not live glass: this redraws every frame.
+                    Circle().fill(DS.Glass.chipTint)
+                    Circle().strokeBorder(DS.Glass.rim, lineWidth: 1)
                     // Never below 0.84, so the label always sits on cyan.
                     Circle()
                         .fill(DS.Colors.target)

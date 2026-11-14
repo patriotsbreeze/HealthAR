@@ -41,9 +41,11 @@ struct CommandButtonStyle: ButtonStyle {
             .background(fill, in: Capsule(style: .continuous))
             .overlay {
                 if let edge {
-                    Capsule(style: .continuous).strokeBorder(edge, lineWidth: kind == .criticalOutline ? 2 : 1)
+                    Capsule(style: .continuous).strokeBorder(edge, lineWidth: kind == .criticalOutline ? 1.5 : 1)
                 }
             }
+            // Start CPR glows a little, so it's the brightest thing on the glass.
+            .shadow(color: kind == .critical ? DS.Colors.criticalFill.opacity(0.45) : .clear, radius: 12, y: 6)
             .contentShape(Capsule(style: .continuous))
             .brightness(configuration.isPressed ? (kind == .primary ? -0.12 : 0.08) : 0)
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
@@ -51,12 +53,14 @@ struct CommandButtonStyle: ButtonStyle {
             .opacity(isEnabled ? 1 : 0.4)
     }
 
-    private var fill: Color {
+    /// On the glass deck: white for the step, a frosted fill for the rest, red lit from above for Start CPR.
+    private var fill: AnyShapeStyle {
         switch kind {
-        case .primary: DS.Colors.primaryFill
-        case .secondary, .answer, .criticalOutline: DS.Colors.surfaceRaised
-        case .critical: DS.Colors.criticalFill
-        case .quiet: .clear
+        case .primary: AnyShapeStyle(LinearGradient(colors: [.white, DS.Colors.primaryFill.opacity(0.88)], startPoint: .top, endPoint: .bottom))
+        case .secondary, .answer: AnyShapeStyle(LinearGradient(colors: [DS.Glass.fillTop, DS.Glass.fill], startPoint: .top, endPoint: .bottom))
+        case .criticalOutline: AnyShapeStyle(DS.Glass.criticalWash)
+        case .critical: AnyShapeStyle(LinearGradient(colors: [DS.Glass.criticalTop, DS.Colors.criticalFill], startPoint: .top, endPoint: .bottom))
+        case .quiet: AnyShapeStyle(Color.clear)
         }
     }
 
@@ -67,7 +71,7 @@ struct CommandButtonStyle: ButtonStyle {
     private var edge: Color? {
         switch kind {
         case .primary, .critical: nil
-        case .secondary, .answer, .quiet: DS.Colors.hairline
+        case .secondary, .answer, .quiet: DS.Glass.edge
         case .criticalOutline: DS.Colors.critical
         }
     }
@@ -105,7 +109,9 @@ struct HoldButton: View {
 
     var body: some View {
         ZStack {
-            Capsule(style: .continuous).fill(DS.Colors.surfaceRaised)
+            Capsule(style: .continuous).fill(tone == .critical
+                ? AnyShapeStyle(DS.Glass.criticalWash)
+                : AnyShapeStyle(LinearGradient(colors: [DS.Glass.fillTop, DS.Glass.fill], startPoint: .top, endPoint: .bottom)))
             // Progress, not decoration, so Reduce Motion keeps it.
             GeometryReader { geometry in
                 Rectangle()
@@ -130,7 +136,7 @@ struct HoldButton: View {
         .clipShape(Capsule(style: .continuous))
         .overlay {
             Capsule(style: .continuous)
-                .strokeBorder(tone == .critical ? DS.Colors.critical : DS.Colors.hairline, lineWidth: tone == .critical ? 2 : 1)
+                .strokeBorder(tone == .critical ? DS.Colors.critical : DS.Glass.edge, lineWidth: tone == .critical ? 1.5 : 1)
         }
         .frame(maxWidth: .infinity, minHeight: minHeight)
         .contentShape(Capsule(style: .continuous))

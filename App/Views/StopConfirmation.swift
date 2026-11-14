@@ -43,7 +43,14 @@ struct StopConfirmation: View {
             .padding(DS.Space.xl)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
-        .background(DS.Colors.canvas.ignoresSafeArea())
+        // Dusk with a red glow from the top: the same screen family, and plainly a warning.
+        .background {
+            ZStack {
+                LinearGradient(colors: [DS.Glass.backdropTop, DS.Glass.backdropBottom], startPoint: .top, endPoint: .bottom)
+                RadialGradient(colors: [DS.Colors.criticalFill.opacity(0.35), .clear], center: .top, startRadius: 0, endRadius: 520)
+            }
+            .ignoresSafeArea()
+        }
         .accessibilityAddTraits(.isModal)
         // A change of value is what plays it, so it's set once the screen is up.
         .sensoryFeedback(DS.Haptics.stopAsked, trigger: shown)

@@ -304,6 +304,13 @@ final class AppCoordinator {
     private(set) var metronomeOn = false
     /// A practice patient lies on the floor for the ghost to kneel beside.
     private(set) var practicePatientPlaced = false
+    /// The ghost is on screen pushing on the beat, read each tick.
+    private(set) var ghostShowsBeat = false
+
+    /// The Push pulse, unless the ghost is up to follow instead. Whenever the ghost can't show, for no
+    /// camera, lost tracking, nothing placed or the AED talking, the pulse comes straight back, so
+    /// compressions always have a beat on screen.
+    var showsBeatPulse: Bool { showsPulse && !ghostShowsBeat }
 
     /// Compressions with the camera up: the ghost can kneel by an imaginary patient when nobody is
     /// lying down. It draws only, sends nothing and gates nothing.
@@ -538,6 +545,8 @@ final class AppCoordinator {
         let status = vision.status
         if status != visionStatus { visionStatus = status }
         if let until = handsGuideUntil, now >= until { handsGuideUntil = nil }
+        let ghost = showsPulse && cameraLive && metronomeOn && vision.showsGhost
+        if ghost != ghostShowsBeat { ghostShowsBeat = ghost }
         let talking = liveConnected && audio.modelAudioPending
         if talking != aiTalking { aiTalking = talking }
         retryLocate(at: now)

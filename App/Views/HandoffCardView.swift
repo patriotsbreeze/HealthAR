@@ -40,8 +40,7 @@ struct HandoffCardView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollBounceBehavior(.basedOnSize)
-        .background(DS.Colors.surface, in: RoundedRectangle(cornerRadius: DS.Radius.deck, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: DS.Radius.deck, style: .continuous).strokeBorder(DS.Colors.hairline, lineWidth: 1))
+        .glassSurface(RoundedRectangle(cornerRadius: DS.Glass.deckRadius, style: .continuous), tint: DS.Glass.deckTint)
     }
 
     private var divider: some View {

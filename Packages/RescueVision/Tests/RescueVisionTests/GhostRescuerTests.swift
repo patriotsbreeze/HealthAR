@@ -298,3 +298,72 @@ private func frame(_ session: VisionSession, tracking: TrackingQuality = .normal
     let outline = try #require(root.findEntity(named: "PatientOutline")).visualBounds(relativeTo: nil)
     #expect(outline.max.y > patient.max.y, "the outline sits just outside the body")
 }
+
+// MARK: - The hands, and a phone held over the chest
+
+@Test func overTheChestTheRescuerIsAtTheBottomOfTheScreen() throws {
+    let anchor = try #require(GhostAnchor(chest: chest, shoulders: nil, camera: chest + [0.02, 0.6, 0], cameraDown: [0, 0, 1]))
+    #expect(isClose(anchor.side, [0, 0, 1]))
+    #expect(abs(simd_dot(anchor.headward, anchor.side)) < 1e-4)
+}
+
+@Test func fromTheSideTheCamerasPositionStillDecides() throws {
+    // Screen-down says otherwise, but a camera well off to one side knows which side is far.
+    let anchor = try #require(GhostAnchor(chest: chest, shoulders: nil, camera: .zero, cameraDown: [1, 0, 0]))
+    #expect(isClose(anchor.side, [0, 0, -1]))
+}
+
+@Test func screenDownPointsDownTheView() throws {
+    let camera = CameraPose(transform: portraitLevel, intrinsics: testIntrinsics, imageResolution: [1920, 1440])
+    let ahead = camera.position + SIMD3<Float>(0, 0, -2)
+    guard case let .inFront(center) = camera.project(ahead),
+          case let .inFront(lower) = camera.project(ahead + camera.screenDown * 0.2) else { throw CancellationError() }
+    #expect(portraitMapping.viewPoint(fromImage: lower).y > portraitMapping.viewPoint(fromImage: center).y)
+}
+
+@Test func theHandsShowWhereTheStepShowsWhereHandsGo() async throws {
+    let clock = TestClock()
+    let lying = person(center: [0.5, 0.6], axisDegrees: 0, aspect: 4.0 / 3)
+    let session = makeSession(clock: clock, surface: chest, people: [lying])
+    session.apply(.overlay(.chestCenter))
+    await frame(session)
+    #expect(await waitUntil { session.hasGhostAnchor })
+    let hands = try #require(session.handsPlacement())
+    #expect(isClose(hands.transform.columns.3.xyz, chest))
+    #expect(session.overlay().handsIn3D, "the flat hands give way")
+
+    // Compressions: up for the hands guide, gone after it.
+    session.apply(.overlay(nil))
+    session.beginHandsGuide()
+    await frame(session)
+    #expect(session.handsPlacement() != nil)
+    clock.advance(VisionSession.handsGuideSeconds)
+    await frame(session)
+    #expect(session.handsPlacement() == nil)
+    #expect(!session.overlay().handsIn3D)
+}
+
+@Test func noChestPlacedKeepsTheFlatHands() async {
+    let clock = TestClock()
+    let lying = person(center: [0.5, 0.6], axisDegrees: 0, aspect: 4.0 / 3)
+    let session = makeSession(clock: clock, surface: nil, people: [lying])
+    session.apply(.overlay(.chestCenter))
+    await frame(session)
+    #expect(session.handsPlacement() == nil)
+    #expect(!session.overlay().handsIn3D)
+}
+
+@MainActor
+@Test func theHandsModelHasTheHeelOnTheChestAndFingersAway() async throws {
+    let url = try #require(Bundle.module.url(forResource: "Hands", withExtension: "usdz"))
+    let root = try await Entity(contentsOf: url)
+    for name in ["HandLower", "HandUpper"] {
+        #expect(root.findEntity(named: name) != nil, "\(name)")
+    }
+    let bounds = root.visualBounds(relativeTo: nil)
+    #expect(bounds.min.y > -0.02, "only the lower thumb tucks against the chest")
+    #expect(bounds.max.y < 0.13, "a stack of two hands, not a tower")
+    #expect(bounds.min.z < -0.12, "fingers reach away from the rescuer")
+    #expect(bounds.max.z < 0.06, "only a stub of wrist toward them")
+    #expect(bounds.max.x - bounds.min.x < 0.22, "about a hand wide, with the lower thumb resting out to the side")
+}

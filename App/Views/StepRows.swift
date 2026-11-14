@@ -8,8 +8,6 @@ struct AwakeRows: View {
     let coordinator: AppCoordinator
     /// A camera step needs the room for something to aim at. These are the tallest rows that can give any.
     var compact = false
-    let onDispatcher: () -> Void
-    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         let layout = RescueControls.awakeLayout(coordinator.controls)
@@ -52,30 +50,11 @@ struct AwakeRows: View {
                 }
                 .fixedSize(horizontal: false, vertical: true)
             }
-            if typeSize > .large {
-                // Three to a row has no room at a larger text size, so EMS arrived gets its own, as on
-                // the arrest path, and the two standing buttons share the next.
-                ForEach(layout.emsArrived) { control in
-                    HoldButton(title: control.title, hint: "Hold for 2 seconds.", minHeight: DS.Height.camera, font: DS.Fonts.buttonCompact) {
-                        coordinator.perform(control.action)
-                    }
+            // The dispatcher and Someone is with me live in the rail's menu, so the deck is only the step.
+            ForEach(layout.emsArrived) { control in
+                HoldButton(title: control.title, hint: "Hold for 2 seconds.", minHeight: DS.Height.camera, font: DS.Fonts.buttonCompact) {
+                    coordinator.perform(control.action)
                 }
-                HStack(spacing: DS.Space.betweenButtons) {
-                    DispatcherButton(height: DS.Height.camera, font: DS.Fonts.buttonCompact, action: onDispatcher)
-                    SecondPersonButton(coordinator: coordinator, height: DS.Height.camera, font: DS.Fonts.buttonCompact)
-                }
-                .fixedSize(horizontal: false, vertical: true)
-            } else {
-                HStack(spacing: DS.Space.betweenButtons) {
-                    ForEach(layout.emsArrived) { control in
-                        HoldButton(title: control.title, hint: "Hold for 2 seconds.", minHeight: DS.Height.camera, font: DS.Fonts.buttonSmall) {
-                            coordinator.perform(control.action)
-                        }
-                    }
-                    DispatcherButton(height: DS.Height.camera, font: DS.Fonts.buttonSmall, action: onDispatcher)
-                    SecondPersonButton(coordinator: coordinator, height: DS.Height.camera, font: DS.Fonts.buttonSmall)
-                }
-                .fixedSize(horizontal: false, vertical: true)
             }
         }
         .rowTypeCap()
@@ -138,7 +117,6 @@ struct WayOutRow: View {
 struct ArrestRows: View {
     let coordinator: AppCoordinator
     let onStopRequested: (RescueControl) -> Void
-    let onDispatcher: () -> Void
 
     var body: some View {
         let controls = coordinator.controls
@@ -182,43 +160,8 @@ struct ArrestRows: View {
                 }
                 .fixedSize(horizontal: false, vertical: true)
             }
-            if !coordinator.isHandoff {
-                HStack(spacing: DS.Space.betweenButtons) {
-                    DispatcherButton(height: DS.Height.arrest, font: DS.Fonts.buttonCompact, action: onDispatcher)
-                    SecondPersonButton(coordinator: coordinator, height: DS.Height.arrest, font: DS.Fonts.buttonCompact)
-                }
-                .fixedSize(horizontal: false, vertical: true)
-            }
         }
         .rowTypeCap()
-    }
-}
-
-/// Places no call. A teammate's phone plays the dispatcher.
-private struct DispatcherButton: View {
-    let height: CGFloat
-    let font: DSFont
-    let action: () -> Void
-
-    var body: some View {
-        Button("CALL MOCK DISPATCHER", action: action)
-            .buttonStyle(CommandButtonStyle(kind: .quiet, height: height, font: font))
-            .accessibilityLabel("Call mock dispatcher. Places no call.")
-    }
-}
-
-/// Gone once someone is with them, since saying so twice changes nothing.
-private struct SecondPersonButton: View {
-    let coordinator: AppCoordinator
-    let height: CGFloat
-    let font: DSFont
-
-    var body: some View {
-        if !coordinator.state.resources.contains(.secondPerson) {
-            Button(RescueControls.title(for: .secondPerson)) { coordinator.perform(.secondPerson) }
-                .buttonStyle(CommandButtonStyle(kind: .quiet, height: height, font: font))
-                .accessibilityLabel(RescueControls.title(for: .secondPerson))
-        }
     }
 }
 

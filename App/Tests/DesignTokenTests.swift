@@ -84,16 +84,16 @@ private func contrast(_ a: UInt32, _ b: UInt32) -> Double {
         #expect(BeatPulse.label == "Push")
     }
 
-    /// Big enough for wet or gloved hands. A label that needs more grows the button, never the other way.
+    /// Compact for the camera, and never under the 44 pt a finger needs. A label that needs more grows the button, never the other way.
     @Test func buttonHeightsAreThePinnedOnes() {
-        #expect(DS.Height.arrestPrimary == 84)
-        #expect(DS.Height.arrest == 68)
+        #expect(DS.Height.arrestPrimary == 64)
+        #expect(DS.Height.arrest == 54)
         #expect(DS.Height.stopCancel == 96)
         #expect(DS.Height.stopConfirm == 84)
-        #expect(DS.Height.awake == 56)
-        #expect(DS.Height.awakeHold == 58)
-        #expect(DS.Height.awakeWayOut == 60)
-        #expect(DS.Height.camera == 48)
+        #expect(DS.Height.awake == 50)
+        #expect(DS.Height.awakeHold == 50)
+        #expect(DS.Height.awakeWayOut == 52)
+        #expect(DS.Height.camera == 44)
     }
 
     @Test func theBeatHasItsThreeSizes() {
@@ -110,7 +110,7 @@ private func contrast(_ a: UInt32, _ b: UInt32) -> Double {
             DS.Fonts.caption, DS.Fonts.strip, DS.Fonts.badge, DS.Fonts.value,
         ]
         #expect(tokens.allSatisfy { [Font.Weight.regular, .semibold, .bold].contains($0.weight) })
-        #expect(DS.Fonts.command.size == 34)
+        #expect(DS.Fonts.command.size == 26)
         #expect(DS.Fonts.command.weight == .bold)
         #expect(DS.Fonts.commandCompact.size == 24, "SAFETY.md holds a camera step's command at 24 pt")
     }

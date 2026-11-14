@@ -208,6 +208,8 @@ protocol VisionPort: AnyObject, Sendable {
     func clearPracticePatient()
     /// How the person compressing compares with the ghost, nil with nothing to say.
     func compressionFeedback() -> CompressionFeedback?
+    /// The ghost is on screen pushing on the beat.
+    var showsGhost: Bool { get }
 }
 
 extension VisionPort {
@@ -216,6 +218,7 @@ extension VisionPort {
     func placePracticePatient(atViewPoint point: CGPoint?) async -> Bool { false }
     func clearPracticePatient() {}
     func compressionFeedback() -> CompressionFeedback? { nil }
+    var showsGhost: Bool { false }
 }
 
 extension VisionSession: VisionPort {}

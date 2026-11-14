@@ -19,6 +19,10 @@ final class GhostRenderer {
     private var upperRest = SIMD3<Float>.zero
     private var tone: GhostPlacement.Tone?
     private var update: (any Cancellable)?
+    /// The stacked hands on the chest, for place_hands and the hands guide.
+    private let handsAnchor = AnchorEntity(world: .zero)
+    private let hands = Entity()
+    private var handsLoaded = false
 
     init(arView: ARView, vision: VisionSession) {
         self.vision = vision
@@ -34,10 +38,29 @@ final class GhostRenderer {
         light.look(at: [0, 0, 0], from: [0.4, 2, 0.6], relativeTo: nil)
         model.addChild(light)
         arView.scene.addAnchor(anchor)
+        handsAnchor.isEnabled = false
+        handsAnchor.addChild(hands)
+        let handsLight = DirectionalLight()
+        handsLight.light.intensity = 1200
+        handsLight.look(at: [0, 0, 0], from: [0.3, 1, 0.5], relativeTo: nil)
+        handsAnchor.addChild(handsLight)
+        arView.scene.addAnchor(handsAnchor)
         update = arView.scene.subscribe(to: SceneEvents.Update.self) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }
-        Task { await load() }
+        Task {
+            await load()
+            await loadHands()
+        }
+    }
+
+    private func loadHands() async {
+        guard let url = Bundle.module.url(forResource: "Hands", withExtension: "usdz"),
+              let root = try? await Entity(contentsOf: url)
+        else { return }
+        hands.addChild(root)
+        apply(PhysicallyBasedMaterial.glassHand, to: hands)
+        handsLoaded = true
     }
 
     private func load() async {
@@ -65,6 +88,12 @@ final class GhostRenderer {
     }
 
     private func refresh() {
+        if handsLoaded, let placement = vision.handsPlacement() {
+            handsAnchor.isEnabled = true
+            hands.transform = Transform(matrix: placement.transform)
+        } else {
+            handsAnchor.isEnabled = false
+        }
         guard upper != nil, let placement = vision.ghostPlacement() else {
             anchor.isEnabled = false
             return
@@ -110,5 +139,24 @@ final class GhostRenderer {
     }
 
     private static let patientColor = UIColor(white: 0.92, alpha: 1)
+}
+
+extension PhysicallyBasedMaterial {
+    /// Clear blue glass: see-through so the chest shows, glossy so the room's light catches its edges
+    /// and gives each hand a rim, and faintly lit from within so it reads in a dim room.
+    static var glassHand: PhysicallyBasedMaterial {
+        var material = PhysicallyBasedMaterial()
+        material.baseColor = .init(tint: UIColor(red: 0.18, green: 0.48, blue: 1, alpha: 1))
+        material.roughness = 0.12
+        material.metallic = 0.0
+        material.specular = 1.0
+        material.clearcoat = 1.0
+        material.clearcoatRoughness = 0.05
+        material.emissiveColor = .init(color: UIColor(red: 0.2, green: 0.5, blue: 1, alpha: 1))
+        material.emissiveIntensity = 0.25
+        material.blending = .transparent(opacity: .init(floatLiteral: HandsPlacement.opacity))
+        material.faceCulling = .back
+        return material
+    }
 }
 #endif

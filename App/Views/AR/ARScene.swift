@@ -128,6 +128,8 @@ struct ARScene: Equatable {
     var hint: ARChip?
     /// Drawn under every other mark, and nothing is kept clear of it, since it is see-through.
     var ghost: ARGhost?
+    /// The AR view draws realistic hands on the chest, so the zone draws without its flat ones.
+    var handsIn3D = false
     /// Where nothing may be laid over: the beat and the guide card.
     var obstacles: [CGRect] = []
     /// The side each chip took, kept so a chip doesn't hop sides from frame to frame.
@@ -294,6 +296,7 @@ enum ARSceneBuilder {
         }
         guard !context.trackingLost else { return scene }
         scene.ghost = overlay.ghost.map { ghost($0, view: view) }
+        scene.handsIn3D = overlay.handsIn3D
         let lock: (Bool) -> ARLock = { context.estimating || !$0 ? .estimating : .locked }
 
         // The zone: one, from vision's zones when it has them, else today's ring or pin.
