@@ -23,11 +23,11 @@ struct AssessmentChip: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DS.Space.s) {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
             Button { if !log.isEmpty { collapsed.toggle() } } label: {
                 summary
-                    .padding(.horizontal, DS.Space.m)
-                    .padding(.vertical, DS.Space.s)
+                    .padding(.horizontal, DS.Space.s + 2)
+                    .padding(.vertical, 6)
                     .frame(minHeight: DS.Height.control)
                     .frostedGlass(RoundedRectangle(cornerRadius: DS.Assessment.radius, style: .continuous))
                     .contentShape(RoundedRectangle(cornerRadius: DS.Assessment.radius, style: .continuous))
@@ -40,7 +40,7 @@ struct AssessmentChip: View {
             if isOpen {
                 // Its own pane under the pill, dropping down from it, so the pill stays two lines.
                 details(assessment)
-                    .padding(DS.Space.s + 2)
+                    .padding(DS.Space.s)
                     .frame(maxWidth: DS.Assessment.panelWidth, alignment: .leading)
                     .frostedGlass(RoundedRectangle(cornerRadius: DS.Assessment.radius, style: .continuous))
                     .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.96, anchor: .top)))
@@ -61,7 +61,7 @@ struct AssessmentChip: View {
                         // Red, and first, because it's the one line that should stop someone.
                         Label(emergency, systemImage: "exclamationmark.triangle.fill")
                             .labelStyle(TightLabel(iconColor: DS.Colors.critical))
-                            .dsFont(DS.Fonts.label)
+                            .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(DS.Colors.critical)
                             .lineLimit(2)
                             .transition(.opacity)
@@ -72,25 +72,25 @@ struct AssessmentChip: View {
                         if assessment.sees != nil { Image(systemName: "eye") }
                     }
                     .labelStyle(TightLabel())
-                    .dsFont(DS.Fonts.label)
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(DS.Colors.textPrimary)
                     .lineLimit(2)
                     Text("\(assessment.prediction) · \(assessment.confidence.rawValue)")
-                        .dsFont(DS.Fonts.caption)
+                        .font(.system(size: 11))
                         .foregroundStyle(DS.Colors.textSecondary)
                         .lineLimit(1)
                 }
                 .contentTransition(.opacity)
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(DS.Colors.textPrimary)
-                    .frame(width: 22, height: 22)
+                    .frame(width: 18, height: 18)
                     .background(DS.Glass.fill, in: Circle())
                     .rotationEffect(.degrees(isOpen ? 180 : 0))
             } else {
                 Text(failed && !assessing ? Self.failedText : Self.pendingText)
-                    .dsFont(DS.Fonts.label)
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(DS.Colors.textSecondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -99,18 +99,18 @@ struct AssessmentChip: View {
     }
 
     private func details(_ assessment: SituationAssessment?) -> some View {
-        VStack(alignment: .leading, spacing: DS.Space.s) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 5) {
                 Circle()
                     .fill(source == AppCoordinator.AssessmentSource.live.rawValue ? DS.Colors.ok : DS.Assessment.tint)
-                    .frame(width: 7, height: 7)
+                    .frame(width: 6, height: 6)
                 Text("Live log")
-                    .dsFont(DS.Fonts.meta)
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(DS.Colors.textPrimary)
                 Spacer(minLength: 0)
                 if let source {
                     Text(source)
-                        .dsFont(DS.Fonts.badge)
+                        .font(.system(size: 9))
                         .foregroundStyle(DS.Colors.textTertiary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
@@ -119,11 +119,11 @@ struct AssessmentChip: View {
             if let watch = assessment?.watchFor {
                 Label(watch, systemImage: "exclamationmark.triangle")
                     .labelStyle(TightLabel())
-                    .dsFont(DS.Fonts.caption)
+                    .font(.system(size: 11))
                     .foregroundStyle(DS.Colors.textPrimary)
             }
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 5) {
+                LazyVStack(alignment: .leading, spacing: 3) {
                     ForEach(log) { LogRow(entry: $0) }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -132,8 +132,10 @@ struct AssessmentChip: View {
             .frame(maxHeight: DS.Assessment.openMaxHeight)
             .animation(DS.Motion.alert, value: log)
             Text(Self.footnote)
-                .dsFont(DS.Fonts.caption)
+                .font(.system(size: 9))
                 .foregroundStyle(DS.Colors.textTertiary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
     }
 
@@ -225,24 +227,25 @@ private struct LogRow: View {
     let entry: AppCoordinator.AssessmentLogEntry
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
             Text(elapsedText(entry.at))
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .foregroundStyle(DS.Colors.textTertiary)
             Image(systemName: symbol)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(tint)
-                .frame(width: 14)
+                .frame(width: 11)
             VStack(alignment: .leading, spacing: 1) {
                 Text(entry.text)
-                    .font(entry.kind == .tool ? .system(size: 12, weight: .regular, design: .monospaced) : nil)
+                    .font(entry.kind == .tool ? .system(size: 10, weight: .regular, design: .monospaced) : nil)
+                    .lineLimit(2)
                     .foregroundStyle(entry.kind == .alert ? DS.Colors.critical : [.saw, .call].contains(entry.kind) ? DS.Colors.textPrimary : DS.Colors.textSecondary)
                     .fontWeight(entry.kind == .alert ? .semibold : nil)
                 if let detail = entry.detail {
-                    Text(detail).foregroundStyle(DS.Colors.textTertiary)
+                    Text(detail).foregroundStyle(DS.Colors.textTertiary).lineLimit(1)
                 }
             }
-            .font(.system(size: 12))
+            .font(.system(size: 11))
             .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)
