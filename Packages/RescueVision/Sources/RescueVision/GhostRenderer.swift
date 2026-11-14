@@ -36,6 +36,7 @@ final class GhostRenderer {
     private var patientLoaded = false
     /// The real legs, placed on their own rather than carried by the torso's transform.
     private let detectedLegs = TrackedLegs()
+    private var skinnedModels: [ModelEntity] = []
 
     init(arView: ARView, vision: VisionSession) {
         self.vision = vision
@@ -79,6 +80,7 @@ final class GhostRenderer {
         }
         Task {
             await load()
+            await loadTrackedRig()
             await loadHands()
         }
     }
@@ -137,6 +139,49 @@ final class GhostRenderer {
         tone = nil
     }
 
+    private func loadTrackedRig() async {
+        guard let url = Bundle.module.url(forResource: "TrackedPatient", withExtension: "usdz"),
+              let root = try? await Entity(contentsOf: url),
+              let body = root.findEntity(named: "Body"), let shell = root.findEntity(named: "Shell") else { return }
+        var models: [ModelEntity] = []
+        visit(root) { entity in
+            if let model = entity as? ModelEntity, !model.jointNames.isEmpty { models.append(model) }
+        }
+        guard !models.isEmpty, models.allSatisfy({ $0.jointNames.allSatisfy { TrackedPatientRig.canonicalName($0) != nil } }) else { return }
+        root.stopAllAnimations(recursive: true)
+        apply(Self.patientGlow(opacity: 0.048), to: body)
+        var glow = Self.patientGlow(opacity: 0.48)
+        glow.faceCulling = .front
+        apply(glow, to: shell)
+        detectedModel.addChild(root)
+        detectedFill.isEnabled = false
+        detectedShell.isEnabled = false
+        // The skinned body carries its own legs, driven by the same joints.
+        detectedLegs.root.isEnabled = false
+        skinnedModels = models
+        vision.patientRigDidLoad()
+    }
+
+    private func poseTrackedMesh(_ placement: PatientBodyPlacement) {
+        guard !skinnedModels.isEmpty else { return }
+        let pose = TrackedPatientRig.localPose(worldPoints: placement.rigJoints, modelToWorld: detectedModel.transform.matrix)
+        for model in skinnedModels {
+            let previous = model.jointTransforms
+            model.jointTransforms = model.jointNames.enumerated().map { index, name in
+                if let key = TrackedPatientRig.canonicalName(name), let matrix = pose[key] { return Transform(matrix: matrix) }
+                return index < previous.count ? previous[index] : Transform()
+            }
+        }
+    }
+
+    /// Blender's Y-up conversion lives on the asset root, above these mesh groups.
+    /// Cloning a child without it turns the body's sideways axis into its vertical axis.
+    private func cloneInModelSpace(_ entity: Entity) -> Entity {
+        let clone = entity.clone(recursive: true)
+        clone.transform = Transform(matrix: entity.transformMatrix(relativeTo: nil))
+        return clone
+    }
+
     private func refresh() {
         let trackedBody = vision.patientBodyPlacement()
         if patientLoaded, let placement = trackedBody {
@@ -145,6 +190,7 @@ final class GhostRenderer {
             let target = Transform(matrix: placement.transform)
             let ease: Float = detectedAnchor.isEnabled ? Self.bodyEasing : 1
             detectedModel.transform = Self.eased(detectedModel.transform, toward: target, by: ease)
+            poseTrackedMesh(placement)
             placeHead(placement)
             detectedLegs.update(placement, scale: target.scale.y, easing: ease)
             detectedAnchor.isEnabled = true

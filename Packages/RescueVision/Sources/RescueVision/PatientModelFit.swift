@@ -59,6 +59,8 @@ public struct PatientBodyPlacement: Sendable, Equatable {
     /// Hips, and whichever knees and ankles were seen with depth behind them, in the world. A leg
     /// joint left out falls back to the template's, hung from the joint above it.
     public var legs: [BodyJoint: SIMD3<Float>] = [:]
+    /// Measured points used to deform the original smooth mesh, from this person only.
+    public var rigJoints: [BodyJoint: SIMD3<Float>] = [:]
 }
 
 struct TimedPatientBody: Sendable {
@@ -151,6 +153,11 @@ enum PatientModelFit {
             SIMD4(headward * sx, 0), SIMD4(normal * sy, 0), SIMD4(across * sz, 0), SIMD4(origin, 1)
         ))
         var placement = PatientBodyPlacement(transform: transform, chest: chest + normal * 0.008, normal: normal, lying: lying)
+        for name in BodyJoint.allCases {
+            guard let joint = person.joint(name), joint.confidence >= 0.3,
+                  let world = depth.worldPoint(joint.position, camera: camera) else { continue }
+            placement.rigJoints[name] = world
+        }
         placement.head = head(of: person, depth: depth, camera: camera, shoulders: shoulders, scale: sy)
         placement.legs = legs(of: person, depth: depth, camera: camera, hips: [.leftHip: lh, .rightHip: rh])
         return placement

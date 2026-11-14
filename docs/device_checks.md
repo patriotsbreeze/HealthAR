@@ -253,3 +253,8 @@ Run on the iPhone 17 Pro with a manikin and an instructor-marked reference. Thes
 ### Independent chest-region marker: pending
 
 On the hand-placement step, verify the dashed orange region and "Estimated sternum region - Not anatomically verified" label appear without the Blender mesh or LiDAR depth. With chest depth available but hip depth obscured, confirm the surface disc still appears independently of the body mesh. Outside the hand-placement guide or active compressions, no chest marker should show. Confirm it disappears for inferred hips, two lying candidates, camera interruption, and stale detections. Measure its offset from an instructor-marked manikin reference; successful rendering does not establish anatomical accuracy. All checks are pending device validation.
+
+
+### Smooth skinned mesh and Blender root axes: pending
+
+Check the camera caption reads "Smooth joint-driven mesh", not "Rigid template". Film the same arms-raised pose as the reported screenshot from overhead and an oblique angle: shoulders and hips should align with their landmarks, and the smooth mesh arms should move to the detected elbows and wrists. Spread and bend legs, then hide one endpoint; document bind-pose fallback rather than treating missing points as measured. Check the torso is not rotated sideways after the child mesh is cloned. Confirm the original practice-patient animation and the independently labeled chest estimate are unchanged. Python USD tests validate asset geometry, but these RealityKit and alignment checks remain pending on the phone.
