@@ -22,10 +22,18 @@ import Testing
         #expect(fixture.audio.played == ["ask_responsive"])
         #expect(coordinator.instruction == coordinator.engine.bundle.text(forPhrase: "ask_responsive"))
 
-        // Nobody touches it. Every required step still plays, and it ends up compressing.
-        fixture.run(seconds: 26)
+        // Nobody answers. The question says itself again, then goes on to the call step and waits there.
+        fixture.run(seconds: 30.2)
+        #expect(coordinator.state.stateID == "call_911")
+        #expect(fixture.audio.played == ["ask_responsive", "ask_responsive", "ask_responsive", "call_911"])
+        #expect(fixture.audio.metronome.isEmpty)
+
+        // From there every required step still plays, one tap each, and it ends up compressing.
+        coordinator.perform(.called)
+        coordinator.perform(.done)
+        coordinator.perform(.done)
         #expect(coordinator.state.stateID == "compressions")
-        #expect(fixture.audio.played == ["ask_responsive", "call_911", "roll_flat", "hands_center", "start_compressions"])
+        #expect(fixture.audio.played.suffix(3) == ["roll_flat", "hands_center", "start_compressions"])
         #expect(fixture.audio.metronome == [true])
         #expect(coordinator.showsPulse)
 
@@ -58,6 +66,7 @@ import Testing
         fixture.coordinator.beginRescue()
         fixture.coordinator.force(stateID: "place_hands")
         fixture.run(seconds: 5.2)
+        fixture.coordinator.perform(.done)
         #expect(fixture.coordinator.state.stateID == "compressions")
     }
 
@@ -392,7 +401,9 @@ import Testing
         fixture.mock.emit(.closed(.networkFailure(code: nil)))
         try await waitUntil("the link went down") { !fixture.coordinator.liveConnected }
         #expect(fixture.coordinator.linkLabel == "Offline protocol")
-        fixture.run(seconds: 26)
+        fixture.run(seconds: 30.2)
+        #expect(fixture.coordinator.state.stateID == "call_911")
+        fixture.coordinator.perform(.startCpr)
         #expect(fixture.coordinator.state.stateID == "compressions")
         #expect(fixture.audio.played.contains("start_compressions"))
     }

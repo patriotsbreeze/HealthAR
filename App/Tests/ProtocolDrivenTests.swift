@@ -233,11 +233,12 @@ import Testing
     @Test func aForcedStateStillRunsItsOwnTimeoutFromNow() throws {
         let fixture = try Fixture()
         fixture.coordinator.beginRescue()
-        fixture.coordinator.force(stateID: "place_hands")
-        fixture.run(seconds: 4.6)
-        #expect(fixture.coordinator.state.stateID == "place_hands")
+        fixture.run(seconds: 20)
+        fixture.coordinator.force(stateID: "intake_breathing")
+        fixture.run(seconds: 29.6)
+        #expect(fixture.coordinator.state.stateID == "intake_breathing")
         fixture.run(seconds: 0.6)
-        #expect(fixture.coordinator.state.stateID == "compressions")
+        #expect(fixture.coordinator.state.stateID == "call_911")
     }
 
     private static let flowModule = Data("""
