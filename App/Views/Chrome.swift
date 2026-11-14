@@ -144,8 +144,20 @@ private struct AgentsStrip: View {
         Button(action: action) {
             // Vision's statuses change without telling anyone, so it looks again twice a second.
             TimelineView(.periodic(from: .now, by: 0.5)) { _ in
-                HStack(spacing: 4) {
-                    ForEach(Self.slots(coordinator)) { slot($0) }
+                // Named as a group, so the row reads as the AI agents at work and not as settings.
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 7, weight: .bold))
+                        Text("AI AGENTS")
+                            .font(.system(size: 8, weight: .bold))
+                            .tracking(0.6)
+                    }
+                    .foregroundStyle(DS.Assessment.tint)
+                    .padding(.leading, 2)
+                    HStack(spacing: 4) {
+                        ForEach(Self.slots(coordinator)) { slot($0) }
+                    }
                 }
             }
             .frame(minHeight: DS.Height.control)
@@ -166,7 +178,7 @@ private struct AgentsStrip: View {
                 .minimumScaleFactor(0.7)
         }
         .foregroundStyle(slot.activity == .off ? DS.Colors.textTertiary : DS.Colors.textPrimary)
-        .frame(width: Self.slotWidth, height: 34)
+        .frame(width: Self.slotWidth, height: 32)
         .glassSurface(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(alignment: .topTrailing) {
                 Circle()
