@@ -241,7 +241,7 @@ Run on the iPhone 17 Pro with a manikin and an instructor-marked reference. Thes
 | Check | Expected behavior | Result |
 |---|---|---|
 | Frame one lying manikin's shoulders, hips, and chest in good light | Glowing cyan 3D template follows torso position, orientation, length, and width. Record offsets in centimetres at each landmark; do not record a visual impression as accuracy evidence | Pending |
-| Bend/move a limb or use a different body shape | Document the mismatch: the mesh retains the Blender limb pose and template shape | Pending |
+| Bend/move a limb or use a different body shape | Arms and legs follow the measured shoulder/elbow/wrist and hip/knee/ankle chains independently. Measure endpoint offsets and document approximate limb thickness and torso shape | Pending |
 | Enter hand placement and the initial compressions guide | Chest disc is labeled "Estimated hand placement - Not a sternum detection". Record signed offset from the instructor's reference in centimetres from several camera angles | Pending |
 | Intake, awake states, and compressions after the hand guide ends | Detecting a person never adds a CPR instruction; no estimated chest disc outside the existing hand-placement guide | Pending |
 | Cover a hip, show two lying candidates, stand up, or lose reliable depth | No fitted 3D patient; existing local guidance and eligible 2D marks continue | Pending |
@@ -253,3 +253,8 @@ Run on the iPhone 17 Pro with a manikin and an instructor-marked reference. Thes
 ### Independent chest-region marker: pending
 
 On the hand-placement step, verify the dashed orange region and "Estimated sternum region - Not anatomically verified" label appear without the Blender mesh or LiDAR depth. With chest depth available but hip depth obscured, confirm the surface disc still appears independently of the body mesh. Outside the hand-placement guide or active compressions, no chest marker should show. Confirm it disappears for inferred hips, two lying candidates, camera interruption, and stale detections. Measure its offset from an instructor-marked manikin reference; successful rendering does not establish anatomical accuracy. All checks are pending device validation.
+
+
+### Articulated body and independent chest disc: pending
+
+On the iPhone 17 Pro, test a spread-arm and spread-leg pose, then bend each elbow and knee independently. Verify the corresponding 3D segment follows the joint without leaving a second limb in the original practice pose. Cover a wrist or ankle: its unavailable segment must disappear, not straighten or jump to another person's joint. Move a helper into frame and check no limb endpoints are borrowed. The practice-patient animation must remain unchanged. On the hand-placement step and during compressions, verify the labeled sternum-region estimate works without a body fit, with a 3D surface disc when chest depth is usable. All checks require a device and remain pending.
