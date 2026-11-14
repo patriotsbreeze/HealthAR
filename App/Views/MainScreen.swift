@@ -44,8 +44,13 @@ struct MainScreen: View {
                         .preference(key: FreeCameraArea.self, value: freeArea)
                 }
                 // Sized first, so the band gets what's left, and never less than its least.
-                CommandDeck(coordinator: coordinator, onStopRequested: { pendingStop = $0 })
-                    .layoutPriority(1)
+                if coordinator.isAssessing {
+                    AssessPanel(coordinator: coordinator) { present(.dispatcher) }
+                        .layoutPriority(1)
+                } else {
+                    CommandDeck(coordinator: coordinator, onStopRequested: { pendingStop = $0 })
+                        .layoutPriority(1)
+                }
             }
             // Above the panels, or a chest outside the band would hide behind them. The marks themselves
             // stay inside the band.

@@ -441,3 +441,30 @@ private func locate(_ session: VisionSession, _ materials: Set<Material>, pose: 
     }
     #expect(session.objects.worldPoint(.aed) == nil)
 }
+
+
+@Test func jointDotsFollowDisplayMappingAndExpireWithThePose() async {
+    let clock = TestClock()
+    let session = makeSession(clock: clock)
+    session.apply(.overlay(.padZones))
+    await step(session)
+    let expected = lying.visibleJoints.map { portraitMapping.viewPoint(fromImage: $0) }
+    #expect(!expected.isEmpty)
+    #expect(session.overlay().joints == expected)
+
+    clock.advance(VisionOverlay.maxZoneAge + 0.01)
+    session.ingest(pixels: makePixels(), pose: cameraPose(), tracking: .normal, imageToView: portraitTransform)
+    #expect(session.overlay().joints.isEmpty)
+}
+
+@Test func jointDotsExcludeEstimatedFaintAndInvalidJoints() {
+    var body = lying
+    body.torsoEstimated = true
+    body.extras = [
+        .leftWrist: .init(position: [0.2, 0.3], confidence: 0.9),
+        .rightWrist: .init(position: [0.7, 0.8], confidence: 0.2),
+        .leftAnkle: .init(position: [.nan, 0.5], confidence: 1),
+        .rightAnkle: .init(position: [1.1, 0.5], confidence: 1),
+    ]
+    #expect(body.visibleJoints == [body.leftShoulder.position, [0.2, 0.3], body.rightShoulder.position])
+}

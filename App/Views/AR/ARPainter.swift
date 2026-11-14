@@ -25,6 +25,11 @@ enum ARPainter {
             }
         }
         if let pointer = scene.pointer { paintPointer(pointer, style: style, in: &context) }
+        for point in scene.joints {
+            let dot = Path(ellipseIn: CGRect(x: point.x - 4, y: point.y - 4, width: 8, height: 8))
+            context.stroke(dot, with: .color(.black.opacity(0.7)), lineWidth: 3)
+            context.fill(dot, with: .color(.blue))
+        }
         if let zoneChip = scene.zone?.chip { chip(zoneChip, style: style, in: &context) }
         for case let itemChip? in scene.items.map(\.chip) { chip(itemChip, style: style, in: &context) }
         if let hint = scene.hint { chip(hint, style: style, in: &context) }

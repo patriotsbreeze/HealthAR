@@ -122,6 +122,7 @@ struct ARGhost: Equatable {
 /// One frame of marks, in the overlay's own points. At most one zone, two items, one pointer and one hint.
 struct ARScene: Equatable {
     var band: CGRect
+    var joints: [CGPoint] = []
     var zone: ARZone?
     var items: [ARItem] = []
     var pointer: ARPointer?
@@ -135,7 +136,7 @@ struct ARScene: Equatable {
     /// The side each chip took, kept so a chip doesn't hop sides from frame to frame.
     var sides: [String: MarkPlacement.Side] = [:]
 
-    var hasMarks: Bool { zone != nil || !items.isEmpty || pointer != nil || ghost != nil }
+    var hasMarks: Bool { !joints.isEmpty || zone != nil || !items.isEmpty || pointer != nil || ghost != nil }
     var markIDs: [String] { (zone.map { [$0.id] } ?? []) + items.map(\.id) }
 }
 

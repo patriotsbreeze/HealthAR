@@ -140,7 +140,8 @@ import Testing
         for definition in bundle.definition.states {
             var state = engine.start(at: 0).state
             state.stateID = definition.id
-            #expect(engine.policy(for: state, at: 0).frameBurstsOnly == definition.kind.isAwake, "\(definition.id)")
+            let bursts = definition.kind.isAwake && definition.id != ScenarioModule.assessState
+            #expect(engine.policy(for: state, at: 0).frameBurstsOnly == bursts, "\(definition.id)")
         }
     }
 

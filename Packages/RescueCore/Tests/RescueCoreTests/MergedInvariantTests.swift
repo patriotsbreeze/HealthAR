@@ -14,7 +14,7 @@ private let everyAwakeState = [
     private func engine() throws -> ProtocolEngine { ProtocolEngine(bundle: try loadMergedBundle()) }
 
     /// Only a tap may land on these.
-    private let humanOnly: Set<String> = ["triage", "chest_aspirin"]
+    private let humanOnly: Set<String> = ["assess", "triage", "chest_aspirin"]
 
     /// As if the rest of the rescue had got it there.
     private func session(_ engine: ProtocolEngine, in id: String) throws -> Session {
@@ -64,7 +64,8 @@ private let everyAwakeState = [
         #expect(bundle.moduleFailures.isEmpty, "\(bundle.moduleFailures)")
         #expect(bundle.flows.map(\.id) == ["possible_heart_attack", "possible_broken_bone"])
         let awake = bundle.definition.states.filter(\.kind.isAwake).map(\.id)
-        #expect(Set(awake) == Set(everyAwakeState), "a new state needs a walk below")
+        // Assess is only ever where a rescue opens, so no walk from core reaches it. `AssessTests` covers it.
+        #expect(Set(awake) == Set(everyAwakeState + [ScenarioModule.assessState]), "a new state needs a walk below")
     }
 
     /// The walk the rest of this suite relies on is the real one.
@@ -158,7 +159,9 @@ private let everyAwakeState = [
     /// Their timers end in the safer branch, never in compressions, whoever was or wasn't there.
     @Test func noAwakeStateTimesOutIntoCPR() throws {
         let engine = try engine()
-        for state in engine.bundle.definition.states where state.kind.isAwake {
+        // Nobody has said the patient on assess is awake, so its silence goes to the arrest questions,
+        // which `AssessTests` holds to never reaching CPR without a tap.
+        for state in engine.bundle.definition.states where state.kind.isAwake && state.id != ScenarioModule.assessState {
             var session = try session(engine, in: state.id)
             for _ in 0..<300 {
                 session.advance(1)
@@ -206,7 +209,7 @@ private let everyAwakeState = [
                 entries += 1
             }
         }
-        #expect(entries == 4)
+        #expect(entries == 6)
     }
 
     @Test func theArrestPathTakesNoRoutingReportAtAll() throws {
@@ -539,7 +542,7 @@ private let everyAwakeState = [
         #expect(opened.isDisjoint(with: ["chest_call", "chest_aspirin_check", "chest_aspirin", "chest_scan", "limb_start", "limb_flags", "limb_splint"]))
 
         let framed = definition.states.filter { $0.kind.isAwake && $0.frameUplink }.map(\.id)
-        #expect(framed == ["chest_scan"])
+        #expect(framed == ["assess", "chest_scan"])
         #expect(states["chest_scan"]?.overlay == .aedDevice)
     }
 

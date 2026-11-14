@@ -19,6 +19,15 @@ public struct ScenarioModule: Sendable, Equatable, Codable {
     public static let manifest = ["triage.v1", "possible_heart_attack.v1", "possible_broken_bone.v1"]
 
     public static let triageState = "triage"
+    /// The first step when there's an AI to do the assessing: the camera and the bystander's words
+    /// decide where the rescue goes, and nobody has said yet whether the patient is awake.
+    public static let assessState = "assess"
+    /// Where assess goes with no route, the arrest path's first question, which is how a rescue opened
+    /// before there was an assess step. It's the one awake timeout the validator lets into that path.
+    static let assessFallback = "intake_responsive"
+    /// Long enough for a bystander to say what happened, and short enough that a silent collapse
+    /// still reaches the arrest path's questions quickly.
+    static let maxAssessSeconds: TimeInterval = 20
     /// Where an AED found in an awake scan shows after a collapse. It has no overlay of its own, and
     /// core's file can't give it one.
     public static let carriedAEDState = "compressions"
@@ -177,6 +186,15 @@ extension ProtocolBundle {
         }
         var seen: Set<String> = []
         return ids.filter { seen.insert($0).inserted }.compactMap(text(forPhrase:))
+    }
+
+    /// Opens on the assess step when it loaded. Only for a rescue with an AI to do the assessing,
+    /// since with none the step would only wait out its timer before asking what it always asked.
+    public func startingWithAssessment() -> ProtocolBundle {
+        guard definition.states.contains(where: { $0.id == ScenarioModule.assessState }) else { return self }
+        var opened = self
+        opened.definition.initialState = ScenarioModule.assessState
+        return opened
     }
 
     /// The flows run on by local phrases and taps, with no AI voice in any awake state.

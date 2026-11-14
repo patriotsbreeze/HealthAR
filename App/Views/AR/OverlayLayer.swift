@@ -83,7 +83,7 @@ struct OverlayLayer: View {
         )
         var context = frame.context
         context.coachingCue = memory.heldCue(coordinator.vision.compressionFeedback()?.cue, now: now)
-        let scene = ARSceneBuilder.build(
+        var scene = ARSceneBuilder.build(
             overlay: frame.overlay,
             zones: frame.zones,
             items: frame.items,
@@ -93,6 +93,12 @@ struct OverlayLayer: View {
             previousSides: memory.sides,
             measure: { [typeSize] in ARText.chipSize($0, typeSize: typeSize) }
         )
+        // Use the current detections, never ARMemory's held marks after a dropout.
+        if coordinator.cameraLive {
+            scene.joints = seen.joints.map {
+                CGPoint(x: $0.x * geometry.size.width, y: $0.y * geometry.size.height)
+            }
+        }
         coordinator.noteDrawn(scene)
         return (scene, memory.noteBuilt(scene, now: now))
     }
