@@ -146,6 +146,9 @@ private struct AgentsStrip: View {
             TimelineView(.periodic(from: .now, by: 0.5)) { _ in
                 // Named as a group, so the row reads as the AI agents at work and not as settings.
                 VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        ForEach(Self.slots(coordinator)) { slot($0) }
+                    }
                     HStack(spacing: 3) {
                         Image(systemName: "sparkles")
                             .font(.system(size: 7, weight: .bold))
@@ -155,9 +158,6 @@ private struct AgentsStrip: View {
                     }
                     .foregroundStyle(DS.Assessment.tint)
                     .padding(.leading, 2)
-                    HStack(spacing: 4) {
-                        ForEach(Self.slots(coordinator)) { slot($0) }
-                    }
                 }
             }
             .frame(minHeight: DS.Height.control)
