@@ -263,6 +263,8 @@ public struct VisionOverlay: Sendable, Equatable {
     /// A fresh, depth-fitted Blender template replaces the flat patient outlines.
     public var patientIn3D = false
     public var chestEstimateLabel: String?
+    /// Palm-sized uncertainty region, never a claim to have identified a bone.
+    public var sternumEstimate: Ring?
     public var injuryPin: InjuryPin?
     /// The camera is live and nothing is placed, and nothing else would say a tap does anything.
     public var showsInjuryHint: Bool

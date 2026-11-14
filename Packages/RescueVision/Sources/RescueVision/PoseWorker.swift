@@ -149,6 +149,7 @@ final class PoseWorker: Sendable {
         var latestPose: TimedPose?
         var jointPose: TimedPose?
         var patientBody: TimedPatientBody?
+        var chestEstimate: TimedChestEstimate?
         var lastNoTargetReason: NoTargetReason?
         var smoother = JointSmoother()
         var lastBone: LimbBone?
@@ -173,6 +174,8 @@ final class PoseWorker: Sendable {
 
     var jointPose: TimedPose? { state.withLock { $0.jointPose } }
 
+    var chestEstimate: TimedChestEstimate? { state.withLock { $0.chestEstimate } }
+
     var patientBody: TimedPatientBody? { state.withLock { $0.patientBody } }
 
     var latest: TimedTorsoTarget? { state.withLock { $0.latest } }
@@ -191,6 +194,7 @@ final class PoseWorker: Sendable {
             state.latestPose = nil
             state.jointPose = nil
             state.patientBody = nil
+            state.chestEstimate = nil
             state.lastNoTargetReason = nil
             state.smoother.reset()
             state.lastBone = nil
@@ -231,6 +235,12 @@ final class PoseWorker: Sendable {
     private func publishJoints(_ detection: PoseDetection, record: FrameRecord, generation: UInt64, depth: BodyDepth?) {
         var fitted: PatientBodyPlacement?
         let sel = selector.select(people: detection.people, gravity: record.pose.gravityInImage, imageAspect: record.pose.imageAspect)
+        let chest: TimedChestEstimate?
+        if case let .patient(person) = sel {
+            chest = TimedChestEstimate.estimate(person: person, depth: depth, record: record)
+        } else {
+            chest = nil
+        }
         if record.tracking == .normal, let depth, case let .patient(person) = sel {
             fitted = PatientModelFit.fit(person: person, depth: depth, camera: record.pose)
         } else if record.tracking == .normal, let depth,
@@ -241,6 +251,8 @@ final class PoseWorker: Sendable {
         state.withLock { state in
             guard state.generation == generation else { return }
             state.jointPose = TimedPose(regions: BodyRegions(), joints: detection.joints, skeletons: detection.skeletons, frameID: record.id, capturedAt: record.timestamp)
+            // Never hold a chest marker on an ambiguous or lost patient.
+            state.chestEstimate = chest
             // One frame failing the depth fit keeps the last good one, which still ages out on its own.
             if let fitted { state.patientBody = TimedPatientBody(placement: fitted, capturedAt: record.timestamp) }
         }

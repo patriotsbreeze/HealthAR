@@ -146,3 +146,8 @@ HEALTHAI_LIVE_EVAL=1 swift test --filter 'LiveEvalTests/triage\(\)' 2>&1 | grep 
 ```
 
 Never run `echo`, `printenv`, or `set -x` with the key set. [evals/README.md](evals/README.md) lists every test and what it measures. These use synthesised speech on a Mac, so they say nothing about a phone's mic or network, which stay device checks in [docs/device_checks.md](docs/device_checks.md).
+
+
+### Estimated sternum-region marker
+
+The hand-placement step and active compressions show a dashed orange, palm-sized region with the label "Estimated sternum region - Not anatomically verified". It reuses the existing unvalidated torso mapping; it does not recognize the sternum or infer a new clinically approved location. A single lying-person candidate, measured shoulders and hips, and fresh tracking are required. The 2D marker works without scene depth or the Blender asset. If depth at the estimated chest surface is usable, a separate 3D disc appears there even when the full-body mesh cannot fit. The marker is never shown merely because an awake person entered the camera view. Test it on a manikin with an instructor-marked reference; it is not validated for real emergencies.

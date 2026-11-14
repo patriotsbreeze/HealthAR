@@ -50,6 +50,18 @@ enum ARPainter {
         if let zoneChip = scene.zone?.chip { chip(zoneChip, style: style, in: &context) }
         for case let itemChip? in scene.items.map(\.chip) { chip(itemChip, style: style, in: &context) }
         if let hint = scene.hint { chip(hint, style: style, in: &context) }
+        if let region = scene.sternumEstimate {
+            let ring = Path(ellipseIn: region)
+            context.fill(ring, with: .color(.orange.opacity(0.12)))
+            context.stroke(ring, with: .color(.black.opacity(0.8)), lineWidth: 5)
+            context.stroke(ring, with: .color(.orange), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+            var cross = Path()
+            cross.move(to: CGPoint(x: region.midX - 5, y: region.midY))
+            cross.addLine(to: CGPoint(x: region.midX + 5, y: region.midY))
+            cross.move(to: CGPoint(x: region.midX, y: region.midY - 5))
+            cross.addLine(to: CGPoint(x: region.midX, y: region.midY + 5))
+            context.stroke(cross, with: .color(.orange), lineWidth: 2)
+        }
         if let label = scene.chestEstimateLabel {
             let text = context.resolve(Text(label).font(.system(size: 11, weight: .semibold)).foregroundStyle(.white))
             let box = scene.band.insetBy(dx: 8, dy: 8)
