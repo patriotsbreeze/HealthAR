@@ -102,6 +102,23 @@ struct ARPointer: Equatable {
     var chip: ARChip?
 }
 
+/// A see-through body, in the overlay's own points.
+struct ARFigure: Equatable {
+    var segments: [VisionOverlay.Figure.Segment]
+    var head: CGPoint
+    var headRadius: CGFloat
+    var hands: CGPoint?
+}
+
+/// The ghost rescuer to follow in compressions, over the practice patient when one was placed.
+struct ARGhost: Equatable {
+    var rescuer: ARFigure
+    var patient: ARFigure?
+    /// 0 up to 1 pressed.
+    var push: Double
+    var limbWidth: CGFloat
+}
+
 /// One frame of marks, in the overlay's own points. At most one zone, two items, one pointer and one hint.
 struct ARScene: Equatable {
     var band: CGRect
@@ -109,12 +126,14 @@ struct ARScene: Equatable {
     var items: [ARItem] = []
     var pointer: ARPointer?
     var hint: ARChip?
+    /// Drawn under every other mark, and nothing is kept clear of it, since it is see-through.
+    var ghost: ARGhost?
     /// Where nothing may be laid over: the beat and the guide card.
     var obstacles: [CGRect] = []
     /// The side each chip took, kept so a chip doesn't hop sides from frame to frame.
     var sides: [String: MarkPlacement.Side] = [:]
 
-    var hasMarks: Bool { zone != nil || !items.isEmpty || pointer != nil }
+    var hasMarks: Bool { zone != nil || !items.isEmpty || pointer != nil || ghost != nil }
     var markIDs: [String] { (zone.map { [$0.id] } ?? []) + items.map(\.id) }
 }
 
@@ -184,6 +203,8 @@ struct ARContext: Equatable {
     var guideInCorner = false
     /// The chest zone at the start of compressions, which has no target of its own.
     var handsGuide = false
+    /// What to fix to match the ghost, held steady by `ARMemory`.
+    var coachingCue: CompressionFeedback.Cue?
     /// Marks were up a moment ago and went away for longer than the grace.
     var trackingLost = false
     /// Inside the grace: what was last seen, drawn as an estimate.
@@ -204,6 +225,17 @@ enum ARSceneBuilder {
     /// `aed_found` asks for it to be brought over, so where it was seen may be empty now.
     static let carriedAED = "AED seen earlier"
 
+    /// Short enough to read mid-push. Never praise: a match only turns the ghost green.
+    static func coachingText(_ cue: CompressionFeedback.Cue) -> String {
+        switch cue {
+        case .handsToCenter: "Hands on the center of the chest"
+        case .lockElbows: "Lock your elbows"
+        case .pushFaster: "Push faster"
+        case .pushSlower: "Push slower"
+        case .followBeat: "Push with the ghost"
+        }
+    }
+
     static func aedPointer(distance: Double) -> String { "AED · \(Int(distance.rounded())) m" }
 
     static let pointerSize = CGSize(width: DS.AR.pointerDisc, height: DS.AR.pointerDisc)
@@ -212,6 +244,23 @@ enum ARSceneBuilder {
     static let shortBand: CGFloat = 160
     /// A zone clipped at the band's edge is pointed at only when less than this much of it shows.
     static let zoneShownToRead: CGFloat = 0.35
+
+    /// From normalized view coordinates to points, with limbs sized by distance.
+    static func ghost(_ ghost: VisionOverlay.Ghost, view: CGSize) -> ARGhost {
+        let metre = CGFloat(ghost.pointsPerMetre)
+        let width = min(DS.AR.Ghost.limbWidth.upperBound, max(DS.AR.Ghost.limbWidth.lowerBound, metre * DS.AR.Ghost.limbMetres))
+        let head = max(width, metre * DS.AR.Ghost.headMetres)
+        let point = { (p: CGPoint) in CGPoint(x: p.x * view.width, y: p.y * view.height) }
+        let figure = { (figure: VisionOverlay.Figure) in
+            ARFigure(
+                segments: figure.segments.map { .init(from: point($0.from), to: point($0.to)) },
+                head: point(figure.head),
+                headRadius: head,
+                hands: figure.hands.map(point)
+            )
+        }
+        return ARGhost(rescuer: figure(ghost.rescuer), patient: ghost.patient.map(figure), push: ghost.push, limbWidth: width)
+    }
 
     /// Pure: the same overlay, context and band always give the same frame.
     static func build(
@@ -244,6 +293,7 @@ enum ARSceneBuilder {
             taken.append(chip.frame)
         }
         guard !context.trackingLost else { return scene }
+        scene.ghost = overlay.ghost.map { ghost($0, view: view) }
         let lock: (Bool) -> ARLock = { context.estimating || !$0 ? .estimating : .locked }
 
         // The zone: one, from vision's zones when it has them, else today's ring or pin.
@@ -390,6 +440,7 @@ enum ARSceneBuilder {
     private static func hintText(overlay: VisionOverlay, context: ARContext) -> (text: String, tone: ARChip.Tone)? {
         if let message = context.pinMessage { return (message, .caution) }
         if context.trackingLost { return (holdSteady, .caution) }
+        if let cue = context.coachingCue { return (coachingText(cue), .caution) }
         if overlay.showsInjuryHint, context.invitesInjuryTap { return (tapHint, .neutral) }
         return nil
     }

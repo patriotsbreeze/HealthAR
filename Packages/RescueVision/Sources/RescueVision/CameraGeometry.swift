@@ -147,6 +147,44 @@ public struct DisplayMapping: Sendable, Equatable {
         return VisionOverlay.Ring(center: viewPoint(fromImage: target.center), radius: radius / viewSize.width)
     }
 
+    /// Every joint in front of the camera, or no ghost: half a body drawn from a flipped
+    /// projection would point the wrong way.
+    func ghost(_ anchor: GhostAnchor, push: Double, practice: Bool, camera: CameraPose) -> VisionOverlay.Ghost? {
+        guard let rescuer = figure(GhostRescuer.joints(anchor, push: push), bones: GhostJoint.bones, head: .head, hands: .hands, camera: camera)
+        else { return nil }
+        var patient: VisionOverlay.Figure?
+        if practice {
+            guard let body = figure(PracticePatient.joints(anchor), bones: PracticePatient.Joint.bones, head: .head, hands: nil, camera: camera)
+            else { return nil }
+            patient = body
+        }
+        // Measured along the body at the chest, over a span short enough to stay in front of the camera.
+        let span: Float = 0.3
+        guard case let .inFront(a) = camera.project(anchor.chest),
+              case let .inFront(b) = camera.project(anchor.chest + anchor.headward * span) else { return nil }
+        let points = simd_length(viewVector(fromImageHeights: [(b.x - a.x) * imageAspect, b.y - a.y]))
+        return VisionOverlay.Ghost(rescuer: rescuer, patient: patient, push: push, pointsPerMetre: points / Double(span))
+    }
+
+    private func figure<J: Hashable>(
+        _ joints: [J: SIMD3<Float>],
+        bones: [(J, J)],
+        head: J,
+        hands: J?,
+        camera: CameraPose
+    ) -> VisionOverlay.Figure? {
+        var view: [J: CGPoint] = [:]
+        for (joint, world) in joints {
+            guard case let .inFront(image) = camera.project(world) else { return nil }
+            view[joint] = viewPoint(fromImage: image)
+        }
+        guard let headPoint = view[head] else { return nil }
+        let segments = bones.compactMap { a, b in
+            view[a].flatMap { from in view[b].map { VisionOverlay.Figure.Segment(from: from, to: $0) } }
+        }
+        return VisionOverlay.Figure(segments: segments, head: headPoint, hands: hands.flatMap { view[$0] })
+    }
+
     func arrow(to world: SIMD3<Float>, camera: CameraPose) -> VisionOverlay.AEDArrow {
         let distance = Double(simd_distance(world, camera.position))
         var direction: SIMD2<Double>

@@ -9,11 +9,15 @@ enum PoseDemand: Sendable, Equatable {
     case lying(since: TimeInterval)
     /// The person nearest the tapped injury, seated or lying.
     case nearPin
+    /// The person compressing, measured against the ghost rescuer in compressions.
+    case rescuer
 
     /// Full rate for this long, to lock on fast, then a cap to save heat.
     static let fastLockSeconds: TimeInterval = 3
     static let lyingCap = 15.0
     static let nearPinCap = 10.0
+    /// Enough to time pushes at up to 180 a minute.
+    static let rescuerCap = 15.0
 
     /// - Parameters:
     ///   - handsGuide: The window the coordinator opened as compressions began, if any.
@@ -25,6 +29,7 @@ enum PoseDemand: Sendable, Equatable {
         handsGuide: Range<TimeInterval>?,
         pinLive: Bool,
         holdsLimb: Bool,
+        coaching: Bool = false,
         now: TimeInterval
     ) -> PoseDemand {
         switch target {
@@ -36,9 +41,10 @@ enum PoseDemand: Sendable, Equatable {
         case .aedDevice:
             return .none
         case nil:
-            // Compressions takes no pixels, except for the hands guide the coordinator asked for.
-            guard let handsGuide, handsGuide.contains(now) else { return .none }
-            return .lying(since: handsGuide.lowerBound)
+            // Compressions takes no pixels, except for the hands guide the coordinator asked for, and
+            // the rescuer's pose while the ghost is up to be followed.
+            if let handsGuide, handsGuide.contains(now) { return .lying(since: handsGuide.lowerBound) }
+            return coaching ? .rescuer : .none
         }
     }
 
@@ -51,6 +57,8 @@ enum PoseDemand: Sendable, Equatable {
             now - since < Self.fastLockSeconds ? load.poseFramesPerSecond : min(load.poseFramesPerSecond, Self.lyingCap)
         case .nearPin:
             min(load.poseFramesPerSecond, Self.nearPinCap)
+        case .rescuer:
+            min(load.poseFramesPerSecond, Self.rescuerCap)
         }
     }
 }

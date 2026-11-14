@@ -13,6 +13,7 @@ enum ARPainter {
         guard scene.hasMarks || scene.hint != nil else { return }
         // Nothing is drawn under the deck. A body zone that runs past the band is cut at its edge.
         context.clip(to: Path(scene.band))
+        if let ghost = scene.ghost { paintGhost(ghost, in: &context) }
         if let zone = scene.zone {
             appearing(appear[zone.id], around: zone.center, style: style, in: &context) { layer in
                 paintZone(zone, in: &layer)
@@ -99,6 +100,15 @@ enum ARPainter {
             }
         case .limb, .press:
             zoneLayers(zone.path, lock: zone.lock, in: &context)
+        }
+    }
+
+    /// The bodies are 3D, drawn by the AR view itself. Over them only the hands' ring, strong on the click.
+    private static func paintGhost(_ ghost: ARGhost, in context: inout GraphicsContext) {
+        if let hands = ghost.rescuer.hands, ghost.push > 0.5 {
+            let size = DS.AR.Ghost.pressRing * (1 + 0.4 * ghost.push)
+            let ring = Path(ellipseIn: CGRect(center: hands, size: CGSize(width: size, height: size)))
+            context.stroke(ring, with: .color(DS.Colors.target.opacity((ghost.push - 0.5) * 2)), lineWidth: DS.AR.Ghost.pressRingWidth)
         }
     }
 

@@ -3,6 +3,7 @@ import CoreVideo
 import Foundation
 import RescueCore
 import Synchronization
+import simd
 
 /// A frame cleared for the model. The engine's policy can change while this is in transit, so
 /// the sender should still check the current policy right before sending.
@@ -79,6 +80,17 @@ public final class VisionSession: Sendable {
         var injuryPin: PlacedPin?
         var pinRequestID: UInt64 = 0
         var lastPoseAt = -TimeInterval.infinity
+        /// Where the ghost rescuer kneels, from the chest pose. Kept across steps until the world is forgotten.
+        var ghostAnchor: GhostAnchor?
+        /// The anchor came from a tap on the floor, so an imaginary patient draws under the ghost.
+        var ghostPractice = false
+        var practiceRequestID: UInt64 = 0
+        var lastGhostLockAt = -TimeInterval.infinity
+        /// When the metronome last turned on, which starts its beat grid afresh.
+        var ghostBeatStart: TimeInterval?
+        var coach = CompressionCoach()
+        /// Bumped whenever the world is forgotten, so a raycast that started before lands nowhere.
+        var worldEpoch: UInt64 = 0
         var wantsRunning = false
         var arActive = false
         var failed = false
@@ -121,8 +133,17 @@ public final class VisionSession: Sendable {
                 handsGuide: handsGuide,
                 pinLive: pinLive(at: now),
                 holdsLimb: holdsLimb,
+                coaching: coaching,
                 now: now
             )
+        }
+
+        /// The ghost is up and pushing, so the person compressing is measured against it.
+        var coaching: Bool { overlayTarget == nil && ghostAnchor != nil && ghostBeatStart != nil }
+
+        func feedback(at now: TimeInterval) -> CompressionFeedback? {
+            guard coaching else { return nil }
+            return coach.feedback(at: now, beatStart: ghostBeatStart, interval: GhostRescuer.beatInterval)
         }
 
         func needsPixels(at now: TimeInterval, holdsLimb: Bool) -> Bool {
@@ -329,6 +350,64 @@ public final class VisionSession: Sendable {
         }
     }
 
+    /// The ghost rescuer pushes on the metronome's beat. The metronome starts its grid each time it
+    /// turns on, so this stamps that moment, and a repeat while it is on changes nothing.
+    public func setGhostBeat(on: Bool) {
+        let now = clock()
+        state.withLock { state in
+            if !on {
+                state.ghostBeatStart = nil
+                state.coach.reset()
+            } else if state.ghostBeatStart == nil {
+                state.ghostBeatStart = now
+                state.coach.reset()
+            }
+        }
+    }
+
+    /// The ghost has a place to kneel, for the latency HUD and tests.
+    public var hasGhostAnchor: Bool { state.withLock { $0.ghostAnchor != nil } }
+
+    /// The metronome's interval, which the ghost's push follows. The app checks it against the audio's.
+    public static let ghostBeatInterval = GhostRescuer.beatInterval
+
+    /// Lays an imaginary patient on the floor at a point on screen, the view's centre by default,
+    /// with the ghost rescuer kneeling beside it, for practice with no one lying down. Raycasts only,
+    /// on the phone. A chest found later by pose takes over from it.
+    @discardableResult
+    public func placePracticePatient(atViewPoint point: CGPoint? = nil) async -> Bool {
+        let request: (id: UInt64, ray: WorldRay, camera: SIMD3<Float>, epoch: UInt64)? = state.withLock { state in
+            guard let camera = state.ledger.latest, camera.tracking == .normal,
+                  clock() - camera.timestamp <= VisionOverlay.maxCameraAge,
+                  let mapping = state.mapping
+            else { return nil }
+            let screen = point ?? CGPoint(x: state.viewport.width / 2, y: state.viewport.height / 2)
+            guard let image = mapping.imagePoint(fromScreen: screen) else { return nil }
+            state.practiceRequestID += 1
+            return (state.practiceRequestID, camera.pose.ray(throughImagePoint: image), camera.pose.position, state.worldEpoch)
+        }
+        guard let request, let floor = await driver.surfacePoint(along: request.ray),
+              let anchor = GhostAnchor(floor: floor, camera: request.camera)
+        else { return false }
+        return state.withLock { state in
+            guard state.practiceRequestID == request.id, state.worldEpoch == request.epoch else { return false }
+            state.ghostAnchor = anchor
+            state.ghostPractice = true
+            return true
+        }
+    }
+
+    public func clearPracticePatient() {
+        state.withLock { state in
+            state.practiceRequestID += 1
+            guard state.ghostPractice else { return }
+            state.ghostAnchor = nil
+            state.ghostPractice = false
+        }
+    }
+
+    public var hasPracticePatient: Bool { state.withLock { $0.ghostPractice } }
+
     public func endHandsGuide() {
         state.withLock { state in
             guard state.handsGuide != nil else { return }
@@ -388,6 +467,11 @@ public final class VisionSession: Sendable {
                 pose: latestPose,
                 items: callouts.filter { state.wanted.contains($0.key) },
                 handsGuide: state.showsHandsGuide(at: now),
+                ghost: state.ghostAnchor.flatMap { anchor in
+                    state.ghostBeatStart.map {
+                        (anchor, GhostRescuer.push(sinceBeatStart: now - $0, beatInterval: GhostRescuer.beatInterval), state.ghostPractice)
+                    }
+                },
                 now: now
             )
         }
@@ -491,6 +575,9 @@ public final class VisionSession: Sendable {
             state.ledger.removeAll()
             state.injuryPin = nil
             state.pinRequestID += 1
+            state.ghostAnchor = nil
+            state.ghostPractice = false
+            state.worldEpoch += 1
         }
         objects.clear()
     }
@@ -528,6 +615,96 @@ public final class VisionSession: Sendable {
         return frame
     }
 
+    private func coach(_ sample: CompressionSample?, record: FrameRecord) {
+        state.withLock { state in
+            guard state.coaching, let sample, let anchor = state.ghostAnchor else { return }
+            // Where the ghost's hands are in this frame, and how many image heights a metre is there.
+            var chest: (point: SIMD2<Double>, perMetre: Double)?
+            if case let .inFront(a) = record.pose.project(anchor.chest),
+               case let .inFront(b) = record.pose.project(anchor.chest + anchor.headward * 0.3) {
+                let metre = simd_length((b - a) * SIMD2(record.pose.imageAspect, 1)) / 0.3
+                chest = (a, metre)
+            }
+            state.coach.add(sample, at: record.timestamp, chest: chest, imageAspect: record.pose.imageAspect)
+        }
+    }
+
+    /// The 3D ghost for this instant, on the same terms as the overlay's: a step with no mark of its
+    /// own, a place to kneel, the beat on, and a fresh camera with normal tracking.
+    public func ghostPlacement() -> GhostPlacement? {
+        let now = clock()
+        return state.withLock { state in
+            guard state.overlayTarget == nil, let anchor = state.ghostAnchor, let start = state.ghostBeatStart,
+                  let camera = state.ledger.latest, camera.tracking == .normal,
+                  now - camera.timestamp <= VisionOverlay.maxCameraAge
+            else { return nil }
+            let tone: GhostPlacement.Tone = switch state.feedback(at: now) {
+            case let feedback? where feedback.matchesGhost: .matching
+            case let feedback? where feedback.cue != nil: .correcting
+            default: .neutral
+            }
+            return GhostPlacement(
+                transform: simd_float4x4(columns: (
+                    SIMD4(anchor.headward, 0),
+                    SIMD4(GhostAnchor.up, 0),
+                    SIMD4(anchor.side, 0),
+                    SIMD4(anchor.chest, 1)
+                )),
+                push: GhostRescuer.push(sinceBeatStart: now - start, beatInterval: GhostRescuer.beatInterval),
+                practice: state.ghostPractice,
+                patientScale: anchor.bodyScale,
+                tone: tone
+            )
+        }
+    }
+
+    /// How the person compressing compares with the ghost, or nil while there's no ghost to follow or
+    /// nobody has been seen compressing lately.
+    public func compressionFeedback() -> CompressionFeedback? {
+        let now = clock()
+        return state.withLock { $0.feedback(at: now) }
+    }
+
+    /// How often the ghost's place is found again while the chest is in view, so it settles on a
+    /// steady pose rather than the first one.
+    static let ghostRelock: TimeInterval = 0.5
+
+    /// Places the ghost from this frame's chest, on place_hands or in the hands guide, where pose is
+    /// already running on the lying patient. Raycasts only, on the phone, and nothing waits on it.
+    private func lockGhost(after record: FrameRecord) {
+        let now = clock()
+        let latest = pose.latest
+        let epoch: UInt64? = state.withLock { state in
+            guard state.overlayTarget == .chestCenter || state.showsHandsGuide(at: now),
+                  record.tracking == .normal,
+                  latest?.frameID == record.id,
+                  now - state.lastGhostLockAt >= Self.ghostRelock
+            else { return nil }
+            state.lastGhostLockAt = now
+            return state.worldEpoch
+        }
+        guard let epoch, let latest else { return }
+        let camera = record.pose
+        Task.detached { [weak self, driver] in
+            guard let chest = await driver.surfaceHit(along: camera.ray(throughImagePoint: latest.target.center)) else { return }
+            var shoulders: SIMD3<Float>?, hips: SIMD3<Float>?
+            if let image = latest.shoulders {
+                shoulders = await driver.surfaceHit(along: camera.ray(throughImagePoint: image))
+            }
+            if let image = latest.hips {
+                hips = await driver.surfaceHit(along: camera.ray(throughImagePoint: image))
+            }
+            guard let anchor = GhostAnchor(chest: chest, shoulders: shoulders, hips: hips, camera: camera.position) else { return }
+            self?.state.withLock { state in
+                guard state.worldEpoch == epoch else { return }
+                state.ghostAnchor = anchor
+                // A real body wins over the practice one.
+                state.ghostPractice = false
+                state.practiceRequestID += 1
+            }
+        }
+    }
+
     func driverFailed() {
         state.withLock { state in
             state.failed = true
@@ -559,6 +736,7 @@ public final class VisionSession: Sendable {
                 case .none: break
                 case .lying: request = .lying
                 case .nearPin: request = .nearPin(anchor: state.pinAnchor(in: record, at: now))
+                case .rescuer: request = .rescuer
                 }
             }
             return FrameJob(
@@ -595,8 +773,12 @@ public final class VisionSession: Sendable {
             }
         }
 
-        if let request = job.pose {
+        if job.pose == .rescuer {
+            let sample = await pose.rescuer(frame, record: job.record)
+            coach(sample, record: job.record)
+        } else if let request = job.pose {
             await pose.process(frame, record: job.record, request: request)
+            if request == .lying { lockGhost(after: job.record) }
         }
         return sent
     }

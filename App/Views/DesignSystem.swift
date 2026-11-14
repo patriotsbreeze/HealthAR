@@ -237,6 +237,12 @@ extension DS {
         static let dockedInset: CGFloat = 12
     }
 
+    enum Listening {
+        static let orb: CGFloat = 56
+        /// The glow reaches out to this, and it's the bubble's whole height.
+        static let frame: CGFloat = 88
+    }
+
     /// No bounce anywhere. Motion explains a change, or it doesn't happen.
     enum Motion {
         static let stepIn = Animation.smooth(duration: 0.30, extraBounce: 0)
@@ -262,6 +268,18 @@ extension DS {
 
     /// Every AR stroke is four layers: a wide under-stroke, the fill, a black keyline, the colored stroke.
     enum AR {
+        /// The ghost's flat marks. Its bodies are 3D, with their opacity in `GhostPlacement`.
+        enum Ghost {
+            /// Metres, scaled by distance on screen, then held to `limbWidth`.
+            static let limbMetres = 0.08
+            static let headMetres = 0.1
+            static let limbWidth: ClosedRange<CGFloat> = 5...24
+            static let keyline: CGFloat = 3
+            /// The hands' press ring, at full strength only on the click.
+            static let pressRing: CGFloat = 18
+            static let pressRingWidth: CGFloat = 2.5
+        }
+
         static let underWidth: CGFloat = 13
         static let keylineWidth: CGFloat = 7
         static let strokeWidth: CGFloat = 3.5

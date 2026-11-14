@@ -46,6 +46,13 @@ public struct SPSCRingBuffer: @unchecked Sendable {
     /// Total samples the consumer has moved past, played or flushed.
     public var totalRead: Int { readPosition.pointee.load(ordering: .acquiring) }
 
+    /// Any thread. Samples pushed and neither played nor flushed yet, counting a flush not yet applied.
+    public var pending: Int {
+        let flush = flushPosition.pointee.load(ordering: .acquiring)
+        let read = max(readPosition.pointee.load(ordering: .acquiring), flush)
+        return max(0, totalWritten - read)
+    }
+
     /// Producer only. Returns how many samples fit. The rest are dropped by the caller.
     @discardableResult
     public func push(_ source: UnsafePointer<Float>, count: Int) -> Int {

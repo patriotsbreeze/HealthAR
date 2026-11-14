@@ -29,6 +29,8 @@ final class ARController: NSObject, ARSessionDelegate, CameraDriver, @unchecked 
             let configuration = ARWorldTrackingConfiguration()
             configuration.worldAlignment = .gravity
             configuration.planeDetection = .horizontal
+            // Lights the ghost with the room's own light.
+            configuration.environmentTexturing = .automatic
             if ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth) {
                 configuration.frameSemantics.insert(.sceneDepth)
             }
@@ -141,6 +143,7 @@ public struct ARCameraView: UIViewRepresentable {
         arView.renderOptions = [.disableMotionBlur, .disableDepthOfField, .disableCameraGrain]
         arView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         host.addSubview(arView)
+        host.ghost = GhostRenderer(arView: arView, vision: vision)
         return host
     }
 
@@ -148,6 +151,7 @@ public struct ARCameraView: UIViewRepresentable {
 
     private final class HostView: UIView {
         var vision: VisionSession?
+        var ghost: GhostRenderer?
 
         override func layoutSubviews() {
             super.layoutSubviews()

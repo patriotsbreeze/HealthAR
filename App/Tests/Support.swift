@@ -79,6 +79,7 @@ final class FakeAudio: AudioPort, @unchecked Sendable {
     var onPhraseFinished: (@Sendable (String) -> Void)?
     var onCallChanged: (@Sendable (Bool) -> Void)?
     var onStatus: (@Sendable (AudioStatus) -> Void)?
+    var modelAudioPending = false
 }
 
 final class FakeVision: VisionPort, @unchecked Sendable {
@@ -96,6 +97,10 @@ final class FakeVision: VisionPort, @unchecked Sendable {
         var sightings: [RescueCore.Material: Int] = [:]
         var handsGuides: [TimeInterval] = []
         var showsHandsGuide = false
+        var ghostBeats: [Bool] = []
+        var practicePlacements: [CGPoint?] = []
+        var practicePlaces = true
+        var practiceClears = 0
     }
 
     private let state = Mutex(State())
@@ -166,6 +171,20 @@ final class FakeVision: VisionPort, @unchecked Sendable {
         }
     }
     var showsHandsGuide: Bool { state.withLock { $0.showsHandsGuide } }
+
+    var ghostBeats: [Bool] { state.withLock { $0.ghostBeats } }
+    var practicePlacements: [CGPoint?] { state.withLock { $0.practicePlacements } }
+    var practiceClears: Int { state.withLock { $0.practiceClears } }
+    /// No floor in view, so nothing can be placed.
+    func setPracticePlaces(_ places: Bool) { state.withLock { $0.practicePlaces = places } }
+    func setGhostBeat(on: Bool) { state.withLock { $0.ghostBeats.append(on) } }
+    func placePracticePatient(atViewPoint point: CGPoint?) async -> Bool {
+        state.withLock {
+            $0.practicePlacements.append(point)
+            return $0.practicePlaces
+        }
+    }
+    func clearPracticePatient() { state.withLock { $0.practiceClears += 1 } }
 }
 
 func shippedBundle() throws -> ProtocolBundle {

@@ -39,8 +39,8 @@ extension AppCoordinator {
         padsInBandAt = clock()
     }
 
-    /// Nothing to draw on a step with no target, unless the carried AED or the hands guide is up.
-    var overlayIdle: Bool { overlayTarget == nil && !mayShowCarriedAED && !showsHandsGuide }
+    /// Nothing to draw on a step with no target, unless the carried AED, the hands guide, or the ghost on the beat is up.
+    var overlayIdle: Bool { overlayTarget == nil && !mayShowCarriedAED && !showsHandsGuide && !metronomeOn }
 }
 
 /// The zone, the items, a pointer and a hint, redrawn from vision each display frame in one Canvas.
@@ -81,11 +81,13 @@ struct OverlayLayer: View {
             context: coordinator.arContext,
             now: now
         )
+        var context = frame.context
+        context.coachingCue = memory.heldCue(coordinator.vision.compressionFeedback()?.cue, now: now)
         let scene = ARSceneBuilder.build(
             overlay: frame.overlay,
             zones: frame.zones,
             items: frame.items,
-            context: frame.context,
+            context: context,
             band: band.offsetBy(dx: -origin.x, dy: -origin.y),
             view: geometry.size,
             previousSides: memory.sides,
@@ -112,6 +114,18 @@ final class ARMemory {
     private var firstSeen: [String: TimeInterval] = [:]
     private(set) var sides: [String: MarkPlacement.Side] = [:]
     private var last: (overlay: VisionOverlay, zones: [ARZoneInput], items: [ARItemInput], at: TimeInterval)?
+    private var cueCandidate: (cue: CompressionFeedback.Cue?, since: TimeInterval)?
+    private var shownCue: CompressionFeedback.Cue?
+
+    /// A correction shows once it has held this long, and goes once its absence has, so a jittery
+    /// frame neither flashes one up nor blinks one away.
+    static let cueHold: TimeInterval = 0.8
+
+    func heldCue(_ cue: CompressionFeedback.Cue?, now: TimeInterval) -> CompressionFeedback.Cue? {
+        if cueCandidate?.cue != cue { cueCandidate = (cue, now) }
+        if let candidate = cueCandidate, now - candidate.since >= Self.cueHold { shownCue = candidate.cue }
+        return shownCue
+    }
 
     /// Marks that were up a moment ago and are gone: within the grace the last ones draw dashed, and
     /// after it they hide and the band says to hold steady. Only where a mark going away means the
@@ -164,5 +178,7 @@ final class ARMemory {
         firstSeen = [:]
         sides = [:]
         last = nil
+        cueCandidate = nil
+        shownCue = nil
     }
 }

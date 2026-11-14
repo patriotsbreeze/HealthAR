@@ -102,6 +102,8 @@ final class AppCoordinator {
     /// One mode's session has stopped and the next isn't up, so nothing is hearing for now.
     private(set) var liveSwapping = false
     private(set) var aiQuiet = false
+    /// The AI's voice is coming out of the speaker right now.
+    private(set) var aiTalking = false
     private(set) var lastDisconnect: String?
     private(set) var audioHealth = AudioHealth.starting
     private(set) var micProblem: String?
@@ -215,6 +217,10 @@ final class AppCoordinator {
         stopLive()
         if showsCamera { vision.stop() }
         audio.setMetronome(on: false)
+        vision.setGhostBeat(on: false)
+        metronomeOn = false
+        vision.clearPracticePatient()
+        practicePatientPlaced = false
         audio.flushModelAudio()
         audio.resume()
         overlayTarget = nil
@@ -294,6 +300,30 @@ final class AppCoordinator {
     /// shows `place_hands`. Pose only, nothing sent, and it gates nothing.
     var showsHandsGuide: Bool { handsGuideUntil != nil }
 
+    /// The metronome is on, so the ghost rescuer, if it has a place, is pushing on its beat.
+    private(set) var metronomeOn = false
+    /// A practice patient lies on the floor for the ghost to kneel beside.
+    private(set) var practicePatientPlaced = false
+
+    /// Compressions with the camera up: the ghost can kneel by an imaginary patient when nobody is
+    /// lying down. It draws only, sends nothing and gates nothing.
+    var offersPracticePatient: Bool {
+        cameraLive && metronomeOn && overlayTarget == nil && definition?.kind == .cpr
+    }
+
+    /// At a point in the camera view, in global points, which are the camera view's.
+    func placePracticePatient(at point: CGPoint) {
+        Task {
+            let placed = await vision.placePracticePatient(atViewPoint: point)
+            if placed { practicePatientPlaced = true }
+        }
+    }
+
+    func clearPracticePatient() {
+        vision.clearPracticePatient()
+        practicePatientPlaced = false
+    }
+
     /// Someone's hands belong on the wound here, not on the screen, and the limb isn't to be kept as found.
     private var handsOnInjury: Bool { state.stateID == ScenarioModule.handsOnInjuryState }
 
@@ -352,6 +382,12 @@ final class AppCoordinator {
     var aiPausedForCall: Bool { liveConnected && state.callActive && definition?.kind.isAwake == true }
 
     var micClosedForDispatcher: Bool { state.dispatcherHeardUntil != nil }
+
+    /// The AED finder needs a key to ask with and a camera to look through.
+    var aedFinderAvailable: Bool { canLocate && showsCamera }
+
+    /// The AI is up and the mic is open to it, so anything said now is heard.
+    var aiListening: Bool { liveConnected && micProblem == nil && !state.callActive && !micClosedForDispatcher }
 
     var isHandoff: Bool { definition?.logOnEnter == .emsArrived }
 
@@ -502,6 +538,8 @@ final class AppCoordinator {
         let status = vision.status
         if status != visionStatus { visionStatus = status }
         if let until = handsGuideUntil, now >= until { handsGuideUntil = nil }
+        let talking = liveConnected && audio.modelAudioPending
+        if talking != aiTalking { aiTalking = talking }
         retryLocate(at: now)
         watchAIVoice(at: now)
     }
@@ -557,6 +595,8 @@ final class AppCoordinator {
             audio.play(phraseID: id)
         case let .metronome(on):
             audio.setMetronome(on: on)
+            vision.setGhostBeat(on: on)
+            metronomeOn = on
         case let .overlay(target):
             overlayTarget = target
             if target != .injurySite, pinMessage != nil { pinMessage = nil }
@@ -1058,6 +1098,8 @@ final class AppCoordinator {
     }
 
     private func noteModelVoice() {
+        // Its first audio just played, so this shows without waiting for the next tick.
+        if liveConnected { aiTalking = true }
         quietSince = nil
         awaitingAnswer = false
         if aiQuiet { aiQuiet = false }

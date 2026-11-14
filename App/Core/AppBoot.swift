@@ -163,6 +163,7 @@ protocol AudioPort: AnyObject, Sendable {
     func play(phraseID: String)
     func enqueueModelAudio(_ data: Data)
     func flushModelAudio()
+    var modelAudioPending: Bool { get }
     func dropQueuedPhrases(keeping: [String])
     func cutPhrases()
     func modelTurnEnded()
@@ -200,6 +201,21 @@ protocol VisionPort: AnyObject, Sendable {
     /// overlay change ends it.
     func beginHandsGuide(seconds: TimeInterval)
     var showsHandsGuide: Bool { get }
+    /// The ghost rescuer pushes on the metronome's beat, so it follows the metronome on and off.
+    func setGhostBeat(on: Bool)
+    /// An imaginary patient on the floor at a point in view, for practice with no one lying down.
+    func placePracticePatient(atViewPoint point: CGPoint?) async -> Bool
+    func clearPracticePatient()
+    /// How the person compressing compares with the ghost, nil with nothing to say.
+    func compressionFeedback() -> CompressionFeedback?
+}
+
+extension VisionPort {
+    // A port with no camera has no ghost to draw.
+    func setGhostBeat(on: Bool) {}
+    func placePracticePatient(atViewPoint point: CGPoint?) async -> Bool { false }
+    func clearPracticePatient() {}
+    func compressionFeedback() -> CompressionFeedback? { nil }
 }
 
 extension VisionSession: VisionPort {}

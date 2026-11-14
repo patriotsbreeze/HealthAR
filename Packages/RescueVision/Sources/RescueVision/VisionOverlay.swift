@@ -139,8 +139,52 @@ public struct VisionOverlay: Sendable, Equatable {
         }
     }
 
+    /// A see-through body drawn from world joints: limbs as segments and a head as a disc.
+    public struct Figure: Sendable, Equatable {
+        public struct Segment: Sendable, Equatable {
+            public var from: CGPoint
+            public var to: CGPoint
+
+            public init(from: CGPoint, to: CGPoint) {
+                self.from = from
+                self.to = to
+            }
+        }
+
+        /// Normalized view coordinates.
+        public var segments: [Segment]
+        public var head: CGPoint
+        /// The pressed hands, for the rescuer. Nil on the patient.
+        public var hands: CGPoint?
+
+        public init(segments: [Segment], head: CGPoint, hands: CGPoint? = nil) {
+            self.segments = segments
+            self.head = head
+            self.hands = hands
+        }
+    }
+
+    /// The see-through rescuer to follow in compressions, and the practice patient under it when
+    /// one was placed on the floor instead of found by pose.
+    public struct Ghost: Sendable, Equatable {
+        public var rescuer: Figure
+        public var patient: Figure?
+        /// 0 up to 1 pressed, on the metronome's beat.
+        public var push: Double
+        /// View points per metre at the chest, for limb widths that shrink with distance.
+        public var pointsPerMetre: Double
+
+        public init(rescuer: Figure, patient: Figure? = nil, push: Double, pointsPerMetre: Double) {
+            self.rescuer = rescuer
+            self.patient = patient
+            self.push = push
+            self.pointsPerMetre = pointsPerMetre
+        }
+    }
+
     public var ring: Ring?
     public var aedArrow: AEDArrow?
+    public var ghost: Ghost?
     public var injuryPin: InjuryPin?
     /// The camera is live and nothing is placed, and nothing else would say a tap does anything.
     public var showsInjuryHint: Bool
@@ -155,8 +199,10 @@ public struct VisionOverlay: Sendable, Equatable {
         injuryPin: InjuryPin? = nil,
         showsInjuryHint: Bool = false,
         zones: [BodyZone] = [],
-        items: [ItemCallout] = []
+        items: [ItemCallout] = [],
+        ghost: Ghost? = nil
     ) {
+        self.ghost = ghost
         self.ring = ring
         self.aedArrow = aedArrow
         self.injuryPin = injuryPin
@@ -191,6 +237,7 @@ public struct VisionOverlay: Sendable, Equatable {
         pose: TimedPose? = nil,
         items: [Material: PlacedObject] = [:],
         handsGuide: Bool = false,
+        ghost: (anchor: GhostAnchor, push: Double, practice: Bool)? = nil,
         now: TimeInterval
     ) -> VisionOverlay {
         guard let camera, let mapping, now - camera.timestamp <= maxCameraAge else { return .empty }
@@ -241,6 +288,11 @@ public struct VisionOverlay: Sendable, Equatable {
                     mapping.zone(two, kind: .pad(2), isLocked: regions.padsLocked),
                 ]
             }
+        }
+
+        // Only on a step with no target of its own, which is compressions, beside whatever else it draws.
+        if target == nil, camera.tracking == .normal, let ghost {
+            overlay.ghost = mapping.ghost(ghost.anchor, push: ghost.push, practice: ghost.practice, camera: camera.pose)
         }
 
         // World points, so only with tracking that holds the world steady.

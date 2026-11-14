@@ -94,6 +94,8 @@ enum PoseRequest: Sendable, Equatable {
     case lying
     /// `anchor` is the pin in this frame's capture image, or nil once it is gone or out of sight.
     case nearPin(anchor: SIMD2<Double>?)
+    /// Goes through `rescuer(_:record:)`, never `process`.
+    case rescuer
 }
 
 /// Body regions from one camera frame.
@@ -160,6 +162,13 @@ final class PoseWorker: Sendable {
         }
     }
 
+    /// The person compressing, upright in the portrait-locked app, so no rotation scan.
+    @concurrent func rescuer(_ frame: CapturedFrame, record: FrameRecord) async -> CompressionSample? {
+        let people = await detect(frame, .right)
+        let gravity = record.tracking == .notAvailable ? nil : record.pose.gravityInImage
+        return CompressionSignal.sample(people: people, gravity: gravity, imageAspect: record.pose.imageAspect)
+    }
+
     @concurrent func process(_ frame: CapturedFrame, record: FrameRecord, request: PoseRequest = .lying) async {
         let (rotation, generation) = state.withLock { ($0.scan.current, $0.generation) }
         let people = await detect(frame, rotation)
@@ -170,6 +179,8 @@ final class PoseWorker: Sendable {
                 findLying(people, record: record, in: &state)
             case let .nearPin(anchor):
                 findNearPin(people, pin: anchor, record: record, in: &state)
+            case .rescuer:
+                break
             }
         }
     }
@@ -185,7 +196,13 @@ final class PoseWorker: Sendable {
             if let target = TorsoMap.target(for: smoothed.torso, imageAspect: pose.imageAspect),
                let regions = BodyRegionMap.lying(smoothed, imageAspect: pose.imageAspect) {
                 found = true
-                state.latest = TimedTorsoTarget(target: target, frameID: record.id, capturedAt: record.timestamp)
+                state.latest = TimedTorsoTarget(
+                    target: target,
+                    frameID: record.id,
+                    capturedAt: record.timestamp,
+                    shoulders: (smoothed.leftShoulder.position + smoothed.rightShoulder.position) / 2,
+                    hips: (smoothed.leftHip.position + smoothed.rightHip.position) / 2
+                )
                 state.latestPose = TimedPose(regions: regions, frameID: record.id, capturedAt: record.timestamp)
             } else {
                 reason = .torsoUnusable

@@ -5,6 +5,10 @@ public struct TimedTorsoTarget: Sendable, Equatable {
     public var target: TorsoTarget
     public var frameID: UInt64
     public var capturedAt: TimeInterval
+    /// The patient's shoulders, between them, in the same image. Says which way the body lies.
+    var shoulders: SIMD2<Double>?
+    /// Between the hips, the same way. With the shoulders, says how big the body is.
+    var hips: SIMD2<Double>?
 
     public func age(at now: TimeInterval) -> TimeInterval { now - capturedAt }
 }
