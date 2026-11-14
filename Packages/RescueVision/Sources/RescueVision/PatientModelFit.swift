@@ -97,12 +97,27 @@ enum PatientModelFit {
         // are allowed: a lying body seen from above rarely shows confident hips, and the depth and
         // planarity checks below still turn down a guess that doesn't sit on the body.
         guard person.lowestConfidence >= 0.3 else { return nil }
-        guard let ls = depth.worldPoint(person.leftShoulder.position, camera: camera) else { return nil }
-        guard let rs = depth.worldPoint(person.rightShoulder.position, camera: camera) else { return nil }
-        guard let lh = depth.worldPoint(person.leftHip.position, camera: camera) else { return nil }
-        guard let rh = depth.worldPoint(person.rightHip.position, camera: camera) else { return nil }
+        guard var ls = depth.worldPoint(person.leftShoulder.position, camera: camera) else { return nil }
+        guard var rs = depth.worldPoint(person.rightShoulder.position, camera: camera) else { return nil }
+        guard var lh = depth.worldPoint(person.leftHip.position, camera: camera) else { return nil }
+        guard var rh = depth.worldPoint(person.rightHip.position, camera: camera) else { return nil }
         guard let target = TorsoMap.target(for: person.torso, imageAspect: camera.imageAspect) else { return nil }
-        guard let chest = depth.worldPoint(target.center, camera: camera) else { return nil }
+        guard var chest = depth.worldPoint(target.center, camera: camera) else { return nil }
+        // Looking down, as at anyone on the floor, where a joint sits in the image is sure but depth at
+        // a hip often lands on the floor beside the body: it read hips a quarter metre below the
+        // shoulders on device, which tipped the body toward the camera and shortened it. So the body's
+        // height is the median of the five readings, which two bad hips can't move, and each joint goes
+        // where its own camera ray meets that level.
+        if looksDown(camera) {
+            let level = [ls.y, rs.y, lh.y, rh.y, chest.y].sorted()[2]
+            func onLevel(_ image: SIMD2<Double>) -> SIMD3<Float>? {
+                camera.ray(throughImagePoint: image).hittingHorizontalPlane(y: level)
+            }
+            guard let l = onLevel(person.leftShoulder.position), let r = onLevel(person.rightShoulder.position),
+                  let a = onLevel(person.leftHip.position), let b = onLevel(person.rightHip.position),
+                  let c = onLevel(target.center) else { return nil }
+            (ls, rs, lh, rh, chest) = (l, r, a, b, c)
+        }
         let shoulders = (ls + rs) / 2, hips = (lh + rh) / 2
         let length = simd_distance(shoulders, hips), width = simd_distance(ls, rs)
         guard (0.25...0.85).contains(length) else { return nil }
@@ -153,6 +168,12 @@ enum PatientModelFit {
             found[bone.joint] = point
         }
         return found
+    }
+
+    /// The camera pointed at least 30 degrees below level, as when looking at someone on the floor.
+    static func looksDown(_ camera: CameraPose) -> Bool {
+        let forward = -simd_normalize(camera.transform.columns.2.xyz)
+        return simd_dot(forward, -GhostAnchor.up) > 0.5
     }
 
     /// Depth at the face is its surface, so the centre sits a head's half-depth further from the camera.
