@@ -227,6 +227,7 @@ public struct ProtocolEngine: Sendable {
         case .notAdult: "adult=no"
         case .back: "adult=back"
         case .patientUnresponsive: "responsive=no"
+        case .patientNotBreathing: "breathing=no"
         case .patientAwake: "responsive=yes"
         default: nil
         }

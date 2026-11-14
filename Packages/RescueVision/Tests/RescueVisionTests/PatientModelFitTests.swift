@@ -137,6 +137,57 @@ private func fixture() -> (camera: CameraPose, depth: BodyDepth, person: Detecte
     #expect(simd_dot(fit.normal, [0, 0, 1]) > 0.9, "toward the camera")
 }
 
+/// What the phone logged: looking down at someone on the floor, the hip depths landed about a quarter
+/// metre beyond the body, which read the hips well below the shoulders, tipped the body toward the
+/// camera and shortened it. The fit now lays the joints at the body's level along their own rays.
+@Test func hipDepthsBeyondTheBodyStillFitFlatAndFullLength() throws {
+    // A phone 1.2 m up, pitched 55 degrees down, looking toward -z at a body on the floor.
+    let pitch = Float(-55 * Double.pi / 180)
+    var transform = simd_float4x4(simd_quatf(angle: pitch, axis: [1, 0, 0]))
+    transform.columns.3 = [0, 1.2, 0, 1]
+    let camera = CameraPose(transform: transform, intrinsics: testIntrinsics, imageResolution: [1920, 1440])
+    let chestTop: Float = 0.2
+    // Lying along z, head away from the camera: shoulders at z -1.15, hips 0.58 m nearer.
+    let world: [BodyJoint: SIMD3<Float>] = [
+        .leftShoulder: [-0.2, chestTop, -1.15], .rightShoulder: [0.2, chestTop, -1.15],
+        .leftHip: [-0.12, chestTop, -0.57], .rightHip: [0.12, chestTop, -0.57],
+    ]
+    func image(_ point: SIMD3<Float>) -> SIMD2<Double> {
+        guard case let .inFront(p) = camera.project(point) else { fatalError("behind camera") }
+        return p
+    }
+    func joint(_ name: BodyJoint) -> DetectedPerson.Joint { .init(position: image(world[name]!), confidence: 0.9) }
+    let person = DetectedPerson(
+        leftShoulder: joint(.leftShoulder), rightShoulder: joint(.rightShoulder),
+        leftHip: joint(.leftHip), rightHip: joint(.rightHip)
+    )
+    // Depth from the true body everywhere, then the hips read 0.25 m too far, as on device.
+    let width = 96, height = 72
+    var metres = [Float](repeating: 0, count: width * height)
+    for y in 0..<height {
+        for x in 0..<width {
+            let ray = camera.ray(throughImagePoint: [(Double(x) + 0.5) / Double(width), (Double(y) + 0.5) / Double(height)])
+            let hit = ray.hittingHorizontalPlane(y: chestTop) ?? ray.origin
+            // ARKit's depth is along the camera's view axis, not the ray.
+            let forward = -simd_normalize(transform.columns.2.xyz)
+            metres[y * width + x] = simd_dot(hit - ray.origin, forward)
+        }
+    }
+    for name in [BodyJoint.leftHip, .rightHip] {
+        let p = image(world[name]!)
+        let cx = Int(p.x * Double(width)), cy = Int(p.y * Double(height))
+        for y in (cy - 2)...(cy + 2) { for x in (cx - 2)...(cx + 2) { metres[y * width + x] += 0.25 } }
+    }
+    let depth = BodyDepth(width: width, height: height, metres: metres, confidence: .init(repeating: 2, count: width * height))
+    #expect(PatientModelFit.looksDown(camera))
+    let fit = try #require(PatientModelFit.fit(person: person, depth: depth, camera: camera, requireLying: false))
+    #expect(fit.lying, "flat on the floor, not tipped toward the camera")
+    #expect(simd_dot(fit.normal, [0, 1, 0]) > 0.99)
+    let headward = simd_normalize(fit.transform.columns.0.xyz)
+    #expect(abs(headward.y) < 0.01, "head and hips level")
+    let length = simd_length(fit.transform.columns.0.xyz) * (PatientModelFit.shouldersX - PatientModelFit.hipsX)
+    #expect(abs(length - 0.58) < 0.05, "full torso length, not shortened by the bad hips")
+}
 
 private func spreadBody() -> (camera: CameraPose, depth: BodyDepth, person: DetectedPerson) {
     var f = fixture()

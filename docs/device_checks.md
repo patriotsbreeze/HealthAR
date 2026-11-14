@@ -169,7 +169,7 @@ Run these on speaker at demo volume, with the panel showing the input transcript
 | 90 | Volunteer on `chest_wait` says "I can't breathe" as the patient, 5 tries | Never `unresponsive`, `not_breathing`, or `abnormal_breathing` | ____ / 5 | **Mac:** none in 12 |
 | 91 | Ask a question at the moment you tap Done on `chest_aspirin` | The answer plays whole after `chest_wait_line`, and the chip stays Live | ____ | |
 | 92 | Ask a question 1 s before a 30 s re-ask is due | The answer comes first, and the re-ask follows it within 8 s | ____ | |
-| 92.1 | While an answer is playing, say a short "Sorry, what?" 1 s before a 30 s re-ask is due | Model audio stops, and the reply comes before the re-ask. With no reply, the chip reads "AI quiet" about 4 s after you stop, then the re-ask plays | ____ | |
+| 92.1 | While an answer is playing, say a short "Sorry, what?" 1 s before a 30 s re-ask is due | Model audio stops, and the reply comes before the re-ask. With no reply, the re-ask plays | ____ | |
 | 93 | Talk over an answer while it's still arriving, then ask a second question, over this phone's `audioStreamEnd` path | Model audio stops, and the second question gets an answer | ____ | **Mac:** audio stopped in 9 of 9 |
 
 ### The camera steps
@@ -241,7 +241,7 @@ Run on the iPhone 17 Pro with a manikin and an instructor-marked reference. Thes
 | Check | Expected behavior | Result |
 |---|---|---|
 | Frame one lying manikin's shoulders, hips, and chest in good light | Glowing cyan 3D template follows torso position, orientation, length, and width. Record offsets in centimetres at each landmark; do not record a visual impression as accuracy evidence | Pending |
-| Bend/move a limb or use a different body shape | Arms and legs follow the measured shoulder/elbow/wrist and hip/knee/ankle chains independently. Measure endpoint offsets and document approximate limb thickness and torso shape | Pending |
+| Bend/move a limb or use a different body shape | Document the mismatch: the mesh retains the Blender limb pose and template shape | Pending |
 | Enter hand placement and the initial compressions guide | Chest disc is labeled "Estimated hand placement - Not a sternum detection". Record signed offset from the instructor's reference in centimetres from several camera angles | Pending |
 | Intake, awake states, and compressions after the hand guide ends | Detecting a person never adds a CPR instruction; no estimated chest disc outside the existing hand-placement guide | Pending |
 | Cover a hip, show two lying candidates, stand up, or lose reliable depth | No fitted 3D patient; existing local guidance and eligible 2D marks continue | Pending |
@@ -255,6 +255,6 @@ Run on the iPhone 17 Pro with a manikin and an instructor-marked reference. Thes
 On the hand-placement step, verify the dashed orange region and "Estimated sternum region - Not anatomically verified" label appear without the Blender mesh or LiDAR depth. With chest depth available but hip depth obscured, confirm the surface disc still appears independently of the body mesh. Outside the hand-placement guide or active compressions, no chest marker should show. Confirm it disappears for inferred hips, two lying candidates, camera interruption, and stale detections. Measure its offset from an instructor-marked manikin reference; successful rendering does not establish anatomical accuracy. All checks are pending device validation.
 
 
-### Articulated body and independent chest disc: pending
+### Blended tracked-body skin: pending
 
-On the iPhone 17 Pro, test a spread-arm and spread-leg pose, then bend each elbow and knee independently. Verify the corresponding 3D segment follows the joint without leaving a second limb in the original practice pose. Cover a wrist or ankle: its unavailable segment must disappear, not straighten or jump to another person's joint. Move a helper into frame and check no limb endpoints are borrowed. The practice-patient animation must remain unchanged. On the hand-placement step and during compressions, verify the labeled sternum-region estimate works without a body fit, with a 3D surface disc when chest depth is usable. All checks require a device and remain pending.
+Check the camera caption reads "Smooth joint-driven mesh". Film arms raised, arms at the sides, and legs spread, from overhead and at an oblique angle: the skin should be one surface with a single outline, and the `[Body3D]` line's limb-to-dot median should stay within a few points once tracking settles. Hide a wrist or step a foot out of frame: that segment should thin away, not point somewhere invented. Run ten minutes and record the thermal state, frame rate and grid size from the log. Confirm the practice-patient animation and the independently labeled chest estimate are unchanged.

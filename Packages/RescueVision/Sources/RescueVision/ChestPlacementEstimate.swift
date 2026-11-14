@@ -9,11 +9,15 @@ public struct ChestSurfacePlacement: Sendable, Equatable {
 
 struct TimedChestEstimate: Sendable {
     var target: TorsoTarget
+    /// The torso the target came from, for which way is headward when guiding a hand onto it.
+    var torso: TorsoKeypoints
     var surface: ChestSurfacePlacement?
     var capturedAt: TimeInterval
 
     static func estimate(person: DetectedPerson, depth: BodyDepth?, record: FrameRecord) -> TimedChestEstimate? {
-        guard record.tracking == .normal, !person.torsoEstimated, person.lowestConfidence >= 0.5,
+        // Hips estimated from the head and shoulders are allowed, as in PatientModelFit: a lying
+        // body seen from above rarely shows confident hips, least of all with hands on its chest.
+        guard record.tracking == .normal, person.lowestConfidence >= 0.3,
               let target = TorsoMap.target(for: person.torso, imageAspect: record.pose.imageAspect) else { return nil }
         // No mesh, hip depth, or model asset is needed for the image-space estimate.
         let surface = depth?.worldPoint(target.center, camera: record.pose).flatMap { point -> ChestSurfacePlacement? in
@@ -22,6 +26,6 @@ struct TimedChestEstimate: Sendable {
             let normal = simd_normalize(towardCamera)
             return ChestSurfacePlacement(center: point + normal * 0.008, normal: normal)
         }
-        return TimedChestEstimate(target: target, surface: surface, capturedAt: record.timestamp)
+        return TimedChestEstimate(target: target, torso: person.torso, surface: surface, capturedAt: record.timestamp)
     }
 }

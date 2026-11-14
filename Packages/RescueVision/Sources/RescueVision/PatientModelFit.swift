@@ -61,6 +61,11 @@ public struct PatientBodyPlacement: Sendable, Equatable {
     /// Centre of the real head in the world, from depth at the face. Nil when no head was seen, and
     /// the template head stands in.
     public var head: SIMD3<Float>? = nil
+    /// Hips, and whichever knees and ankles were seen with depth behind them, in the world. A leg
+    /// joint left out falls back to the template's, hung from the joint above it.
+    public var legs: [BodyJoint: SIMD3<Float>] = [:]
+    /// Measured points used to deform the original smooth mesh, from this person only.
+    public var rigJoints: [BodyJoint: SIMD3<Float>] = [:]
     /// Independently measured limbs of this person; missing endpoints produce no segment.
     public var limbs: [TrackedBodyLimb] = []
 }
@@ -91,6 +96,18 @@ enum PatientModelFit {
     static let headHalfDepth: Float = 0.08
     /// The nearest and farthest a head centre may sit from the middle of the shoulders.
     static let headReach: ClosedRange<Float> = 0.1...0.45
+    /// Template leg joints in model space, from patient() in the same script: +z is the right side.
+    public static let templateLegs: [BodyJoint: SIMD3<Float>] = [
+        .leftHip: [-0.42, -0.1, -0.1], .leftKnee: [-0.84, -0.12, -0.12], .leftAnkle: [-1.25, -0.15, -0.13],
+        .rightHip: [-0.42, -0.1, 0.1], .rightKnee: [-0.84, -0.12, 0.12], .rightAnkle: [-1.25, -0.15, 0.13],
+    ]
+    /// Each seen leg joint, the joint it hangs from, and how far apart in metres the two may be.
+    /// `depth` is the leg's half-thickness there, since the camera sees its surface, not its middle.
+    static let legBones: [(joint: BodyJoint, parent: BodyJoint, reach: ClosedRange<Float>, depth: Float)] = [
+        (.leftKnee, .leftHip, 0.2...0.7, 0.06), (.leftAnkle, .leftKnee, 0.2...0.65, 0.045),
+        (.rightKnee, .rightHip, 0.2...0.7, 0.06), (.rightAnkle, .rightKnee, 0.2...0.65, 0.045),
+    ]
+    static let hipDepth: Float = 0.075
 
     /// - Parameter requireLying: When false, any single person's torso is fitted, in whatever pose,
     ///   and the result is marked as not lying so no chest estimate shows on it.
@@ -99,12 +116,27 @@ enum PatientModelFit {
         // are allowed: a lying body seen from above rarely shows confident hips, and the depth and
         // planarity checks below still turn down a guess that doesn't sit on the body.
         guard person.lowestConfidence >= 0.3 else { return nil }
-        guard let ls = depth.worldPoint(person.leftShoulder.position, camera: camera) else { return nil }
-        guard let rs = depth.worldPoint(person.rightShoulder.position, camera: camera) else { return nil }
-        guard let lh = depth.worldPoint(person.leftHip.position, camera: camera) else { return nil }
-        guard let rh = depth.worldPoint(person.rightHip.position, camera: camera) else { return nil }
+        guard var ls = depth.worldPoint(person.leftShoulder.position, camera: camera) else { return nil }
+        guard var rs = depth.worldPoint(person.rightShoulder.position, camera: camera) else { return nil }
+        guard var lh = depth.worldPoint(person.leftHip.position, camera: camera) else { return nil }
+        guard var rh = depth.worldPoint(person.rightHip.position, camera: camera) else { return nil }
         guard let target = TorsoMap.target(for: person.torso, imageAspect: camera.imageAspect) else { return nil }
-        guard let chest = depth.worldPoint(target.center, camera: camera) else { return nil }
+        guard var chest = depth.worldPoint(target.center, camera: camera) else { return nil }
+        // Looking down, as at anyone on the floor, where a joint sits in the image is sure but depth at
+        // a hip often lands on the floor beside the body: it read hips a quarter metre below the
+        // shoulders on device, which tipped the body toward the camera and shortened it. So the body's
+        // height is the median of the five readings, which two bad hips can't move, and each joint goes
+        // where its own camera ray meets that level.
+        if looksDown(camera) {
+            let level = [ls.y, rs.y, lh.y, rh.y, chest.y].sorted()[2]
+            func onLevel(_ image: SIMD2<Double>) -> SIMD3<Float>? {
+                camera.ray(throughImagePoint: image).hittingHorizontalPlane(y: level)
+            }
+            guard let l = onLevel(person.leftShoulder.position), let r = onLevel(person.rightShoulder.position),
+                  let a = onLevel(person.leftHip.position), let b = onLevel(person.rightHip.position),
+                  let c = onLevel(target.center) else { return nil }
+            (ls, rs, lh, rh, chest) = (l, r, a, b, c)
+        }
         let shoulders = (ls + rs) / 2, hips = (lh + rh) / 2
         let length = simd_distance(shoulders, hips), width = simd_distance(ls, rs)
         guard (0.25...0.85).contains(length) else { return nil }
@@ -138,7 +170,13 @@ enum PatientModelFit {
             SIMD4(headward * sx, 0), SIMD4(normal * sy, 0), SIMD4(across * sz, 0), SIMD4(origin, 1)
         ))
         var placement = PatientBodyPlacement(transform: transform, chest: chest + normal * 0.008, normal: normal, lying: lying)
+        for name in BodyJoint.allCases {
+            guard let joint = person.joint(name), joint.confidence >= 0.3,
+                  let world = depth.worldPoint(joint.position, camera: camera) else { continue }
+            placement.rigJoints[name] = world
+        }
         placement.head = head(of: person, depth: depth, camera: camera, shoulders: shoulders, scale: sy)
+        placement.legs = legs(of: person, depth: depth, camera: camera, hips: [.leftHip: lh, .rightHip: rh])
         placement.limbs = limbs(of: person, depth: depth, camera: camera, scale: sy)
         return placement
     }
@@ -176,6 +214,26 @@ enum PatientModelFit {
             return TrackedBodyLimb(from: from, to: to, start: start.point, end: end.point,
                                    radius: radius * min(1.5, max(0.6, scale)), inferredDepth: end.inferred)
         }
+    }
+
+    /// Knees and ankles from depth, each kept only when it sits a leg bone's length from the joint above.
+    static func legs(of person: DetectedPerson, depth: BodyDepth, camera: CameraPose, hips: [BodyJoint: SIMD3<Float>]) -> [BodyJoint: SIMD3<Float>] {
+        let inward = { (surface: SIMD3<Float>, by: Float) in surface + simd_normalize(surface - camera.position) * by }
+        var found = hips.mapValues { inward($0, hipDepth) }
+        for bone in legBones {
+            guard let parent = found[bone.parent], let joint = person.extras[bone.joint], joint.confidence >= 0.3,
+                  let surface = depth.worldPoint(joint.position, camera: camera) else { continue }
+            let point = inward(surface, bone.depth)
+            guard bone.reach.contains(simd_distance(point, parent)) else { continue }
+            found[bone.joint] = point
+        }
+        return found
+    }
+
+    /// The camera pointed at least 30 degrees below level, as when looking at someone on the floor.
+    static func looksDown(_ camera: CameraPose) -> Bool {
+        let forward = -simd_normalize(camera.transform.columns.2.xyz)
+        return simd_dot(forward, -GhostAnchor.up) > 0.5
     }
 
     /// A joint the pose model placed outside the picture is a guess at where it would be, not a sighting.

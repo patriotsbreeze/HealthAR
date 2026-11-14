@@ -94,6 +94,7 @@ public final class VisionSession: Sendable {
         var wantsRunning = false
         var arActive = false
         var patientModelReady = false
+        var patientRigReady = false
         var failed = false
 
         enum DriverAction { case none, run, pause }
@@ -497,6 +498,8 @@ public final class VisionSession: Sendable {
     /// Called only after the renderer has loaded both patient meshes successfully.
     func patientModelDidLoad() { state.withLock { $0.patientModelReady = true } }
 
+    func patientRigDidLoad() { state.withLock { $0.patientRigReady = true } }
+
     /// Depth-backed patient template. It expires instead of staying at an old body location.
     public func patientBodyPlacement() -> PatientBodyPlacement? {
         let now = clock()
@@ -511,6 +514,27 @@ public final class VisionSession: Sendable {
             placement.showsChestEstimate = placement.lying && (state.overlayTarget == .chestCenter || state.showsHandsGuide(at: now))
             return placement
         }
+    }
+
+    /// The sternum ring, and which way the rescuer's hand has to slide to reach it, on place_hands,
+    /// the hands guide, and compressions. Hand detection runs only while this can show.
+    private func handGuide(at now: TimeInterval) -> VisionOverlay.HandGuide? {
+        let mapping: DisplayMapping? = state.withLock { state in
+            guard state.arActive, state.showsChestEstimate(at: now), !state.ghostPractice,
+                  let camera = state.ledger.latest, camera.tracking == .normal,
+                  (0...VisionOverlay.maxCameraAge).contains(now - camera.timestamp) else { return nil }
+            return state.mapping
+        }
+        pose.setWantsHands(mapping != nil)
+        guard let mapping, let chest = pose.chestEstimate,
+              (0...VisionOverlay.handGuideHold).contains(now - chest.capturedAt) else { return nil }
+        var guide = VisionOverlay.HandGuide(target: mapping.ring(for: chest.target))
+        if let seen = pose.hands, (0...VisionOverlay.maxHandAge).contains(now - seen.capturedAt),
+           let hand = HandPlacementGuide.nearest(seen.hands, to: chest.target, imageAspect: mapping.imageAspect) {
+            guide.hand = mapping.viewPoint(fromImage: hand.heel)
+            guide.guidance = HandPlacementGuide.guide(hand: hand.heel, target: chest.target, torso: chest.torso, imageAspect: mapping.imageAspect)
+        }
+        return guide
     }
 
     /// The 3D surface marker works independently of the Blender asset and body fit.
@@ -563,7 +587,7 @@ public final class VisionSession: Sendable {
         if overlay.patientIn3D {
             overlay.chestEstimateLabel = patientBody?.showsChestEstimate == true
                 ? "Estimated hand placement - Not a sternum detection"
-                : "3D body fit - Template estimate"
+                : state.withLock { $0.patientRigReady ? "3D body fit - Smooth joint-driven mesh" : "3D body fit - Rigid template" }
         }
         let chest = pose.chestEstimate
         if let chest, (0...VisionOverlay.maxJointAge).contains(now - chest.capturedAt) {
@@ -577,6 +601,7 @@ public final class VisionSession: Sendable {
         if overlay.sternumEstimate != nil {
             overlay.chestEstimateLabel = "Estimated sternum region - Not anatomically verified"
         }
+        overlay.handGuide = handGuide(at: now)
         overlay.handsIn3D = chestSurfacePlacement() != nil || handsPlacement() != nil
         return overlay
     }

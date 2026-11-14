@@ -50,7 +50,9 @@ enum ARPainter {
         if let zoneChip = scene.zone?.chip { chip(zoneChip, style: style, in: &context) }
         for case let itemChip? in scene.items.map(\.chip) { chip(itemChip, style: style, in: &context) }
         if let hint = scene.hint { chip(hint, style: style, in: &context) }
-        if let region = scene.sternumEstimate {
+        if let guide = scene.handGuide {
+            paintHandGuide(guide, below: scene.chestEstimateLabel == nil ? 0 : 34, band: scene.band, in: &context)
+        } else if let region = scene.sternumEstimate {
             let ring = Path(ellipseIn: region)
             context.fill(ring, with: .color(.orange.opacity(0.12)))
             context.stroke(ring, with: .color(.black.opacity(0.8)), lineWidth: 5)
@@ -70,6 +72,53 @@ enum ARPainter {
             context.fill(Path(roundedRect: frame, cornerRadius: 5), with: .color(.black.opacity(0.8)))
             context.draw(text, in: frame.insetBy(dx: 6, dy: 4))
         }
+    }
+
+    /// The ring goes green with the hand on it. Until then an arrow runs from the heel of the hand to
+    /// the ring, and the line under the label says which way to slide, in the patient's own terms.
+    private static func paintHandGuide(_ guide: ARHandGuide, below top: CGFloat, band: CGRect, in context: inout GraphicsContext) {
+        let color: Color = guide.onTarget ? .green : .orange
+        let ring = Path(ellipseIn: guide.target)
+        context.fill(ring, with: .color(color.opacity(guide.onTarget ? 0.3 : 0.12)))
+        context.stroke(ring, with: .color(.black.opacity(0.8)), lineWidth: 5)
+        context.stroke(ring, with: .color(color), style: StrokeStyle(lineWidth: guide.onTarget ? 3 : 2, dash: guide.onTarget ? [] : [6, 4]))
+        let center = CGPoint(x: guide.target.midX, y: guide.target.midY)
+        var cross = Path()
+        cross.move(to: CGPoint(x: center.x - 5, y: center.y))
+        cross.addLine(to: CGPoint(x: center.x + 5, y: center.y))
+        cross.move(to: CGPoint(x: center.x, y: center.y - 5))
+        cross.addLine(to: CGPoint(x: center.x, y: center.y + 5))
+        context.stroke(cross, with: .color(color), lineWidth: 2)
+
+        if let hand = guide.hand {
+            let dx = center.x - hand.x, dy = center.y - hand.y
+            let length = (dx * dx + dy * dy).squareRoot()
+            // Stop short of the ring's middle, so the head sits on the ring rather than hiding the cross.
+            if !guide.onTarget, length > guide.target.width / 2 {
+                let unit = CGPoint(x: dx / length, y: dy / length)
+                let tip = CGPoint(x: center.x - unit.x * guide.target.width / 2, y: center.y - unit.y * guide.target.width / 2)
+                var arrow = Path()
+                arrow.move(to: hand)
+                arrow.addLine(to: tip)
+                for side in [CGFloat(1), -1] {
+                    arrow.move(to: tip)
+                    arrow.addLine(to: CGPoint(x: tip.x - unit.x * 12 - unit.y * 8 * side, y: tip.y - unit.y * 12 + unit.x * 8 * side))
+                }
+                context.stroke(arrow, with: .color(.black.opacity(0.8)), style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
+                context.stroke(arrow, with: .color(.orange), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+            }
+            let dot = Path(ellipseIn: CGRect(x: hand.x - 7, y: hand.y - 7, width: 14, height: 14))
+            context.fill(dot, with: .color(color))
+            context.stroke(dot, with: .color(.black.opacity(0.8)), lineWidth: 2)
+            context.stroke(dot, with: .color(.white), lineWidth: 1)
+        }
+
+        let text = context.resolve(Text(guide.text).font(.system(size: 15, weight: .bold)).foregroundStyle(guide.onTarget ? .black : .white))
+        let box = band.insetBy(dx: 8, dy: 8)
+        let size = text.measure(in: CGSize(width: max(1, box.width - 16), height: 80))
+        let frame = CGRect(x: box.midX - (size.width + 16) / 2, y: box.minY + top, width: size.width + 16, height: size.height + 10)
+        context.fill(Path(roundedRect: frame, cornerRadius: 8), with: .color(guide.onTarget ? .green : .black.opacity(0.85)))
+        context.draw(text, in: frame.insetBy(dx: 8, dy: 5))
     }
 
     /// Layered round strokes give the measured torso and arms a translucent tube appearance.

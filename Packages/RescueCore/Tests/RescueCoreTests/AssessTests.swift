@@ -109,6 +109,22 @@ import Testing
         #expect(session.state.stateID == "intake_breathing")
     }
 
+    /// Not breathing, or only gasping, is the second half of the call to start CPR. A person's tap
+    /// is the human input the call step needs, so it goes there, as a No at the breathing question does.
+    @Test func tappingNotBreathingGoesStraightToTheCall() throws {
+        var session = Session(engine: try engine())
+        session.human(.patientNotBreathing)
+        #expect(session.state.stateID == "call_911")
+        #expect(session.phrases.last == "call_911")
+    }
+
+    /// Only assess has it: an awake step's patient was already said to be responding.
+    @Test func onlyAssessHasTheNotBreathingTap() throws {
+        let bundle = try loadMergedBundle().startingWithAssessment()
+        let holders = bundle.definition.states.filter { $0.transitions.contains { $0.on == "human.patient_not_breathing" } }
+        #expect(holders.map(\.id) == ["assess"])
+    }
+
     @Test func aLongDescriptionNeverPushesItOn() throws {
         var session = Session(engine: try engine())
         session.send(.modelTurn(active: true))

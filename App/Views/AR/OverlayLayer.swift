@@ -104,6 +104,19 @@ struct OverlayLayer: View {
                     width: radius * 2, height: radius * 2
                 )
             }
+            if let guide = seen.handGuide {
+                let radius = guide.target.radius * geometry.size.width
+                scene.handGuide = ARHandGuide(
+                    target: CGRect(
+                        x: guide.target.center.x * geometry.size.width - radius,
+                        y: guide.target.center.y * geometry.size.height - radius,
+                        width: radius * 2, height: radius * 2
+                    ),
+                    hand: guide.hand.map { CGPoint(x: $0.x * geometry.size.width, y: $0.y * geometry.size.height) },
+                    text: guide.text,
+                    onTarget: guide.onTarget
+                )
+            }
             scene.patientIn3D = seen.patientIn3D
             if seen.patientIn3D { scene.outline = nil }
             scene.bodies = seen.bodies.map { body in

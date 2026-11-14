@@ -268,6 +268,8 @@ public struct VisionOverlay: Sendable, Equatable {
     public var chestEstimateLabel: String?
     /// Palm-sized uncertainty region, never a claim to have identified a bone.
     public var sternumEstimate: Ring?
+    /// Guides the rescuer's hand onto the sternum region while hands are being placed.
+    public var handGuide: HandGuide?
     public var injuryPin: InjuryPin?
     /// The camera is live and nothing is placed, and nothing else would say a tap does anything.
     public var showsInjuryHint: Bool
@@ -297,6 +299,30 @@ public struct VisionOverlay: Sendable, Equatable {
     }
 
     public static let empty = VisionOverlay()
+
+    public struct HandGuide: Sendable, Equatable {
+        /// Where the hand should go, in normalized view coordinates.
+        public var target: Ring
+        /// The heel of the rescuer's hand, normalized view coordinates, when one is seen.
+        public var hand: CGPoint?
+        /// Nil until a hand is seen.
+        public var guidance: HandGuidance?
+
+        public init(target: Ring, hand: CGPoint? = nil, guidance: HandGuidance? = nil) {
+            self.target = target
+            self.hand = hand
+            self.guidance = guidance
+        }
+
+        public var text: String { guidance?.text ?? HandGuidance.noHandText }
+        public var onTarget: Bool { guidance?.move == .onTarget }
+    }
+
+    /// The guide keeps the ring this long after the patient was last seen, because the rescuer's
+    /// hands hide the chest as they reach it.
+    static let handGuideHold: TimeInterval = 2
+    /// A hand is only followed while it is this fresh.
+    static let maxHandAge: TimeInterval = 0.5
 
     /// With no camera frame this recent, nothing on screen can be trusted to line up.
     static let maxCameraAge: TimeInterval = 0.5

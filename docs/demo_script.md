@@ -44,7 +44,7 @@ Times are targets, and the engine keeps its own: the intake question moves on af
 | 0:00 | Volunteer | Sits in the chair, clutching their chest | | Staged |
 | 0:02 | Helper | Unlocks the phone and opens HealthAI SIM. Says "simulation" out loud | Amber strip, "SIMULATION, will not call 911". Voice: "Tap their shoulders and shout. Are they responding?" | Real, local |
 | 0:06 | Rescuer, Helper | Rescuer asks "Can you hear me?", volunteer nods. Helper taps **Yes** at once | Voice: "Tell me what's happening, or tap below." The link pill may read "AI switching, can't hear" for a moment | Real, tap |
-| 0:12 | | | The AI speaks first: it says it's an AI and asks what they can see | Real AI voice |
+| 0:12 | | | The AI speaks first: what it sees and the first thing to check, or it asks what they can see | Real AI voice |
 | 0:16 | Volunteer | As the patient: "My chest really hurts. It feels like something heavy is sitting on me." | AI heard: chest pain. The deck's command is the call prompt, with "Possible heart attack. Not a diagnosis." in the why row under it, tagged AI chose. Voice: "Possible heart attack.", the call prompt, then "Sit them comfortably. Cushion behind their back." Sit-and-rest card | Real AI hearing, engine decides |
 | 0:30 | Helper | Taps **CALL MOCK DISPATCHER**, **Confirm address**, **Read Aloud**. Taps **Close** as soon as Read Aloud has finished | Mic and AI voice close while the sheet is open, and the step waits. On-device voice says it is an AI assistant, then reads the script, which names a possible heart attack, to the Dispatcher | Real script, **mock dispatcher**, no call placed |
 | 0:50 | Helper | Taps **Called** | Voice: "Any aspirin allergy, injury, doctor's warning, or not fully alert?" The answers wait 2 s | Real, local |
@@ -97,7 +97,7 @@ If the AI routes from what the volunteer says before the helper taps, the screen
 |---|---|
 | "If you are sure, tap yes. If not, we start CPR." plays at the first question | The gate turned away an AI report that the patient is responding, since only a tap can lower urgency. Tap **Yes** and carry on |
 | The link pill doesn't read **Live** before a run, or drops mid-run | Run both flows by taps, which work offline. Run 1: **Yes**, **Chest pain or heart symptoms**, **Called**, **No**, **Done, next**, then skip the scan, since there's no arrow without the network. At the slump tap **Not responding now**, then **No**, and carry on as written, tapping **AED here** when the AED comes. Run 2 runs as written, since the pin is on-device. Skip the AI questions. Say the AI is offline |
-| AI doesn't speak first after "Tell me what's happening" | An alert row reads "AI quiet, use the buttons" after 4 s. Tap **Chest pain or heart symptoms** |
+| AI doesn't speak first after "Tell me what's happening" | Tap **Chest pain or heart symptoms** |
 | AI doesn't move to the heart attack step on the patient's words | Tap **Chest pain or heart symptoms**. The screen then reads You tapped |
 | Wrong flow tapped | Hold **Not this, go back** for 2 s, then tap the right button |
 | A step won't move on | Check the dispatcher sheet is closed. An awake step waits while it's open |

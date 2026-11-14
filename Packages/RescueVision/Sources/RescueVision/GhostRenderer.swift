@@ -200,9 +200,13 @@ final class GhostRenderer {
         } else {
             chestAnchor.isEnabled = false
         }
-        if handsLoaded, surface == nil, let placement = vision.handsPlacement() {
+        // Only on place_hands or the hands guide, on a lying patient's chest: the CPR steps.
+        if handsLoaded, let placement = vision.handsPlacement() {
             handsAnchor.isEnabled = true
-            hands.transform = Transform(matrix: placement.transform)
+            var transform = Transform(matrix: placement.transform)
+            // On the estimated sternum region when there is one, so the hands sit on its marker.
+            if let surface { transform.translation = surface.center }
+            hands.transform = transform
         } else {
             handsAnchor.isEnabled = false
         }
@@ -240,6 +244,7 @@ final class GhostRenderer {
         self.skin = skin
         patientLoaded = true
         vision.patientModelDidLoad()
+        vision.patientRigDidLoad()
     }
 
     /// Everything the skin is made of this frame, in world metres: the eased torso, the head, the neck

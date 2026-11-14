@@ -35,6 +35,7 @@ struct HandoffCardView: View {
                     if index > 0 { divider }
                     row(item)
                 }
+                BuildingHandoffRows(coordinator: coordinator)
             }
             .padding(DS.Space.l)
             .frame(maxWidth: .infinity, alignment: .leading)

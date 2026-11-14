@@ -12,7 +12,8 @@ It writes Packages/RescueVision/Sources/RescueVision/Resources/Ghost.usdz with t
 - Patient: an adult lying face up, filled in for practice.
 - PatientOutline: the same body grown 1.5 cm along its normals. The app draws only its back faces,
   which leaves a clean edge around the body, so a real dummy shows through with a line traced round it.
-- TrackedBody and TrackedBodyOutline: the patient without a head, fitted to a real person.
+- TrackedBody and TrackedBodyOutline: the patient without a head or legs, fitted to a real person.
+  The app draws the legs itself, from the knees and ankles it sees.
 - TrackedHead and TrackedHeadOutline: the head alone, centred on the origin, placed on the real head.
 
 Model space, in metres, after export (Y up): +x toward the patient's head, +y up, +z toward the
@@ -179,8 +180,9 @@ HEAD_CENTER = (0.42, BODY + 0.01, 0.0)
 HEAD_SIZE = (0.1, 0.08, 0.075)
 
 
-def patient(name="Patient", head=True):
-    """`head=False` leaves the head off, for the tracked body, whose head the app places by itself."""
+def patient(name="Patient", head=True, legs=True):
+    """`head=False` and `legs=False` leave those off, for the tracked body, whose head and legs the
+    app places by itself on the real person's."""
     body = Body(name)
     body.capsule((-0.36, BODY, 0.0), (0.1, BODY, 0.0), 0.11)
     body.ellipsoid((0.05, BODY, 0.0), (0.14, 0.095, 0.17))
@@ -198,6 +200,8 @@ def patient(name="Patient", head=True):
         body.capsule(shoulder, elbow, 0.047)
         body.capsule(elbow, wrist, 0.037)
         body.ellipsoid((-0.43, BODY - 0.04, 0.28 * z), (0.07, 0.02, 0.04))
+        if not legs:
+            continue
         hip = (-0.42, BODY, 0.1 * z)
         knee = (-0.84, BODY - 0.02, 0.12 * z)
         ankle = (-1.25, BODY - 0.05, 0.13 * z)
@@ -498,7 +502,7 @@ def export(path, objects):
 def main():
     clear_scene()
     body = patient()
-    tracked, head = patient("TrackedBody", head=False), tracked_head()
+    tracked, head = patient("TrackedBody", head=False, legs=False), tracked_head()
     parts = [
         rescuer_upper(), rescuer_lower(), body, outline(body),
         tracked, outline(tracked, "TrackedBodyOutline"), head, outline(head, "TrackedHeadOutline"),

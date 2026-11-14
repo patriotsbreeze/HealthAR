@@ -8,7 +8,7 @@ let package = Package(
     dependencies: [.package(path: "../RescueCore")],
     targets: [
         .target(name: "RescueVision", dependencies: ["RescueCore"], resources: [
-            .copy("Resources/Ghost.usdz"),
+            .copy("Resources/Ghost.usdz"), .copy("Resources/TrackedPatient.usdz"),
             .copy("Resources/Hands.usdz"),
             .copy("Resources/GripReminder.mp4"),
             .copy("Resources/GripReminder.png"),
