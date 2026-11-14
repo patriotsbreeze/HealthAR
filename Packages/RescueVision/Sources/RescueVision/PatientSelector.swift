@@ -68,6 +68,17 @@ struct DetectedPerson: Sendable, Equatable {
         return person
     }
 
+    /// Display measured joints only; inferred hips must never look like detections.
+    var visibleJoints: [SIMD2<Double>] {
+        BodyJoint.allCases.compactMap { name in
+            guard let joint = joint(name), joint.confidence >= 0.5,
+                  joint.position.x.isFinite, joint.position.y.isFinite,
+                  (0...1).contains(joint.position.x), (0...1).contains(joint.position.y)
+            else { return nil }
+            return joint.position
+        }
+    }
+
     var allPositions: [BodyJoint: SIMD2<Double>] {
         var positions = extras.mapValues(\.position)
         positions[.leftShoulder] = leftShoulder.position

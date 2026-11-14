@@ -101,6 +101,8 @@ enum PoseRequest: Sendable, Equatable {
 /// Body regions from one camera frame.
 struct TimedPose: Sendable, Equatable {
     var regions: BodyRegions
+    /// Only measured, confident joints of the selected person, in capture image coordinates.
+    var joints: [SIMD2<Double>] = []
     var frameID: UInt64
     var capturedAt: TimeInterval
 
@@ -203,7 +205,7 @@ final class PoseWorker: Sendable {
                     shoulders: (smoothed.leftShoulder.position + smoothed.rightShoulder.position) / 2,
                     hips: (smoothed.leftHip.position + smoothed.rightHip.position) / 2
                 )
-                state.latestPose = TimedPose(regions: regions, frameID: record.id, capturedAt: record.timestamp)
+                state.latestPose = TimedPose(regions: regions, joints: smoothed.visibleJoints, frameID: record.id, capturedAt: record.timestamp)
             } else {
                 reason = .torsoUnusable
             }
@@ -231,11 +233,13 @@ final class PoseWorker: Sendable {
             return
         }
 
+        var joints: [SIMD2<Double>] = []
         var choice: (bone: LimbBone, capsule: LimbCapsule)?
         switch selector.selectNearest(people: people, anchor: anchor, imageAspect: aspect) {
         case let .patient(person):
             state.scan.record(foundTarget: true)
             let smoothed = state.smoother.smooth(person, at: now, imageAspect: aspect)
+            joints = smoothed.visibleJoints
             if pin != nil {
                 choice = BodyRegionMap.limb(person: smoothed, anchor: anchor, imageAspect: aspect, previous: state.lastBone)
             } else if let held = state.held {
@@ -260,6 +264,6 @@ final class PoseWorker: Sendable {
             // The pin moved to a limb that hasn't locked yet, so the old one isn't what was tapped.
             state.held = nil
         }
-        state.latestPose = TimedPose(regions: BodyRegions(limb: choice.capsule), frameID: record.id, capturedAt: now)
+        state.latestPose = TimedPose(regions: BodyRegions(limb: choice.capsule), joints: joints, frameID: record.id, capturedAt: now)
     }
 }

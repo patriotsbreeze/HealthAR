@@ -182,6 +182,8 @@ public struct VisionOverlay: Sendable, Equatable {
         }
     }
 
+    /// Detected joints in normalized view coordinates, origin top-left.
+    public var joints: [CGPoint] = []
     public var ring: Ring?
     public var aedArrow: AEDArrow?
     public var ghost: Ghost?
@@ -295,6 +297,10 @@ public struct VisionOverlay: Sendable, Equatable {
         // Only on a step with no target of its own, which is compressions, beside whatever else it draws.
         if target == nil, camera.tracking == .normal, let ghost {
             overlay.ghost = mapping.ghost(ghost.anchor, push: ghost.push, practice: ghost.practice, camera: camera.pose)
+        }
+
+        if zoneFresh, let pose {
+            overlay.joints = pose.joints.map { mapping.viewPoint(fromImage: $0) }
         }
 
         // World points, so only with tracking that holds the world steady.
