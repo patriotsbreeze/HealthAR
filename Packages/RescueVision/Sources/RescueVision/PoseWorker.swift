@@ -230,14 +230,19 @@ final class PoseWorker: Sendable {
 
     private func publishJoints(_ detection: PoseDetection, record: FrameRecord, generation: UInt64, depth: BodyDepth?) {
         var fitted: PatientBodyPlacement?
-        if record.tracking == .normal, let depth,
-           case let .patient(person) = selector.select(people: detection.people, gravity: record.pose.gravityInImage, imageAspect: record.pose.imageAspect) {
+        let sel = selector.select(people: detection.people, gravity: record.pose.gravityInImage, imageAspect: record.pose.imageAspect)
+        if record.tracking == .normal, let depth, case let .patient(person) = sel {
             fitted = PatientModelFit.fit(person: person, depth: depth, camera: record.pose)
+        } else if record.tracking == .normal, let depth,
+                  let person = detection.people.max(by: { $0.shoulderSpan < $1.shoulderSpan }) {
+            // No lying patient: the nearest person, by shoulder span on screen, gets the outline in any pose.
+            fitted = PatientModelFit.fit(person: person, depth: depth, camera: record.pose, requireLying: false)
         }
         state.withLock { state in
             guard state.generation == generation else { return }
             state.jointPose = TimedPose(regions: BodyRegions(), joints: detection.joints, skeletons: detection.skeletons, frameID: record.id, capturedAt: record.timestamp)
-            state.patientBody = fitted.map { TimedPatientBody(placement: $0, capturedAt: record.timestamp) }
+            // One frame failing the depth fit keeps the last good one, which still ages out on its own.
+            if let fitted { state.patientBody = TimedPatientBody(placement: fitted, capturedAt: record.timestamp) }
         }
     }
 
@@ -320,4 +325,8 @@ final class PoseWorker: Sendable {
         }
         state.latestPose = TimedPose(regions: BodyRegions(limb: choice.capsule), joints: joints, frameID: record.id, capturedAt: now)
     }
+}
+
+private extension DetectedPerson {
+    var shoulderSpan: Double { simd_distance(leftShoulder.position, rightShoulder.position) }
 }

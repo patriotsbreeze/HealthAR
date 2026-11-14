@@ -12,6 +12,8 @@ It writes Packages/RescueVision/Sources/RescueVision/Resources/Ghost.usdz with t
 - Patient: an adult lying face up, filled in for practice.
 - PatientOutline: the same body grown 1.5 cm along its normals. The app draws only its back faces,
   which leaves a clean edge around the body, so a real dummy shows through with a line traced round it.
+- TrackedBody and TrackedBodyOutline: the patient without a head, fitted to a real person.
+- TrackedHead and TrackedHeadOutline: the head alone, centred on the origin, placed on the real head.
 
 Model space, in metres, after export (Y up): +x toward the patient's head, +y up, +z toward the
 side the rescuer kneels on. The origin is the top of the patient's chest, where the hands go, and
@@ -172,14 +174,23 @@ def rescuer_lower():
 BODY = FLOOR + 0.1
 
 
-def patient():
-    body = Body("Patient")
+# The template head's centre and half-sizes, in model space, as patient() draws it.
+HEAD_CENTER = (0.42, BODY + 0.01, 0.0)
+HEAD_SIZE = (0.1, 0.08, 0.075)
+
+
+def patient(name="Patient", head=True):
+    """`head=False` leaves the head off, for the tracked body, whose head the app places by itself."""
+    body = Body(name)
     body.capsule((-0.36, BODY, 0.0), (0.1, BODY, 0.0), 0.11)
     body.ellipsoid((0.05, BODY, 0.0), (0.14, 0.095, 0.17))
     body.ellipsoid((-0.4, BODY, 0.0), (0.12, 0.09, 0.16))
+    # The abdomen, wide and flat, so the waist doesn't pinch in between the chest and the pelvis.
+    body.ellipsoid((-0.17, BODY, 0.0), (0.2, 0.09, 0.155))
     body.capsule((0.17, BODY, 0.17), (0.17, BODY, -0.17), 0.07)
     body.capsule((0.2, BODY, 0.0), (0.32, BODY, 0.0), 0.05)
-    body.ellipsoid((0.42, BODY + 0.01, 0.0), (0.1, 0.08, 0.075))
+    if head:
+        body.ellipsoid(HEAD_CENTER, HEAD_SIZE)
     for z in (1, -1):
         shoulder = (0.16, BODY, 0.2 * z)
         elbow = (-0.1, BODY - 0.02, 0.25 * z)
@@ -199,12 +210,19 @@ def patient():
 OUTLINE = 0.015
 
 
-def outline(body):
+def tracked_head():
+    """The head on its own, centred on the origin, so the app can put it where the real head is."""
+    head = Body("TrackedHead")
+    head.ellipsoid((0.0, 0.0, 0.0), HEAD_SIZE)
+    return head.mesh()
+
+
+def outline(body, name="PatientOutline"):
     """A copy grown along its normals, for an inverted-hull outline."""
     shell = body.copy()
     shell.data = body.data.copy()
-    shell.name = "PatientOutline"
-    shell.data.name = "PatientOutlineMesh"
+    shell.name = name
+    shell.data.name = name + "Mesh"
     bpy.context.collection.objects.link(shell)
     for vertex in shell.data.vertices:
         vertex.co += vertex.normal * OUTLINE
@@ -480,7 +498,11 @@ def export(path, objects):
 def main():
     clear_scene()
     body = patient()
-    parts = [rescuer_upper(), rescuer_lower(), body, outline(body)]
+    tracked, head = patient("TrackedBody", head=False), tracked_head()
+    parts = [
+        rescuer_upper(), rescuer_lower(), body, outline(body),
+        tracked, outline(tracked, "TrackedBodyOutline"), head, outline(head, "TrackedHeadOutline"),
+    ]
     for obj in parts:
         print(f"[ghost] {obj.name}: {len(obj.data.vertices)} vertices")
     export(OUT, parts)

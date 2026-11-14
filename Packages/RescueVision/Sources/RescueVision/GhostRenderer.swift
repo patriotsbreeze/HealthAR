@@ -106,8 +106,8 @@ final class GhostRenderer {
         apply(line, to: patientOutline)
         detectedFill.addChild(patient.clone(recursive: true))
         detectedShell.addChild(outline.clone(recursive: true))
-        apply(Self.patientGlow(opacity: 0.08), to: detectedFill)
-        var glow = Self.patientGlow(opacity: 0.8)
+        apply(Self.patientGlow(opacity: 0.048), to: detectedFill)
+        var glow = Self.patientGlow(opacity: 0.48)
         glow.faceCulling = .front
         apply(glow, to: detectedShell)
         patientLoaded = true
@@ -118,10 +118,22 @@ final class GhostRenderer {
     private func refresh() {
         let trackedBody = vision.patientBodyPlacement()
         if patientLoaded, let placement = trackedBody {
+            // Eases toward each new fit so frame-to-frame depth noise doesn't shake the body, but
+            // snaps straight there when it first shows.
+            let target = Transform(matrix: placement.transform)
+            if detectedAnchor.isEnabled {
+                var eased = detectedModel.transform
+                eased.translation = simd_mix(eased.translation, target.translation, SIMD3(repeating: Self.bodyEasing))
+                eased.scale = simd_mix(eased.scale, target.scale, SIMD3(repeating: Self.bodyEasing))
+                eased.rotation = simd_slerp(eased.rotation, target.rotation, Self.bodyEasing)
+                detectedModel.transform = eased
+                chestEstimate.position = simd_mix(chestEstimate.position, placement.chest, SIMD3(repeating: Self.bodyEasing))
+            } else {
+                detectedModel.transform = target
+                chestEstimate.position = placement.chest
+            }
             detectedAnchor.isEnabled = true
-            detectedModel.transform = Transform(matrix: placement.transform)
             chestEstimate.isEnabled = placement.showsChestEstimate
-            chestEstimate.position = placement.chest
             chestEstimate.orientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: placement.normal)
         } else {
             detectedAnchor.isEnabled = false
@@ -186,12 +198,14 @@ final class GhostRenderer {
         material.emissiveColor = .init(color: cyan)
         material.emissiveIntensity = 1.6
         material.roughness = 0.25
-        material.metallic = 0
+        material.metallic = 0.0
         material.blending = .transparent(opacity: .init(floatLiteral: opacity))
         return material
     }
 
     private static let patientColor = UIColor(white: 0.92, alpha: 1)
+    /// The share of the way to the latest fit the tracked body moves each rendered frame.
+    private static let bodyEasing: Float = 0.2
 }
 
 extension PhysicallyBasedMaterial {

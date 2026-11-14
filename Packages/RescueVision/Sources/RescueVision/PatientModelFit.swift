@@ -20,10 +20,10 @@ struct BodyDepth: Sendable {
         for row in (y - 1)...(y + 1) {
             for column in (x - 1)...(x + 1) {
                 let i = row * width + column, value = metres[i]
-                if confidence[i] >= 2, value.isFinite, (0.25...4).contains(value) { values.append(value) }
+                if confidence[i] >= 1, value.isFinite, (0.25...4).contains(value) { values.append(value) }
             }
         }
-        guard values.count >= 5 else { return nil }
+        guard values.count >= 4 else { return nil }
         values.sort()
         // A boundary between the body and the floor is not a trustworthy surface sample.
         guard values[values.count - 1] - values[0] < 0.08 else { return nil }
@@ -51,6 +51,11 @@ public struct PatientBodyPlacement: Sendable, Equatable {
     public var chest: SIMD3<Float>
     public var normal: SIMD3<Float>
     public var showsChestEstimate: Bool = false
+    /// Fitted to a face-up, level body. Only then may the chest estimate show.
+    public var lying: Bool = true
+    /// Centre of the real head in the world, from depth at the face. Nil when no head was seen, and
+    /// the template head stands in.
+    public var head: SIMD3<Float>? = nil
 }
 
 struct TimedPatientBody: Sendable {
@@ -64,39 +69,63 @@ enum PatientModelFit {
     static let hipsX: Float = -0.42
     static let shoulderWidth: Float = 0.4
     static let bodyY: Float = -0.1
+    /// Template head centre and half-depth, from HEAD_CENTER and HEAD_SIZE in the same script.
+    public static let headCenter = SIMD3<Float>(0.42, -0.09, 0)
+    static let headHalfDepth: Float = 0.08
+    /// The nearest and farthest a head centre may sit from the middle of the shoulders.
+    static let headReach: ClosedRange<Float> = 0.1...0.45
 
-    static func fit(person: DetectedPerson, depth: BodyDepth, camera: CameraPose) -> PatientBodyPlacement? {
-        // Never fit a patient to the rescuer, guessed hips, or faint joints.
-        guard !person.torsoEstimated, person.lowestConfidence >= 0.5,
-              let ls = depth.worldPoint(person.leftShoulder.position, camera: camera),
-              let rs = depth.worldPoint(person.rightShoulder.position, camera: camera),
-              let lh = depth.worldPoint(person.leftHip.position, camera: camera),
-              let rh = depth.worldPoint(person.rightHip.position, camera: camera),
-              let target = TorsoMap.target(for: person.torso, imageAspect: camera.imageAspect),
-              let chest = depth.worldPoint(target.center, camera: camera)
-        else { return nil }
+    /// - Parameter requireLying: When false, any single person's torso is fitted, in whatever pose,
+    ///   and the result is marked as not lying so no chest estimate shows on it.
+    static func fit(person: DetectedPerson, depth: BodyDepth, camera: CameraPose, requireLying: Bool = true) -> PatientBodyPlacement? {
+        // Never fit a patient to the rescuer or faint joints. Hips estimated from the shoulders and head
+        // are allowed: a lying body seen from above rarely shows confident hips, and the depth and
+        // planarity checks below still turn down a guess that doesn't sit on the body.
+        guard person.lowestConfidence >= 0.3 else { return nil }
+        guard let ls = depth.worldPoint(person.leftShoulder.position, camera: camera) else { return nil }
+        guard let rs = depth.worldPoint(person.rightShoulder.position, camera: camera) else { return nil }
+        guard let lh = depth.worldPoint(person.leftHip.position, camera: camera) else { return nil }
+        guard let rh = depth.worldPoint(person.rightHip.position, camera: camera) else { return nil }
+        guard let target = TorsoMap.target(for: person.torso, imageAspect: camera.imageAspect) else { return nil }
+        guard let chest = depth.worldPoint(target.center, camera: camera) else { return nil }
         let shoulders = (ls + rs) / 2, hips = (lh + rh) / 2
         let length = simd_distance(shoulders, hips), width = simd_distance(ls, rs)
-        guard (0.25...0.85).contains(length), (0.2...0.65).contains(width),
-              simd_distance(lh, rh) > 0.1 else { return nil }
+        guard (0.25...0.85).contains(length) else { return nil }
+        guard (0.2...0.65).contains(width) else { return nil }
+        guard simd_distance(lh, rh) > 0.1 else { return nil }
         let headward = simd_normalize(shoulders - hips)
         let acrossRaw = rs - ls - simd_dot(rs - ls, headward) * headward
         guard simd_length(acrossRaw) > 0.15 else { return nil }
         var across = simd_normalize(acrossRaw)
         var normal = simd_normalize(simd_cross(across, headward))
         if simd_dot(normal, camera.position - shoulders) < 0 { normal = -normal; across = -across }
-        // A face-up, approximately level adult/manikin. No standing or side-on template.
-        guard simd_dot(normal, GhostAnchor.up) >= 0.65,
-              abs(simd_dot(headward, GhostAnchor.up)) < 0.5,
-              abs(simd_dot(chest - shoulders, normal)) < 0.15,
-              abs(simd_dot(lh - shoulders, normal)) < 0.08,
-              abs(simd_dot(rh - shoulders, normal)) < 0.08 else { return nil }
+        // A face-up, approximately level adult/manikin, unless any pose is allowed.
+        let lying = simd_dot(normal, GhostAnchor.up) >= 0.65 && abs(simd_dot(headward, GhostAnchor.up)) < 0.5
+        guard lying || !requireLying else { return nil }
+        guard abs(simd_dot(chest - shoulders, normal)) < 0.15 else { return nil }
+        // A standing or twisting body's hips sit well off its shoulder plane; a lying one's don't.
+        let hipTolerance: Float = requireLying ? 0.08 : 0.2
+        guard abs(simd_dot(lh - shoulders, normal)) < hipTolerance else { return nil }
+        guard abs(simd_dot(rh - shoulders, normal)) < hipTolerance else { return nil }
         let sx = length / (shouldersX - hipsX), sz = width / shoulderWidth
         let sy = min(sx, sz)
         let origin = shoulders - headward * (shouldersX * sx) - normal * (bodyY * sy)
         let transform = simd_float4x4(columns: (
             SIMD4(headward * sx, 0), SIMD4(normal * sy, 0), SIMD4(across * sz, 0), SIMD4(origin, 1)
         ))
-        return PatientBodyPlacement(transform: transform, chest: chest + normal * 0.008, normal: normal)
+        var placement = PatientBodyPlacement(transform: transform, chest: chest + normal * 0.008, normal: normal, lying: lying)
+        placement.head = head(of: person, depth: depth, camera: camera, shoulders: shoulders, scale: sy)
+        return placement
+    }
+
+    /// Depth at the face is its surface, so the centre sits a head's half-depth further from the camera.
+    static func head(of person: DetectedPerson, depth: BodyDepth, camera: CameraPose, shoulders: SIMD3<Float>, scale: Float) -> SIMD3<Float>? {
+        guard let joint = DetectedPerson.head(in: person.extras), joint.confidence >= 0.3,
+              let face = depth.worldPoint(joint.position, camera: camera) else { return nil }
+        let center = face + simd_normalize(face - camera.position) * headHalfDepth * scale
+        guard headReach.contains(simd_distance(center, shoulders)) else {
+            return nil
+        }
+        return center
     }
 }

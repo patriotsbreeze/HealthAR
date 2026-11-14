@@ -54,11 +54,15 @@ private func fixture() -> (camera: CameraPose, depth: BodyDepth, person: Detecte
     #expect(simd_distance(fit.chest, expected) < 0.0001)
 }
 
-@Test func guessedHipsFaintJointsAndStandingPeopleNeverProduceAFittedPatient() {
+@Test func estimatedHipsThatSitOnTheBodyStillFit() {
     let f = fixture()
     var estimated = f.person
     estimated.torsoEstimated = true
-    #expect(PatientModelFit.fit(person: estimated, depth: f.depth, camera: f.camera) == nil)
+    #expect(PatientModelFit.fit(person: estimated, depth: f.depth, camera: f.camera) != nil)
+}
+
+@Test func faintJointsAndStandingPeopleNeverProduceAFittedPatient() {
+    let f = fixture()
     var faint = f.person
     faint.leftShoulder.confidence = 0.2
     #expect(PatientModelFit.fit(person: faint, depth: f.depth, camera: f.camera) == nil)

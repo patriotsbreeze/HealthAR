@@ -499,9 +499,11 @@ public final class VisionSession: Sendable {
         return state.withLock { state in
             guard state.arActive, let camera = state.ledger.latest, camera.tracking == .normal,
                   (0...VisionOverlay.maxCameraAge).contains(now - camera.timestamp),
-                  state.mapping != nil, !state.ghostPractice else { return nil }
+                  state.mapping != nil, !state.ghostPractice else {
+                return nil
+            }
             var placement = fitted.placement
-            placement.showsChestEstimate = state.overlayTarget == .chestCenter || state.showsHandsGuide(at: now)
+            placement.showsChestEstimate = placement.lying && (state.overlayTarget == .chestCenter || state.showsHandsGuide(at: now))
             return placement
         }
     }
