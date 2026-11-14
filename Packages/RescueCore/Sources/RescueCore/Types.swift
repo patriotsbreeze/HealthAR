@@ -13,6 +13,7 @@ public enum HumanAction: String, Sendable, Codable, CaseIterable {
     case patientMoving = "patient_moving"
     case patientAwake = "patient_awake"
     case patientUnresponsive = "patient_unresponsive"
+    case patientNotBreathing = "patient_not_breathing"
     case resumeCpr = "resume_cpr"
     case triageChest = "triage_chest"
     case triageLimb = "triage_limb"

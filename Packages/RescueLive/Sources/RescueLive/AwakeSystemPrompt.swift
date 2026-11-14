@@ -17,8 +17,10 @@ extension SystemPrompt {
     /// `triage_ask` has just said this much out loud, so the cue mustn't get it said twice.
     public static let awakeKick = """
     APP CUE The app has just asked the person what is going on, so do not ask that again. Speak out \
-    loud now, not through a tool. In one short sentence, tell them you are an AI that can talk them \
-    through this, and ask what they can see.
+    loud now, not through a tool. In one short sentence, start on the emergency: say what you can \
+    see in the camera and the first thing to check, or if nothing is clear yet, ask what they can see. \
+    Do not introduce yourself or say what you are first. The screen already says this is an AI, and \
+    you say so whenever someone asks.
     """
 
     private static let awakeIntro = """

@@ -132,7 +132,7 @@ private func declaredFindings(_ contract: Data) throws -> Set<Finding> {
         let text = SystemPrompt.awakeKick.lowercased()
         #expect(text.hasPrefix("app cue"))
         #expect(text.contains("do not ask that again"))
-        #expect(text.contains("you are an ai"))
+        #expect(text.contains("do not introduce yourself"), "the first line is about the emergency, not the app")
         #expect(text.contains("what they can see"))
         #expect(text.contains("one short sentence"))
     }

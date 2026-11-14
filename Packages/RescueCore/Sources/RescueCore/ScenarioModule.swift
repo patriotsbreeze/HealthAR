@@ -55,7 +55,14 @@ public struct ScenarioModule: Sendable, Equatable, Codable {
         return edges
     }
 
-    static let injectedKeys = Set(injectedEdges(triageLoaded: true).map(\.on))
+    /// Only assess gets these. A person who taps that the patient isn't breathing, or is only
+    /// gasping, has given the human input the call step needs, as a No at the breathing question would.
+    /// Core's edge, not a module's, since a module's tap may never leave the awake states.
+    static let assessEdges: [StateDefinition.Transition] = [
+        .init(on: "human.patient_not_breathing", to: "call_911", cutsPhrases: true),
+    ]
+
+    static let injectedKeys = Set((injectedEdges(triageLoaded: true) + assessEdges).map(\.on))
 
     public var version: String
     public var status: String
@@ -211,6 +218,7 @@ extension ProtocolBundle {
         next.definition.states += module.states.map { state in
             var state = state
             state.transitions += ScenarioModule.injectedEdges(triageLoaded: triageLoaded)
+            if state.id == ScenarioModule.assessState { state.transitions += ScenarioModule.assessEdges }
             return state
         }
         next.phrases.phrases += module.phrases

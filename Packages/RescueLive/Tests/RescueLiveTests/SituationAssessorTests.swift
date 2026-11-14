@@ -35,6 +35,24 @@ import Testing
         #expect(assessment?.reasoning == ["Weighing the chest pain", "Checking the tool calls"])
     }
 
+    @Test func aSuggestionNamesOneOfTheFixedButtons() async throws {
+        let read = try await assess(#"{"headline":"Person down, not moving","prediction":"Possible collapse","confidence":"medium","suggests":"not_responding"}"#)
+        #expect(read?.suggests == .notResponding)
+    }
+
+    /// A low read only shows what the AI thinks, so it never highlights anything.
+    @Test func aLowReadSuggestsNothing() async throws {
+        let read = try await assess(#"{"headline":"Person on the floor","prediction":"Possible collapse","confidence":"low","suggests":"start_cpr"}"#)
+        #expect(read != nil)
+        #expect(read?.suggests == nil)
+    }
+
+    @Test func aSuggestionThatIsNoButtonIsIgnored() async throws {
+        let read = try await assess(#"{"headline":"Bleeding arm","prediction":"Possible cut","confidence":"high","suggests":"apply_tourniquet"}"#)
+        #expect(read != nil)
+        #expect(read?.suggests == nil)
+    }
+
     @Test func aPredictionStatedAsFactIsHedged() {
         #expect(SituationAssessor.hedged("Heart attack") == "Possible heart attack")
         #expect(SituationAssessor.hedged("Possible stroke") == "Possible stroke")

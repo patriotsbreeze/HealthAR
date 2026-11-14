@@ -25,8 +25,20 @@ public struct SituationAssessment: Sendable, Equatable {
     public var watchFor: String?
     /// The model's thought summaries, cut to a few short steps.
     public var reasoning: [String]
+    /// Which of the assess step's fixed buttons the read points to. Only ever one of those, only at
+    /// medium or high confidence, and it only highlights the button: a person still taps it.
+    public var suggests: Suggestion?
 
-    public init(sees: String? = nil, emergency: String? = nil, headline: String, prediction: String, confidence: Confidence, watchFor: String?, reasoning: [String]) {
+    /// The assess step's fixed buttons, which are all a suggestion may name.
+    public enum Suggestion: String, Sendable, Equatable, CaseIterable {
+        case startCpr = "start_cpr"
+        case notResponding = "not_responding"
+        case notBreathing = "not_breathing"
+        case awake = "awake_and_talking"
+        case callForHelp = "call_for_help"
+    }
+
+    public init(sees: String? = nil, emergency: String? = nil, headline: String, prediction: String, confidence: Confidence, watchFor: String?, reasoning: [String], suggests: Suggestion? = nil) {
         self.sees = sees
         self.emergency = emergency
         self.headline = headline
@@ -34,6 +46,7 @@ public struct SituationAssessment: Sendable, Equatable {
         self.confidence = confidence
         self.watchFor = watchFor
         self.reasoning = reasoning
+        self.suggests = suggests
     }
 }
 
@@ -195,7 +208,10 @@ public struct SituationAssessor: Sendable {
         let sees = hasPicture ? field(root["sees"], max: maxSees).flatMap { isClean($0, mode: mode) ? $0 : nil } : nil
         let reasoning = steps(in: reply.thoughts).filter { isClean($0, mode: mode) }
         let emergency = hasPicture ? screenEmergency(root["emergency"], mode: mode) : nil
-        return SituationAssessment(sees: sees, emergency: emergency, headline: headline, prediction: prediction, confidence: confidence, watchFor: watchFor, reasoning: reasoning)
+        // A low read only shows what the AI thinks, so it never points at a button.
+        var suggests: SituationAssessment.Suggestion?
+        if confidence != .low, case let .string(raw)? = root["suggests"] { suggests = SituationAssessment.Suggestion(rawValue: raw) }
+        return SituationAssessment(sees: sees, emergency: emergency, headline: headline, prediction: prediction, confidence: confidence, watchFor: watchFor, reasoning: reasoning, suggests: suggests)
     }
 
     /// The voice model's scene report, held to the same rules as a read of the assessor's own: clipped
@@ -315,6 +331,7 @@ public struct SituationAssessor: Sendable {
                         "prediction": ["type": "string"],
                         "confidence": ["type": "string", "enum": .array(SituationAssessment.Confidence.allCases.map { .string($0.rawValue) })],
                         "watch_for": ["type": "string"],
+                        "suggests": ["type": "string", "enum": .array(SituationAssessment.Suggestion.allCases.map { .string($0.rawValue) })],
                     ],
                     "required": ["headline", "prediction", "confidence"],
                 ],
@@ -338,6 +355,12 @@ public struct SituationAssessor: Sendable {
     "Not enough information yet".
     confidence: low, medium or high, from how much the transcripts actually support it.
     watch_for: at most 12 words, the one change that would matter most. Leave it out if nothing does.
+    suggests: which one button the rescuer should most likely press next, only when what you see and \
+    hear clearly supports it, and never at low confidence. start_cpr only for someone who doesn't \
+    respond and isn't breathing normally. not_responding for someone down who doesn't move or answer. \
+    not_breathing for no breathing, or only gasping. awake_and_talking only when the person is clearly \
+    awake and talking. call_for_help for any other emergency that needs emergency services on the way. Leave it out when \
+    unsure. It only highlights a button; the rescuer decides.
     Never state a condition as fact, never give a medication or a dose, never say anyone is fine, \
     dead, or doesn't need emergency services, never tell anyone to check a pulse, and never give an \
     instruction that contradicts the app's current step. The app's protocol decides every step, not you.
