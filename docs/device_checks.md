@@ -169,7 +169,7 @@ Run these on speaker at demo volume, with the panel showing the input transcript
 | 90 | Volunteer on `chest_wait` says "I can't breathe" as the patient, 5 tries | Never `unresponsive`, `not_breathing`, or `abnormal_breathing` | ____ / 5 | **Mac:** none in 12 |
 | 91 | Ask a question at the moment you tap Done on `chest_aspirin` | The answer plays whole after `chest_wait_line`, and the chip stays Live | ____ | |
 | 92 | Ask a question 1 s before a 30 s re-ask is due | The answer comes first, and the re-ask follows it within 8 s | ____ | |
-| 92.1 | While an answer is playing, say a short "Sorry, what?" 1 s before a 30 s re-ask is due | Model audio stops, and the reply comes before the re-ask. With no reply, the chip reads "AI quiet" about 4 s after you stop, then the re-ask plays | ____ | |
+| 92.1 | While an answer is playing, say a short "Sorry, what?" 1 s before a 30 s re-ask is due | Model audio stops, and the reply comes before the re-ask. With no reply, the re-ask plays | ____ | |
 | 93 | Talk over an answer while it's still arriving, then ask a second question, over this phone's `audioStreamEnd` path | Model audio stops, and the second question gets an answer | ____ | **Mac:** audio stopped in 9 of 9 |
 
 ### The camera steps

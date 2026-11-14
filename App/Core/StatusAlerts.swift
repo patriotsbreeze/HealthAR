@@ -36,9 +36,8 @@ extension AppCoordinator {
         if aiCannotHear {
             alerts.append(StatusAlert(text: "Mic problem, AI can't hear", symbol: "mic.slash.fill", weight: .act))
         }
-        if aiQuiet {
-            alerts.append(StatusAlert(text: "AI quiet, use the buttons", symbol: "waveform.badge.exclamationmark", weight: .act))
-        }
+        // No row for the AI going quiet: it fired on any noise and on an AI that was only watching, so
+        // it was mostly noise itself. The buttons always work, and the AI read shows when the AI fails.
         switch audioHealth {
         case .outputLost:
             alerts.append(StatusAlert(text: "No sound, follow the screen", symbol: "speaker.slash.fill", weight: .act))
