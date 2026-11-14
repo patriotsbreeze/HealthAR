@@ -22,10 +22,21 @@ import Testing
         #expect(fixture.audio.played == ["ask_responsive"])
         #expect(coordinator.instruction == coordinator.engine.bundle.text(forPhrase: "ask_responsive"))
 
-        // Nobody touches it. Every required step still plays, and it ends up compressing.
-        fixture.run(seconds: 26)
+        // Nobody answers. The question says itself again and waits; only the rescuer moves it on.
+        fixture.run(seconds: 30.2)
+        #expect(coordinator.state.stateID == "intake_responsive")
+        #expect(fixture.audio.played == ["ask_responsive", "ask_responsive", "ask_responsive", "ask_responsive"])
+        #expect(fixture.audio.metronome.isEmpty)
+        coordinator.perform(.no)
+        coordinator.perform(.no)
+        #expect(coordinator.state.stateID == "call_911")
+
+        // From there every required step still plays, one tap each, and it ends up compressing.
+        coordinator.perform(.called)
+        coordinator.perform(.done)
+        coordinator.perform(.done)
         #expect(coordinator.state.stateID == "compressions")
-        #expect(fixture.audio.played == ["ask_responsive", "call_911", "roll_flat", "hands_center", "start_compressions"])
+        #expect(fixture.audio.played.suffix(3) == ["roll_flat", "hands_center", "start_compressions"])
         #expect(fixture.audio.metronome == [true])
         #expect(coordinator.showsPulse)
 
@@ -58,6 +69,7 @@ import Testing
         fixture.coordinator.beginRescue()
         fixture.coordinator.force(stateID: "place_hands")
         fixture.run(seconds: 5.2)
+        fixture.coordinator.perform(.done)
         #expect(fixture.coordinator.state.stateID == "compressions")
     }
 
@@ -386,13 +398,32 @@ import Testing
         #expect(fixture.coordinator.state.stateID == before)
     }
 
+    /// The 911 agent is a scripted log, never a call, and it can't move the rescue on.
+    @Test func theCallerAgentIsASimulatedLogThatMovesNothing() throws {
+        let fixture = try Fixture()
+        let coordinator = fixture.coordinator
+        coordinator.beginRescue()
+        coordinator.perform(.no)
+        coordinator.perform(.no)
+        #expect(coordinator.state.stateID == "call_911")
+        let lines = AppCoordinator.callerAgentLines(coordinator.callerScript)
+        #expect(lines.first?.contains("Simulation, no real call") == true)
+        #expect(lines.contains { $0.contains(coordinator.callerScript.situation) })
+        #expect(lines.last?.contains("Tap Called") == true)
+        fixture.run(seconds: 30)
+        #expect(coordinator.state.stateID == "call_911", "the agent's call moves no step")
+    }
+
     @Test func losingLiveSilentlyFallsBackToTheLocalProtocol() async throws {
         let fixture = try Fixture(live: true)
         try await fixture.beginAndConnect()
         fixture.mock.emit(.closed(.networkFailure(code: nil)))
         try await waitUntil("the link went down") { !fixture.coordinator.liveConnected }
         #expect(fixture.coordinator.linkLabel == "Offline protocol")
-        fixture.run(seconds: 26)
+        fixture.coordinator.perform(.no)
+        fixture.coordinator.perform(.no)
+        #expect(fixture.coordinator.state.stateID == "call_911")
+        fixture.coordinator.perform(.startCpr)
         #expect(fixture.coordinator.state.stateID == "compressions")
         #expect(fixture.audio.played.contains("start_compressions"))
     }

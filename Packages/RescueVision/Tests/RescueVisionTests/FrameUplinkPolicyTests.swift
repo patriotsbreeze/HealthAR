@@ -34,13 +34,13 @@ private final class Gate {
     #expect(gate.run(from: 1, seconds: 60).isEmpty)
 }
 
-@Test func idleRateIsOnePerFiveSeconds() {
+@Test func idleRateIsOnePerSecond() {
     let gate = Gate()
     let sent = gate.run(from: 0, seconds: 30)
-    #expect(sent.count == 6 || sent.count == 7)
+    #expect(sent.count == 30 || sent.count == 31)
     for (a, b) in zip(sent, sent.dropFirst()) {
-        #expect(b - a >= 5)
-        #expect(b - a <= 5.1)
+        #expect(b - a >= 1)
+        #expect(b - a <= 1.1)
     }
 }
 
@@ -53,18 +53,21 @@ private final class Gate {
     for (a, b) in zip(sent, sent.dropFirst()) { #expect(b - a >= 1) }
 
     let after = gate.run(from: 13, seconds: 20)
-    #expect(after.count <= 4)
-    for (a, b) in zip(after, after.dropFirst()) { #expect(b - a >= 5) }
+    #expect(after.count <= 21)
+    for (a, b) in zip(after, after.dropFirst()) { #expect(b - a >= 1) }
 }
 
+/// Bursts only, as on an awake step, where nothing goes out between bursts.
 @Test func closingEndsABurstForGood() {
     let gate = Gate()
+    gate.policy.setBurstsOnly(true)
     gate.policy.beginBurst(at: 0)
     #expect(gate.send(at: 0))
     gate.policy.setOpen(false)
     #expect(!gate.send(at: 1))
     gate.policy.setOpen(true)
     #expect(!gate.send(at: 2), "the burst must not resume after the gate reopens")
+    gate.policy.beginBurst(at: 5)
     #expect(gate.send(at: 5))
 }
 
@@ -73,15 +76,15 @@ private final class Gate {
     #expect(gate.send(at: 0))
     gate.policy.setOpen(false)
     gate.policy.setOpen(true)
-    #expect(!gate.send(at: 1))
+    #expect(!gate.send(at: 0.9))
 }
 
 @Test func thermalScalingStretchesButStaysInRange() {
     let gate = Gate()
     gate.policy.setIntervalScale(2)
     #expect(gate.send(at: 0))
-    #expect(!gate.send(at: 9.9))
-    #expect(gate.send(at: 10))
+    #expect(!gate.send(at: 1.9))
+    #expect(gate.send(at: 2))
 
     gate.policy.beginBurst(at: 20)
     #expect(gate.send(at: 20))
@@ -90,5 +93,6 @@ private final class Gate {
 
     gate.policy.setIntervalScale(100)
     #expect(gate.send(at: 32))
-    #expect(gate.send(at: 42), "idle never goes past 10 s")
+    #expect(!gate.send(at: 35.9))
+    #expect(gate.send(at: 36), "idle never goes past 4 s")
 }

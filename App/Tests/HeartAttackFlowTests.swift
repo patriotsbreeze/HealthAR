@@ -94,19 +94,28 @@ import Testing
 
     // MARK: - By timeouts
 
-    @Test func theWholeFlowByTimeoutsNeverGivesAspirinOrStartsCPR() throws {
+    /// Silence at the aspirin check rules nothing out and gives nothing: it stays on the check.
+    @Test func withNoReplyNoStepGivesAspirinOrStartsCPR() throws {
         let fixture = try begun()
         let coordinator = fixture.coordinator
         coordinator.perform(.yes)
         coordinator.perform(.triageChest)
+        fixture.run(seconds: 30.2)
+        #expect(coordinator.state.stateID == "chest_call")
+        coordinator.perform(.done)
+        #expect(coordinator.state.stateID == "chest_aspirin_check")
         fixture.audio.clearCalls()
 
-        fixture.run(seconds: 15.2)
-        #expect(coordinator.state.stateID == "chest_aspirin_check")
-        fixture.run(seconds: 20.2)
+        fixture.run(seconds: 60.2)
+        #expect(coordinator.state.stateID == "chest_aspirin_check", "silence never moves the check")
+        #expect(fixture.audio.played.filter { $0 == "aspirin_check" }.count == 6)
+        #expect(!fixture.logDetails(.answer).contains { $0.hasPrefix("aspirin") })
+        fixture.audio.clearCalls()
+
+        coordinator.performStep(.unsure)
         #expect(coordinator.state.stateID == "chest_wait")
-        #expect(fixture.logDetails(.answer).last == "aspirin_risk_reported=no_reply")
-        #expect(fixture.audio.played == ["aspirin_check", "aspirin_skip", "chest_wait_line"])
+        #expect(fixture.logDetails(.answer).last == "aspirin_risk_reported=unsure")
+        #expect(fixture.audio.played == ["aspirin_skip", "chest_wait_line"])
 
         fixture.run(seconds: 95)
         #expect(coordinator.state.stateID == "chest_wait", "no reply never leaves for CPR here")
@@ -117,7 +126,8 @@ import Testing
         expectOffline(fixture)
     }
 
-    @Test func theAspirinStepAndTheScanEndOnTheirOwn() throws {
+    /// The dose step keeps its timeout, and the scan waits for Done.
+    @Test func theAspirinStepEndsOnItsOwnAndTheScanWaitsForDone() throws {
         let fixture = try begun()
         let coordinator = fixture.coordinator
         coordinator.perform(.yes)
@@ -130,13 +140,16 @@ import Testing
         coordinator.perform(.scan)
         #expect(coordinator.state.stateID == "chest_scan")
         fixture.run(seconds: 20.2)
+        #expect(coordinator.state.stateID == "chest_scan")
+        #expect(fixture.audio.played.filter { $0 == "aed_look" }.count == 3)
+        coordinator.perform(.done)
         #expect(coordinator.state.stateID == "chest_wait")
         #expect(coordinator.overlayTarget == nil)
         expectOffline(fixture)
     }
 
     @Test(arguments: ["triage", "general_talk", "choking_talk", "chest_call", "chest_aspirin_check", "chest_aspirin", "chest_wait", "chest_scan"])
-    func aTappedCollapseFromAnyAwakeStateIsCompressingWithin30Seconds(id: String) throws {
+    func aTappedCollapseFromAnyAwakeStateWaitsOnTheBreathingQuestion(id: String) throws {
         let fixture = try begun()
         let coordinator = fixture.coordinator
         coordinator.force(stateID: id)
@@ -144,16 +157,20 @@ import Testing
 
         coordinator.perform(.patientUnresponsive)
         #expect(coordinator.state.stateID == "intake_breathing")
-        fixture.run(seconds: 25.6)
+        fixture.run(seconds: 30.2)
+        #expect(coordinator.state.stateID == "intake_breathing", "only the rescuer moves it on")
+        coordinator.perform(.startCpr)
         #expect(coordinator.state.stateID == "compressions")
         #expect(coordinator.showsPulse)
     }
 
-    @Test func noTouchFromLaunchIsStillTheArrestPath() throws {
+    @Test func noTouchFromLaunchKeepsAskingAndStartCprIsOneTap() throws {
         let fixture = try begun()
-        fixture.run(seconds: 26)
+        fixture.run(seconds: 30.2)
+        #expect(fixture.coordinator.state.stateID == "intake_responsive")
+        #expect(fixture.audio.played == ["ask_responsive", "ask_responsive", "ask_responsive", "ask_responsive"])
+        fixture.coordinator.perform(.startCpr)
         #expect(fixture.coordinator.state.stateID == "compressions")
-        #expect(fixture.audio.played == ["ask_responsive", "call_911", "roll_flat", "hands_center", "start_compressions"])
         #expect(fixture.audio.metronome == [true])
     }
 
@@ -237,14 +254,14 @@ import Testing
         #expect(fixture.audio.lane == ["chest_possible", "chest_sit", "aspirin_check"])
     }
 
-    /// Timers flush nothing, so with no touch every line gets said before the next step's.
+    /// Repeats flush nothing, so with no touch every line gets said before the step's line again.
     @Test func noTouchSaysEverythingInOrder() throws {
         let fixture = try begun()
         fixture.coordinator.perform(.yes)
         fixture.audio.clearCalls()
         fixture.coordinator.perform(.triageChest)
-        fixture.run(seconds: 15.2)
-        #expect(fixture.audio.lane == ["chest_possible", "call_911", "chest_sit", "aspirin_check"])
+        fixture.run(seconds: 10.2)
+        #expect(fixture.audio.lane == ["chest_possible", "call_911", "chest_sit", "chest_sit"])
     }
 
     @Test func aCollapseCutsTheLane() throws {
@@ -258,13 +275,13 @@ import Testing
 
     // MARK: - A tap aimed at the last step
 
-    /// The step moved on by its timer as someone reached for Done, whose spot is now an answer.
+    /// A second tap on Done lands where the answers now are.
     @Test func anAnswerWaitsForTheQuestionToLand() throws {
         let fixture = try begun()
         let coordinator = fixture.coordinator
         coordinator.perform(.yes)
         coordinator.perform(.triageChest)
-        fixture.run(seconds: 15.2)
+        coordinator.perform(.done)
         #expect(coordinator.state.stateID == "chest_aspirin_check")
 
         coordinator.performStep(.no)
@@ -323,9 +340,10 @@ import Testing
         #expect(!fixture.logDetails(.answer).contains { $0.hasPrefix("aspirin") })
 
         coordinator.setDispatcher(open: false)
-        #expect(coordinator.secondsUntilTimeout == 20)
         fixture.run(seconds: 20.2)
-        #expect(coordinator.state.stateID == "chest_wait")
+        #expect(coordinator.state.stateID == "chest_aspirin_check", "closing the sheet answers nothing")
+        #expect(fixture.audio.played.filter { $0 == "aspirin_check" }.count == 2, "the repeats pick up again")
+        #expect(coordinator.secondsUntilTimeout == nil)
     }
 
     // MARK: - The voice
@@ -337,7 +355,8 @@ import Testing
         #expect(open.isSuperset(of: ["triage", "general_talk", "choking_talk", "chest_wait", "limb_wait", "limb_danger"]))
         let fixture = try Fixture(bundle: bundle)
         fixture.coordinator.beginRescue()
-        for state in bundle.definition.states where state.kind.isAwake {
+        // Assess only ever opens a rescue, so nothing walks to it. `AssessTests` checks its voice.
+        for state in bundle.definition.states where state.kind.isAwake && state.id != ScenarioModule.assessState {
             fixture.coordinator.force(stateID: state.id)
             #expect(fixture.coordinator.state.stateID == state.id)
             #expect(fixture.audio.lastPolicy?.modelSpeechOpen == open.contains(state.id), "\(state.id)")
@@ -365,7 +384,8 @@ import Testing
 
     @Test func everyControlDoesWhatTheBundleSays() throws {
         let bundle = try mergedBundle()
-        for state in bundle.definition.states where state.kind.isAwake {
+        // Assess has its own panel, which `AssessTests` drives.
+        for state in bundle.definition.states where state.kind.isAwake && state.id != ScenarioModule.assessState {
             let controls = try {
                 let fixture = try begun()
                 fixture.coordinator.force(stateID: state.id)
@@ -392,7 +412,8 @@ import Testing
         let bundle = try mergedBundle()
         let engine = ProtocolEngine(bundle: bundle)
         for from in bundle.definition.states {
-            for to in bundle.definition.states where to.id != from.id {
+            // Only a restart gets back to where a rescue opens.
+            for to in bundle.definition.states where to.id != from.id && to.id != ScenarioModule.assessState {
                 #expect(OperatorForce.path(engine: engine, from: from.id, to: to.id) != nil, "\(from.id) to \(to.id)")
             }
         }

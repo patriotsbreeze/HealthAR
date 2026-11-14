@@ -55,6 +55,9 @@ public struct ReduceResult: Sendable, Equatable {
 public struct ProtocolEngine: Sendable {
     /// How long past its time a re-ask waits for the AI's turn to end.
     public static let reaskHoldSeconds: TimeInterval = 8
+    /// How long past its timeout assess waits while someone is describing what happened, or the AI is
+    /// answering them. That's the assessment working, but a turn that never ends can't hold it forever.
+    public static let assessHoldSeconds: TimeInterval = 15
 
     public let bundle: ProtocolBundle
     private let states: [String: StateDefinition]
@@ -89,7 +92,8 @@ public struct ProtocolEngine: Sendable {
             micUplink: !state.callActive && !state.dispatcherActive && !dispatcherHeard,
             frameUplink: (definition?.frameUplink ?? false) && !state.callActive,
             audioMode: state.callActive ? .playbackOnly : .full,
-            frameBurstsOnly: definition?.kind.isAwake == true,
+            // Assess is looking for what's wrong, so it sends at the steady rate and not just in bursts.
+            frameBurstsOnly: definition?.kind.isAwake == true && state.stateID != ScenarioModule.assessState,
             modelAudioWaitsForPhrases: definition?.kind.isAwake == true,
             aedFindsCarry: definition?.kind.isAwake == true,
             showsCarriedAED: state.stateID == ScenarioModule.carriedAEDState && !state.aedArrived,
@@ -223,6 +227,7 @@ public struct ProtocolEngine: Sendable {
         case .notAdult: "adult=no"
         case .back: "adult=back"
         case .patientUnresponsive: "responsive=no"
+        case .patientNotBreathing: "breathing=no"
         case .patientAwake: "responsive=yes"
         default: nil
         }
@@ -401,7 +406,9 @@ public struct ProtocolEngine: Sendable {
         }
         if timersWait(for: result.state) { return }
 
-        if let timeout = definition.timeout, now - result.state.enteredAt >= timeout.seconds {
+        let describing = definition.id == ScenarioModule.assessState && result.state.modelTurnActive
+            && now - result.state.enteredAt < (definition.timeout?.seconds ?? 0) + Self.assessHoldSeconds
+        if let timeout = definition.timeout, now - result.state.enteredAt >= timeout.seconds, !describing {
             var target = timeout.to
             if let guardRule = timeout.ifBreathsAtLeast, result.state.breathsMarked >= guardRule.count {
                 target = guardRule.to

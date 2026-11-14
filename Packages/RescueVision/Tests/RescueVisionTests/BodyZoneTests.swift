@@ -85,7 +85,50 @@ private func step(_ session: VisionSession, pose: CameraPose = cameraPose(), tra
     #expect(session.overlay().zones.count == 2)
     clock.advance(VisionOverlay.maxZoneAge - 0.3 + 0.01)
     session.ingest(pixels: makePixels(), pose: cameraPose(), tracking: .normal, imageToView: portraitTransform)
+    #expect(session.overlay().zones.isEmpty)
+    clock.advance(VisionOverlay.maxJointAge)
+    session.ingest(pixels: makePixels(), pose: cameraPose(), tracking: .normal, imageToView: portraitTransform)
     #expect(session.overlay() == .empty)
+}
+
+@Test func theOutlineShowsUnderTheChestAndPadsAndAgesOutWithThem() async throws {
+    let clock = TestClock()
+    for target in [OverlayTarget.chestCenter, .padZones] {
+        let session = makeSession(clock: clock, people: Crowd([fullPerson(center: [0.5, 0.6], axisDegrees: 0, aspect: aspect)]))
+        session.apply(.overlay(target))
+        await step(session)
+        let outline = try #require(session.overlay().outline, "\(target)")
+        #expect(outline.torso.count == 4)
+        #expect(outline.head != nil)
+        #expect(outline.limbs.count == 8)
+        #expect(outline.limbs.allSatisfy { $0.width > 0 })
+
+        clock.advance(VisionOverlay.maxZoneAge + 0.01)
+        session.ingest(pixels: makePixels(), pose: cameraPose(), tracking: .normal, imageToView: portraitTransform)
+        #expect(session.overlay().outline == nil, "\(target)")
+    }
+}
+
+@Test func theOutlineLandsWhereTheChestZoneDoes() async throws {
+    let clock = TestClock()
+    let session = makeSession(clock: clock)
+    session.apply(.overlay(.chestCenter))
+    await step(session)
+    let overlay = session.overlay()
+    let outline = try #require(overlay.outline)
+    let chest = try #require(overlay.zones.first)
+    let xs = outline.torso.map(\.x), ys = outline.torso.map(\.y)
+    #expect((xs.min()!...xs.max()!).contains(chest.center.x) && (ys.min()!...ys.max()!).contains(chest.center.y), "the hands sit inside the torso")
+}
+
+@Test func noOutlineOnStepsThatDontLookForSomeoneLying() async throws {
+    let clock = TestClock()
+    for target in [OverlayTarget.aedDevice, .injurySite] {
+        let session = makeSession(clock: clock)
+        session.apply(.overlay(target))
+        await step(session)
+        #expect(session.overlay().outline == nil, "\(target)")
+    }
 }
 
 @Test func padsFromCrossedLabelsLandInTheSamePlaceButDashed() async throws {
@@ -440,4 +483,139 @@ private func locate(_ session: VisionSession, _ materials: Set<Material>, pose: 
         #expect(session.sightings(of: material) == 0)
     }
     #expect(session.objects.worldPoint(.aed) == nil)
+}
+
+
+@Test func jointDotsFollowDisplayMappingAndExpireWithThePose() async {
+    let clock = TestClock()
+    let session = makeSession(clock: clock)
+    session.apply(.overlay(.padZones))
+    await step(session)
+    let skeleton = DetectedSkeleton(person: lying)
+    let expected = BodyJoint.cprJoints.compactMap { skeleton.joints[$0] }.map { portraitMapping.viewPoint(fromImage: $0) }
+    #expect(!expected.isEmpty)
+    #expect(session.overlay().joints == expected)
+
+    clock.advance(VisionOverlay.maxJointAge + 0.01)
+    session.ingest(pixels: makePixels(), pose: cameraPose(), tracking: .normal, imageToView: portraitTransform)
+    #expect(session.overlay().joints.isEmpty)
+}
+
+@Test func jointDotsExcludeEstimatedFaintAndInvalidJoints() {
+    var body = lying
+    body.torsoEstimated = true
+    body.extras = [
+        .leftWrist: .init(position: [0.2, 0.3], confidence: 0.9),
+        .rightWrist: .init(position: [0.7, 0.8], confidence: 0.2),
+        .leftAnkle: .init(position: [.nan, 0.5], confidence: 1),
+        .rightAnkle: .init(position: [1.1, 0.5], confidence: 1),
+    ]
+    #expect(body.visibleJoints == [body.leftShoulder.position, [0.2, 0.3], body.rightShoulder.position])
+}
+
+
+@Test func activeCameraShowsPartialBodyJointsWithoutSelectingAPatientOrUploading() async {
+    let clock = TestClock()
+    let points: [SIMD2<Double>] = [[0.4, 0.4], [0.5, 0.5]]
+    let session = VisionSession(
+        locator: FixedLocator(box: nil),
+        driver: FakeDriver(surface: wall),
+        detect: { _, _ in [] },
+        detectFrame: { _, _ in PoseDetection(people: [], joints: points) },
+        clock: { clock.now },
+        runsPump: false
+    )
+    session.viewportSize = portraitMapping.viewSize
+    session.start()
+    // No overlay target, lying patient, torso, injury tap, or network permission.
+    let result = await step(session)
+    #expect(result.wantedPixels)
+    #expect(!result.sentUplink)
+    #expect(session.overlay().joints == points.map { portraitMapping.viewPoint(fromImage: $0) })
+    #expect(session.latestTarget == nil)
+    #expect(session.overlay().zones.isEmpty)
+
+    clock.advance(VisionOverlay.maxJointAge + 0.01)
+    session.ingest(pixels: makePixels(), pose: cameraPose(), tracking: .normal, imageToView: portraitTransform)
+    #expect(session.overlay().joints.isEmpty)
+}
+
+
+@Test func cprSkeletonKeepsTheHeadArmsTorsoAndLegsButDropsUnreliablePoints() {
+    let measured: [BodyJoint: DetectedPerson.Joint] = [
+        .leftShoulder: .init(position: [0.3, 0.3], confidence: 0.9),
+        .rightShoulder: .init(position: [0.7, 0.3], confidence: 0.9),
+        .leftElbow: .init(position: [0.25, 0.45], confidence: 0.8),
+        .leftWrist: .init(position: [0.4, 0.6], confidence: 0.8),
+        .rightElbow: .init(position: [0.75, 0.45], confidence: 0.1),
+        .rightWrist: .init(position: [.nan, 0.6], confidence: 0.9),
+        .leftHip: .init(position: [0.35, 0.7], confidence: 0.9),
+        .rightHip: .init(position: [1.1, 0.7], confidence: 0.9),
+        .nose: .init(position: [0.5, 0.2], confidence: 1),
+        .leftKnee: .init(position: [0.35, 0.9], confidence: 1),
+    ]
+    let skeleton = DetectedSkeleton(joints: measured)
+    #expect(Set(skeleton.joints.keys) == [.leftShoulder, .rightShoulder, .leftElbow, .leftWrist, .leftHip, .nose, .leftKnee])
+    #expect(skeleton.joints[.leftWrist] == [0.4, 0.6])
+    #expect(BodyJoint.leftWrist.cprLabel == "L wrist")
+    #expect(BodyJoint.rightWrist.cprLabel == "R wrist")
+    #expect(BodyJoint.nose.cprLabel == "Head")
+    #expect(BodyJoint.leftKnee.cprLabel == "L knee")
+    #expect(BodyJoint.rightAnkle.cprLabel == "R ankle")
+    #expect(BodyJoint.neck.cprLabel == nil, "the neck joins the head on, unlabelled")
+}
+
+@Test func theOutlineJoinsTheLegsAndTheHead() {
+    let body = VisionOverlay.DetectedBody(joints: [
+        .neck: CGPoint(x: 0.5, y: 0.2), .nose: CGPoint(x: 0.5, y: 0.1),
+        .leftHip: CGPoint(x: 0.4, y: 0.5), .leftKnee: CGPoint(x: 0.4, y: 0.7), .leftAnkle: CGPoint(x: 0.4, y: 0.9),
+    ])
+    let pairs = body.segments.map { [$0.from, $0.to] }
+    #expect(pairs.contains([CGPoint(x: 0.4, y: 0.5), CGPoint(x: 0.4, y: 0.7)]), "hip to knee")
+    #expect(pairs.contains([CGPoint(x: 0.4, y: 0.7), CGPoint(x: 0.4, y: 0.9)]), "knee to ankle")
+    #expect(pairs.contains([CGPoint(x: 0.5, y: 0.2), CGPoint(x: 0.5, y: 0.1)]), "neck to head")
+}
+
+@Test func outlinesNeverConnectDifferentPeopleOrFillMissingJoints() {
+    let one = VisionOverlay.DetectedBody(joints: [.leftShoulder: CGPoint(x: 0.2, y: 0.3)])
+    let two = VisionOverlay.DetectedBody(joints: [.leftElbow: CGPoint(x: 0.8, y: 0.5)])
+    #expect(one.segments.isEmpty)
+    #expect(two.segments.isEmpty)
+    let arm = VisionOverlay.DetectedBody(joints: [
+        .leftShoulder: CGPoint(x: 0.2, y: 0.3),
+        .leftElbow: CGPoint(x: 0.25, y: 0.5),
+        .leftWrist: CGPoint(x: 0.3, y: 0.7),
+        .leftEar: CGPoint(x: 0.2, y: 0.1),
+    ])
+    #expect(arm.joints[.leftEar] == nil, "only the body's own joints, never the ears")
+    #expect(arm.segments.count == 2)
+    #expect(arm.segments[0].from == arm.joints[.leftShoulder])
+    #expect(arm.segments[0].to == arm.joints[.leftElbow])
+    #expect(arm.segments[1].to == arm.joints[.leftWrist])
+}
+
+@Test func namedSkeletonsReachTheOverlayWithoutATorsoAndExpireTogether() async {
+    let clock = TestClock()
+    let skeleton = DetectedSkeleton(joints: [
+        .rightElbow: .init(position: [0.4, 0.4], confidence: 0.9),
+        .rightWrist: .init(position: [0.5, 0.5], confidence: 0.9),
+    ])
+    let session = VisionSession(
+        locator: FixedLocator(box: nil), driver: FakeDriver(surface: wall),
+        detect: { _, _ in [] },
+        detectFrame: { _, _ in PoseDetection(people: [], joints: [], skeletons: [skeleton]) },
+        clock: { clock.now }, runsPump: false
+    )
+    session.viewportSize = portraitMapping.viewSize
+    session.start()
+    await step(session)
+    #expect(session.overlay().bodies.count == 1)
+    #expect(session.overlay().bodies.first?.joints[.rightElbow] == portraitMapping.viewPoint(fromImage: [0.4, 0.4]))
+    #expect(session.overlay().bodies.first?.segments.count == 1)
+    #expect(session.overlay().joints.count == 2)
+    #expect(session.latestTarget == nil)
+    clock.advance(VisionOverlay.maxJointAge + 0.01)
+    session.ingest(pixels: makePixels(), pose: cameraPose(), tracking: .normal, imageToView: portraitTransform)
+    #expect(session.overlay().bodies.isEmpty)
+    #expect(session.overlay().joints.isEmpty)
 }

@@ -94,7 +94,7 @@ import Testing
             guard case let .object(item) = declaration, case let .string(name)? = item["name"] else { return nil }
             return name
         }
-        #expect(names == ["report_finding", "report_resources", "say", "locate_object", "log_event"])
+        #expect(names == ["report_finding", "report_resources", "say", "locate_object", "log_event", "report_scene"])
     }
 
     @Test func everyFunctionIsNonBlockingWhateverTheFileSays() throws {
@@ -116,4 +116,16 @@ import Testing
             try LiveSetup.functionDeclarations(fromContract: Data(contract.utf8))
         }
     }
+}
+
+/// Gemini cuts the AI off when it hears speech start, and by default nearly any sound counts. The
+/// setup turns that down, in a form the API accepts.
+@Test func theSetupTurnsDownSpeechSensitivitySoNoiseDoesntCutTheAIOff() throws {
+    let setup = LiveSetup(model: "gemini-3.8-live", systemInstruction: "x", functionDeclarations: [], resumeHandle: nil, seedsHistory: false)
+    let data = try JSONEncoder().encode(setup.jsonValue)
+    let text = try #require(String(data: data, encoding: .utf8))
+    #expect(text.contains("\"startOfSpeechSensitivity\":\"START_SENSITIVITY_LOW\""))
+    // An int32 field: a decimal point could be refused.
+    #expect(text.contains("\"prefixPaddingMs\":400"))
+    #expect(!text.contains("\"prefixPaddingMs\":400."))
 }

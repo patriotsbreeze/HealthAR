@@ -19,6 +19,9 @@ public struct ScenarioModule: Sendable, Equatable, Codable {
     public static let manifest = ["triage.v1", "possible_heart_attack.v1", "possible_broken_bone.v1"]
 
     public static let triageState = "triage"
+    /// The first step when there's an AI to do the assessing: the camera and the bystander's words
+    /// decide where the rescue goes, and nobody has said yet whether the patient is awake.
+    public static let assessState = "assess"
     /// Where an AED found in an awake scan shows after a collapse. It has no overlay of its own, and
     /// core's file can't give it one.
     public static let carriedAEDState = "compressions"
@@ -52,7 +55,14 @@ public struct ScenarioModule: Sendable, Equatable, Codable {
         return edges
     }
 
-    static let injectedKeys = Set(injectedEdges(triageLoaded: true).map(\.on))
+    /// Only assess gets these. A person who taps that the patient isn't breathing, or is only
+    /// gasping, has given the human input the call step needs, as a No at the breathing question would.
+    /// Core's edge, not a module's, since a module's tap may never leave the awake states.
+    static let assessEdges: [StateDefinition.Transition] = [
+        .init(on: "human.patient_not_breathing", to: "call_911", cutsPhrases: true),
+    ]
+
+    static let injectedKeys = Set((injectedEdges(triageLoaded: true) + assessEdges).map(\.on))
 
     public var version: String
     public var status: String
@@ -179,6 +189,15 @@ extension ProtocolBundle {
         return ids.filter { seen.insert($0).inserted }.compactMap(text(forPhrase:))
     }
 
+    /// Opens on the assess step when it loaded. Only for a rescue with an AI to do the assessing,
+    /// since with none the step would only wait out its timer before asking what it always asked.
+    public func startingWithAssessment() -> ProtocolBundle {
+        guard definition.states.contains(where: { $0.id == ScenarioModule.assessState }) else { return self }
+        var opened = self
+        opened.definition.initialState = ScenarioModule.assessState
+        return opened
+    }
+
     /// The flows run on by local phrases and taps, with no AI voice in any awake state.
     public func closingAwakeVoice() -> ProtocolBundle {
         var closed = self
@@ -199,6 +218,7 @@ extension ProtocolBundle {
         next.definition.states += module.states.map { state in
             var state = state
             state.transitions += ScenarioModule.injectedEdges(triageLoaded: triageLoaded)
+            if state.id == ScenarioModule.assessState { state.transitions += ScenarioModule.assessEdges }
             return state
         }
         next.phrases.phrases += module.phrases

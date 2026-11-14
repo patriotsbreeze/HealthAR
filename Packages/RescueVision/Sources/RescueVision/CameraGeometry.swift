@@ -259,6 +259,24 @@ public struct DisplayMapping: Sendable, Equatable {
         )
     }
 
+    func outline(_ outline: BodyOutline) -> VisionOverlay.Outline {
+        let widthFraction = { (imageHeights: Double) in
+            simd_length(viewVector(fromImageHeights: [imageHeights, 0])) / viewSize.width
+        }
+        return VisionOverlay.Outline(
+            torso: outline.torso.map(viewPoint(fromImage:)),
+            torsoLocked: outline.torsoLocked,
+            head: outline.head.map {
+                VisionOverlay.Outline.Head(center: viewPoint(fromImage: $0.center), radius: widthFraction($0.radius), isLocked: $0.isLocked)
+            },
+            limbs: outline.limbs.map {
+                VisionOverlay.Outline.Limb(
+                    from: viewPoint(fromImage: $0.from), to: viewPoint(fromImage: $0.to), width: widthFraction($0.radius * 2), isLocked: $0.isLocked
+                )
+            }
+        )
+    }
+
     /// About a palm across, wherever the pin is.
     static let pressRingRadius: Float = 0.05
 

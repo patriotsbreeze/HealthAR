@@ -591,6 +591,13 @@ private final class Rescue {
     rescue.tap(.patientUnresponsive)
 
     var visited: [String] = []
+    // The breathing question waits for the rescuer, so they answer it.
+    for _ in 0..<5 {
+        rescue.tick()
+        await step(rescue.session)
+        #expect(rescue.session.overlay().aedArrow == nil, "\(rescue.state.stateID)")
+    }
+    rescue.tap(.no)
     for _ in 0..<300 where rescue.state.stateID != "call_911" {
         rescue.tick()
         if visited.last != rescue.state.stateID { visited.append(rescue.state.stateID) }

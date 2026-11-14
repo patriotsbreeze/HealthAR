@@ -33,6 +33,14 @@ struct PoseOrientationScan: Sendable {
     }
 }
 
+struct PoseDetection: Sendable {
+    var people: [DetectedPerson]
+    var joints: [SIMD2<Double>]
+    var skeletons: [DetectedSkeleton] = []
+}
+
+typealias PoseFrameDetector = @Sendable (CapturedFrame, CaptureRotation) async -> PoseDetection
+
 struct VisionPoseDetector: Sendable {
     private let request: DetectHumanBodyPoseRequest = {
         var request = DetectHumanBodyPoseRequest()
@@ -41,13 +49,18 @@ struct VisionPoseDetector: Sendable {
     }()
 
     func detect(_ frame: CapturedFrame, rotation: CaptureRotation) async -> [DetectedPerson] {
+        await detectFrame(frame, rotation: rotation).people
+    }
+
+    func detectFrame(_ frame: CapturedFrame, rotation: CaptureRotation) async -> PoseDetection {
         // A failed request is the same as seeing nobody: no ring, and voice carries on.
         guard let observations = try? await request.perform(on: frame.pixels, orientation: rotation.cgOrientation) else {
-            return []
+            return PoseDetection(people: [], joints: [])
         }
         // Capture image space is the buffer as captured, so its aspect is the buffer's.
         let aspect = Double(CVPixelBufferGetWidth(frame.pixels)) / Double(max(1, CVPixelBufferGetHeight(frame.pixels)))
-        return observations.compactMap { observation in
+        var skeletons: [DetectedSkeleton] = []
+        let people = observations.compactMap { observation -> DetectedPerson? in
             var joints: [BodyJoint: DetectedPerson.Joint] = [:]
             for (name, joint) in observation.allJoints() {
                 guard let body = BodyJoint(name) else { continue }
@@ -56,8 +69,15 @@ struct VisionPoseDetector: Sendable {
                     confidence: Double(joint.confidence)
                 )
             }
+            let skeleton = DetectedSkeleton(joints: joints)
+            if !skeleton.joints.isEmpty { skeletons.append(skeleton) }
             return DetectedPerson(joints: joints, imageAspect: aspect)
         }
+        return PoseDetection(
+            people: people,
+            joints: skeletons.flatMap { skeleton in BodyJoint.cprJoints.compactMap { skeleton.joints[$0] } },
+            skeletons: skeletons
+        )
     }
 }
 
@@ -91,6 +111,8 @@ extension BodyJoint {
 
 /// What pose is asked to find in a frame.
 enum PoseRequest: Sendable, Equatable {
+    /// Display joints without selecting a patient or changing guidance.
+    case joints
     case lying
     /// `anchor` is the pin in this frame's capture image, or nil once it is gone or out of sight.
     case nearPin(anchor: SIMD2<Double>?)
@@ -101,6 +123,9 @@ enum PoseRequest: Sendable, Equatable {
 /// Body regions from one camera frame.
 struct TimedPose: Sendable, Equatable {
     var regions: BodyRegions
+    /// Measured joints in capture image coordinates; skeletons preserve each person and joint name.
+    var joints: [SIMD2<Double>] = []
+    var skeletons: [DetectedSkeleton] = []
     var frameID: UInt64
     var capturedAt: TimeInterval
 
@@ -122,6 +147,12 @@ final class PoseWorker: Sendable {
         var scan = PoseOrientationScan()
         var latest: TimedTorsoTarget?
         var latestPose: TimedPose?
+        var jointPose: TimedPose?
+        var patientBody: TimedPatientBody?
+        var chestEstimate: TimedChestEstimate?
+        /// Hands are looked for only while the hand placement guide is up, since it costs a second request.
+        var wantsHands = false
+        var hands: TimedHands?
         var lastNoTargetReason: NoTargetReason?
         var smoother = JointSmoother()
         var lastBone: LimbBone?
@@ -134,12 +165,32 @@ final class PoseWorker: Sendable {
     static let heldLimbGrace: TimeInterval = 0.5
 
     private let state = Mutex(State())
-    private let detect: PoseDetector
+    private let detect: PoseFrameDetector
+    private let detectHands: HandFrameDetector
     private let selector = PatientSelector()
 
-    init(detect: @escaping PoseDetector) {
-        self.detect = detect
+    init(detect: @escaping PoseDetector, detectFrame: PoseFrameDetector? = nil, detectHands: HandFrameDetector? = nil) {
+        self.detectHands = detectHands ?? { frame, rotation in await VisionHandDetector().detect(frame, rotation: rotation) }
+        self.detect = detectFrame ?? { frame, rotation in
+            let people = await detect(frame, rotation)
+            return PoseDetection(people: people, joints: people.flatMap(\.visibleJoints), skeletons: people.map { DetectedSkeleton(person: $0) })
+        }
     }
+
+    var jointPose: TimedPose? { state.withLock { $0.jointPose } }
+
+    var chestEstimate: TimedChestEstimate? { state.withLock { $0.chestEstimate } }
+
+    var hands: TimedHands? { state.withLock { $0.hands } }
+
+    func setWantsHands(_ wants: Bool) {
+        state.withLock { state in
+            state.wantsHands = wants
+            if !wants { state.hands = nil }
+        }
+    }
+
+    var patientBody: TimedPatientBody? { state.withLock { $0.patientBody } }
 
     var latest: TimedTorsoTarget? { state.withLock { $0.latest } }
     var latestPose: TimedPose? { state.withLock { $0.latestPose } }
@@ -155,6 +206,10 @@ final class PoseWorker: Sendable {
             state.generation += 1
             state.latest = nil
             state.latestPose = nil
+            state.jointPose = nil
+            state.patientBody = nil
+            state.chestEstimate = nil
+            state.hands = nil
             state.lastNoTargetReason = nil
             state.smoother.reset()
             state.lastBone = nil
@@ -164,17 +219,26 @@ final class PoseWorker: Sendable {
 
     /// The person compressing, upright in the portrait-locked app, so no rotation scan.
     @concurrent func rescuer(_ frame: CapturedFrame, record: FrameRecord) async -> CompressionSample? {
-        let people = await detect(frame, .right)
+        let generation = state.withLock { $0.generation }
+        let detection = await detect(frame, .right)
+        publishJoints(detection, record: record, generation: generation, depth: frame.bodyDepth)
+        await findHands(frame, rotation: .right, record: record, generation: generation)
+        let people = detection.people
         let gravity = record.tracking == .notAvailable ? nil : record.pose.gravityInImage
         return CompressionSignal.sample(people: people, gravity: gravity, imageAspect: record.pose.imageAspect)
     }
 
     @concurrent func process(_ frame: CapturedFrame, record: FrameRecord, request: PoseRequest = .lying) async {
         let (rotation, generation) = state.withLock { ($0.scan.current, $0.generation) }
-        let people = await detect(frame, rotation)
+        let detection = await detect(frame, rotation)
+        publishJoints(detection, record: record, generation: generation, depth: frame.bodyDepth)
+        await findHands(frame, rotation: rotation, record: record, generation: generation)
+        let people = detection.people
         state.withLock { state in
             guard state.generation == generation else { return }
             switch request {
+            case .joints:
+                state.scan.record(foundTarget: !detection.joints.isEmpty || detection.skeletons.contains { !$0.joints.isEmpty })
             case .lying:
                 findLying(people, record: record, in: &state)
             case let .nearPin(anchor):
@@ -182,6 +246,42 @@ final class PoseWorker: Sendable {
             case .rescuer:
                 break
             }
+        }
+    }
+
+    private func findHands(_ frame: CapturedFrame, rotation: CaptureRotation, record: FrameRecord, generation: UInt64) async {
+        guard state.withLock({ $0.wantsHands }) else { return }
+        let hands = await detectHands(frame, rotation)
+        state.withLock { state in
+            guard state.generation == generation, state.wantsHands else { return }
+            state.hands = TimedHands(hands: hands, capturedAt: record.timestamp)
+        }
+    }
+
+    private func publishJoints(_ detection: PoseDetection, record: FrameRecord, generation: UInt64, depth: BodyDepth?) {
+        var fitted: PatientBodyPlacement?
+        let sel = selector.select(people: detection.people, gravity: record.pose.gravityInImage, imageAspect: record.pose.imageAspect)
+        let chest: TimedChestEstimate?
+        if case let .patient(person) = sel {
+            chest = TimedChestEstimate.estimate(person: person, depth: depth, record: record)
+        } else {
+            chest = nil
+        }
+        if record.tracking == .normal, let depth, case let .patient(person) = sel {
+            fitted = PatientModelFit.fit(person: person, depth: depth, camera: record.pose)
+        } else if record.tracking == .normal, let depth,
+                  let person = detection.people.max(by: { $0.shoulderSpan < $1.shoulderSpan }) {
+            // No lying patient: the nearest person, by shoulder span on screen, gets the outline in any pose.
+            fitted = PatientModelFit.fit(person: person, depth: depth, camera: record.pose, requireLying: false)
+        }
+        state.withLock { state in
+            guard state.generation == generation else { return }
+            state.jointPose = TimedPose(regions: BodyRegions(), joints: detection.joints, skeletons: detection.skeletons, frameID: record.id, capturedAt: record.timestamp)
+            // Never hold a chest marker on an ambiguous patient. One lost for a moment, as hands
+            // cover the chest, keeps the last estimate, which still ages out where it's read.
+            if chest != nil || sel == .none(.multipleCandidates) { state.chestEstimate = chest }
+            // One frame failing the depth fit keeps the last good one, which still ages out on its own.
+            if let fitted { state.patientBody = TimedPatientBody(placement: fitted, capturedAt: record.timestamp) }
         }
     }
 
@@ -203,7 +303,7 @@ final class PoseWorker: Sendable {
                     shoulders: (smoothed.leftShoulder.position + smoothed.rightShoulder.position) / 2,
                     hips: (smoothed.leftHip.position + smoothed.rightHip.position) / 2
                 )
-                state.latestPose = TimedPose(regions: regions, frameID: record.id, capturedAt: record.timestamp)
+                state.latestPose = TimedPose(regions: regions, joints: smoothed.visibleJoints, frameID: record.id, capturedAt: record.timestamp)
             } else {
                 reason = .torsoUnusable
             }
@@ -231,11 +331,13 @@ final class PoseWorker: Sendable {
             return
         }
 
+        var joints: [SIMD2<Double>] = []
         var choice: (bone: LimbBone, capsule: LimbCapsule)?
         switch selector.selectNearest(people: people, anchor: anchor, imageAspect: aspect) {
         case let .patient(person):
             state.scan.record(foundTarget: true)
             let smoothed = state.smoother.smooth(person, at: now, imageAspect: aspect)
+            joints = smoothed.visibleJoints
             if pin != nil {
                 choice = BodyRegionMap.limb(person: smoothed, anchor: anchor, imageAspect: aspect, previous: state.lastBone)
             } else if let held = state.held {
@@ -260,6 +362,10 @@ final class PoseWorker: Sendable {
             // The pin moved to a limb that hasn't locked yet, so the old one isn't what was tapped.
             state.held = nil
         }
-        state.latestPose = TimedPose(regions: BodyRegions(limb: choice.capsule), frameID: record.id, capturedAt: now)
+        state.latestPose = TimedPose(regions: BodyRegions(limb: choice.capsule), joints: joints, frameID: record.id, capturedAt: now)
     }
+}
+
+private extension DetectedPerson {
+    var shoulderSpan: Double { simd_distance(leftShoulder.position, rightShoulder.position) }
 }

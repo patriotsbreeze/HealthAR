@@ -1,6 +1,30 @@
 import Foundation
 import RescueCore
 
+/// The voice model's description of the camera view, for the screen only. It never becomes a
+/// proposal, so the engine never sees it, and the app screens its words before showing them.
+public struct SceneReport: Sendable, Equatable {
+    public var sees: String
+    public var headline: String
+    public var prediction: String
+    public var confidence: SituationAssessment.Confidence
+    /// One line from the voice AI on what changed and why it matters. The live log's reasoning.
+    public var note: String
+    /// A few words for a possible emergency in view, or empty when there isn't one.
+    public var emergency: String
+    public var stateVersion: Int
+
+    public init(sees: String, headline: String, prediction: String, confidence: SituationAssessment.Confidence, note: String = "", emergency: String = "", stateVersion: Int) {
+        self.note = note
+        self.emergency = emergency
+        self.sees = sees
+        self.headline = headline
+        self.prediction = prediction
+        self.confidence = confidence
+        self.stateVersion = stateVersion
+    }
+}
+
 /// Decodes a model function call into a `ModelProposal`, or refuses it. The arguments are
 /// untrusted, so nothing is coerced: names and enum values must match exactly, and every argument
 /// must be one the contract declares. The engine then decides whether a proposal does anything.
@@ -9,6 +33,8 @@ public struct ToolRouter: Sendable {
         public var proposal: ModelProposal?
         /// Nil only when the call has no usable id, since there is then nothing to answer.
         public var response: ToolResponse?
+        /// A `report_scene` call. Never alongside a proposal.
+        public var scene: SceneReport? = nil
     }
 
     private enum Tool: String {
@@ -34,6 +60,9 @@ public struct ToolRouter: Sendable {
     private static let maxNameLength = 128
     private static let maxPhraseIDBytes = 64
     private static let maxResourceItems = 16
+    /// Longer than any field the contract asks for. A field past this is off contract, not clipped.
+    private static let maxSceneField = 200
+    private static let sceneArguments: Set<String> = ["sees", "headline", "prediction", "confidence", "note", "emergency", "state_version"]
 
     private let clock: @Sendable () -> TimeInterval
     /// What this session's contract declares. A real finding outside it is still off contract.
@@ -49,6 +78,13 @@ public struct ToolRouter: Sendable {
             return Routed(proposal: nil, response: nil)
         }
         let name = call.name.flatMap { $0.isEmpty ? nil : String($0.prefix(Self.maxNameLength)) } ?? "unknown"
+
+        if call.name == "report_scene" {
+            guard let scene = Self.scene(call.args) else {
+                return Routed(proposal: nil, response: ToolResponse(id: id, name: name, status: .rejected, reason: .invalidArguments))
+            }
+            return Routed(proposal: nil, response: ToolResponse(id: id, name: name, status: .received, reason: nil), scene: scene)
+        }
 
         switch Self.decode(name: call.name, args: call.args, allowedFindings: allowedFindings) {
         case let .success(decoded):
@@ -121,6 +157,25 @@ public struct ToolRouter: Sendable {
             guard let note: ModelNote = enumValue(fields["kind"]) else { return nil }
             return .logEvent(note)
         }
+    }
+
+    /// Every argument present, nothing extra, short strings, and a known confidence.
+    private static func scene(_ args: JSONValue?) -> SceneReport? {
+        guard case let .object(fields)? = args, Set(fields.keys) == sceneArguments,
+              let version = fields["state_version"].flatMap(stateVersion),
+              let confidence: SituationAssessment.Confidence = enumValue(fields["confidence"])
+        else { return nil }
+        func text(_ key: String) -> String? {
+            guard case let .string(value)? = fields[key] else { return nil }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty || trimmed.count > maxSceneField ? nil : trimmed
+        }
+        guard let sees = text("sees"), let headline = text("headline"), let prediction = text("prediction"), let note = text("note"),
+              case let .string(emergency)? = fields["emergency"], emergency.count <= maxSceneField
+        else { return nil }
+        // Empty is the usual answer, so it's allowed here, unlike the other fields.
+        return SceneReport(sees: sees, headline: headline, prediction: prediction, confidence: confidence, note: note,
+                           emergency: emergency.trimmingCharacters(in: .whitespacesAndNewlines), stateVersion: version)
     }
 
     private static func enumValue<T: RawRepresentable>(_ field: JSONValue?) -> T? where T.RawValue == String {

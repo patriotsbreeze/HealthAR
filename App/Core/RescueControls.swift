@@ -123,7 +123,7 @@ enum RescueControls {
         case .triageChest, .triageLimb, .triageOther, .triageChoking: return .triage
         case .notAdult, .notThis: return .holdStep
         case .emsArrived where awake: return .holdStep
-        case .patientUnresponsive where awake: return .collapse
+        case .patientUnresponsive where awake, .patientNotBreathing where awake: return .collapse
         default: return .step
         }
     }
@@ -148,6 +148,7 @@ enum RescueControls {
         case .patientMoving: "Patient moved"
         case .patientAwake: "Patient awake"
         case .patientUnresponsive: "Not responding now"
+        case .patientNotBreathing: "Not breathing or only gasping"
         case .resumeCpr: "Resume CPR"
         case .triageChest: "Chest pain or heart symptoms"
         case .triageLimb: "Injured arm or leg"

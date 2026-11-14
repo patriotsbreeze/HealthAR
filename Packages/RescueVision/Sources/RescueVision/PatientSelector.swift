@@ -3,13 +3,65 @@ import simd
 
 /// The 19 joints Vision's body pose reports, under our own names so nothing past the detector
 /// depends on Vision's raw values, which Apple doesn't document.
-enum BodyJoint: String, CaseIterable, Sendable, Hashable {
+public enum BodyJoint: String, CaseIterable, Sendable, Hashable {
     case leftEar, leftEye, rightEar, rightEye, neck, nose
     case leftShoulder, leftElbow, leftWrist
     case rightShoulder, rightElbow, rightWrist
     case root
     case leftHip, leftKnee, leftAnkle
     case rightHip, rightKnee, rightAnkle
+}
+
+extension BodyJoint {
+    /// The whole body, so the outline reads as a person: the head, the torso, the rescuer's arm chain,
+    /// and the legs. The sternum is not a detected joint. The neck only joins the head to the shoulders.
+    public static let cprJoints: [BodyJoint] = [
+        .nose, .neck,
+        .leftShoulder, .rightShoulder, .leftElbow, .rightElbow,
+        .leftWrist, .rightWrist, .leftHip, .rightHip,
+        .leftKnee, .rightKnee, .leftAnkle, .rightAnkle,
+    ]
+
+    public var cprLabel: String? {
+        switch self {
+        case .leftShoulder: "L shoulder"
+        case .rightShoulder: "R shoulder"
+        case .leftElbow: "L elbow"
+        case .rightElbow: "R elbow"
+        case .leftWrist: "L wrist"
+        case .rightWrist: "R wrist"
+        case .leftHip: "L hip"
+        case .rightHip: "R hip"
+        case .leftKnee: "L knee"
+        case .rightKnee: "R knee"
+        case .leftAnkle: "L ankle"
+        case .rightAnkle: "R ankle"
+        case .nose: "Head"
+        default: nil
+        }
+    }
+}
+
+/// Named measurements from one observation; never combines different people or estimates hips.
+struct DetectedSkeleton: Sendable, Equatable {
+    var joints: [BodyJoint: SIMD2<Double>]
+
+    init(joints: [BodyJoint: DetectedPerson.Joint]) {
+        self.joints = [:]
+        for name in BodyJoint.cprJoints {
+            guard let joint = joints[name], joint.confidence >= 0.3,
+                  joint.position.x.isFinite, joint.position.y.isFinite,
+                  (0...1).contains(joint.position.x), (0...1).contains(joint.position.y)
+            else { continue }
+            self.joints[name] = joint.position
+        }
+    }
+
+    init(person: DetectedPerson) {
+        self.init(joints: Dictionary(uniqueKeysWithValues: BodyJoint.cprJoints.compactMap { name in
+            person.joint(name).map { (name, $0) }
+        }))
+    }
 }
 
 struct DetectedPerson: Sendable, Equatable {
@@ -68,6 +120,20 @@ struct DetectedPerson: Sendable, Equatable {
         return person
     }
 
+    /// The nose, or failing that the middle of the eyes or ears. Nil when Vision saw none of them.
+    var head: Joint? { Self.head(in: extras) }
+
+    /// Display measured joints only; inferred hips must never look like detections.
+    var visibleJoints: [SIMD2<Double>] {
+        BodyJoint.allCases.compactMap { name in
+            guard let joint = joint(name), joint.confidence >= 0.5,
+                  joint.position.x.isFinite, joint.position.y.isFinite,
+                  (0...1).contains(joint.position.x), (0...1).contains(joint.position.y)
+            else { return nil }
+            return joint.position
+        }
+    }
+
     var allPositions: [BodyJoint: SIMD2<Double>] {
         var positions = extras.mapValues(\.position)
         positions[.leftShoulder] = leftShoulder.position
@@ -118,7 +184,7 @@ extension DetectedPerson {
     }
 
     /// The nose, or failing that the middle of the eyes or ears.
-    private static func head(in joints: [BodyJoint: Joint]) -> Joint? {
+    static func head(in joints: [BodyJoint: Joint]) -> Joint? {
         if let nose = joints[.nose] { return nose }
         for pair in [(BodyJoint.leftEye, BodyJoint.rightEye), (.leftEar, .rightEar)] {
             let found = [joints[pair.0], joints[pair.1]].compactMap { $0 }

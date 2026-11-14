@@ -77,12 +77,13 @@ private func walk(_ fixture: Fixture, to id: String) {
         #expect(fixture.coordinator.state.stateID == id, "a tap on the camera moves no step")
     }
 
-    /// The Done row goes when the step times out, the band grows into its place, and a tap aimed at Done
-    /// would move the pin and restart its time.
+    /// The Done row goes when the step changes, the band grows into its place, and a second tap aimed at
+    /// Done would move the pin and restart its time.
     @Test func aTapAsTheStepChangesIsIgnoredLikeTheButtons() async throws {
         let fixture = try begun()
         walk(fixture, to: "limb_splint")
-        fixture.run(seconds: 10)
+        settle(fixture)
+        fixture.coordinator.perform(.done)
         #expect(fixture.coordinator.state.stateID == "limb_wait")
         #expect(fixture.coordinator.stepIsSettling)
         fixture.coordinator.tapCamera(at: CGPoint(x: 100, y: 300))
@@ -194,7 +195,7 @@ private func walk(_ fixture: Fixture, to id: String) {
         try await Task.sleep(for: .milliseconds(30))
         #expect(fixture.vision.pinTaps.isEmpty)
 
-        fixture.run(seconds: 7)
+        fixture.coordinator.perform(.done)
         #expect(fixture.coordinator.state.stateID == "limb_flags")
     }
 
@@ -206,7 +207,7 @@ private func walk(_ fixture: Fixture, to id: String) {
         settle(fixture)
         fixture.coordinator.tapCamera(at: .zero)
         try await waitUntil("the failure came back") { fixture.coordinator.pinMessage != nil }
-        fixture.run(seconds: 4)
+        fixture.coordinator.perform(.done)
         #expect(fixture.coordinator.state.stateID == "limb_flags")
     }
 
@@ -347,7 +348,7 @@ private func walk(_ fixture: Fixture, to id: String) {
         fixture.run(seconds: 1.2)
         #expect(!coordinator.showsHandsGuide)
         #expect(!coordinator.leavesRoomForCamera, "the full panels come back")
-        #expect(!coordinator.pulseDocked)
+        #expect(coordinator.pulseDocked, "the beat has one place, the corner")
     }
 
     /// The timer out of place_hands has already shown the hands, and says nothing on its edge.
@@ -462,7 +463,7 @@ private func walk(_ fixture: Fixture, to id: String) {
         #expect(fixture.vision.locateCount == 0)
         #expect(!fixture.audio.played.contains("aed_found"))
         #expect(fixture.coordinator.instruction == "Sweep the phone around. Look for an AED, in case they collapse.")
-        fixture.run(seconds: 16)
+        fixture.coordinator.perform(.done)
         #expect(fixture.coordinator.state.stateID == "chest_wait", "the scan gates nothing")
     }
 

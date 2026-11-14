@@ -532,11 +532,11 @@ private let awakeKinds: [StateDefinition.Kind] = [.triage, .flow]
             node("breathing", .intake, urgency: 2),
         ]))
         session.model(.reportFinding(.chestPain, source: .heard, confidence: .high))
-        session.model(.reportFinding(.unresponsive, source: .seen, confidence: .low))
+        session.model(.reportFinding(.unresponsive, source: .heard, confidence: .low))
         #expect(session.state.stateID == "breathing")
         // The card matches these exactly.
         #expect(session.entries(.finding).map(\.detail) == ["chest_pain", "unresponsive"])
-        #expect(session.entries(.observation).map(\.detail) == ["chest_pain,heard,high", "unresponsive,seen,low"])
+        #expect(session.entries(.observation).map(\.detail) == ["chest_pain,heard,high", "unresponsive,heard,low"])
         #expect(session.entries(.observation).allSatisfy { $0.source == .aiInferred })
     }
 

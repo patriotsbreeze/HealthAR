@@ -30,5 +30,7 @@ xcuserdata/
 evals/private/
 *.mov
 *.mp4
+# Except the grip reminder the app plays as CPR starts, which the build needs.
+!Packages/RescueVision/Sources/RescueVision/Resources/GripReminder.mp4
 
 .DS_Store

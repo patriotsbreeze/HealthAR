@@ -18,7 +18,7 @@ Fill in each blank. A check with no entry has not been done. Never test against 
 
 | # | Check | Pass bar | Result | Notes |
 |---|---|---|---|---|
-| 1 | App installs and opens on the iPhone | Shows banner, name HealthAI SIM, and the SIM icon | ____ | |
+| 1 | App installs and opens on the iPhone | Shows banner, name HealthAI SIM, and the medical alert icon | ____ | |
 | 2 | Non-LiDAR iPhone, if one can be found | Runs with no depth, and the ring still works | ____ | |
 
 ## M1: offline protocol, metronome, call behaviour
@@ -118,7 +118,7 @@ The fuzz bar (0 illegal transitions) is met by `swift test`. These need a real v
 | 51 | Arrow after a 2 m walk away and back. A scan lasts 20 s, and tapping Scan room again keeps the point | Holds on the AED | ____ | |
 | 52 | AED on a wall, not a table | Note where the arrow lands | ____ | |
 | 53 | Metronome once pads are on, against the trainer's prompts | Off, and the phone doesn't compete | ____ | |
-| 53.1 | Trainer talking with pads on but the **Pads on** tap missed | Model calls `report_finding(aed_prompting)`. Phone goes quiet for 8 s, the pulse hides, and the chip reads "AED talking". Note whether the model reports it reliably, and how often it falsely does during compressions | ____ | |
+| 53.1 | Trainer talking with pads on but the **Pads on** tap missed | Model calls `report_finding(aed_prompting)`. Phone goes quiet for 8 s, the beat's dot hides, and the chip reads "AED talking". Note whether the model reports it reliably, and how often it falsely does during compressions | ____ | |
 | 53.2 | Trainer saying "Analyzing, stand clear" with pads on | Model reports what it likes. The phone says nothing about pushing, stopping, or the AED | ____ | |
 | 54 | No uplink during pads and analysis, checked with a proxy or the socket trace | No frames sent | ____ | |
 | 55 | Coarse pad zones, manikin only | Labeled, and agree with the trainer's pictures | ____ | |
@@ -169,7 +169,7 @@ Run these on speaker at demo volume, with the panel showing the input transcript
 | 90 | Volunteer on `chest_wait` says "I can't breathe" as the patient, 5 tries | Never `unresponsive`, `not_breathing`, or `abnormal_breathing` | ____ / 5 | **Mac:** none in 12 |
 | 91 | Ask a question at the moment you tap Done on `chest_aspirin` | The answer plays whole after `chest_wait_line`, and the chip stays Live | ____ | |
 | 92 | Ask a question 1 s before a 30 s re-ask is due | The answer comes first, and the re-ask follows it within 8 s | ____ | |
-| 92.1 | While an answer is playing, say a short "Sorry, what?" 1 s before a 30 s re-ask is due | Model audio stops, and the reply comes before the re-ask. With no reply, the chip reads "AI quiet" about 4 s after you stop, then the re-ask plays | ____ | |
+| 92.1 | While an answer is playing, say a short "Sorry, what?" 1 s before a 30 s re-ask is due | Model audio stops, and the reply comes before the re-ask. With no reply, the re-ask plays | ____ | |
 | 93 | Talk over an answer while it's still arriving, then ask a second question, over this phone's `audioStreamEnd` path | Model audio stops, and the second question gets an answer | ____ | **Mac:** audio stopped in 9 of 9 |
 
 ### The camera steps
@@ -193,7 +193,7 @@ None of these can run in the Simulator, which has no AR. Layout was only checked
 | 106 | Seated volunteer, plain sleeve, phone 1 m away. Tap the arm, then step 1 m sideways. Again on a phone without LiDAR if there is one | Pin stays on the arm, or the tap says it couldn't place one. Never a pin on the floor behind | ____ / 10 | |
 | 107 | On `limb_wait`, finger on its way to the band as someone says "he's stopped breathing", 10 tries. Screen-record it | Compressions never start from that tap. Note where Start CPR sits against where the band was | ____ / 10 | |
 | 108 | Carried arrow in `compressions`, then the phone face down on the floor for 60 s, then picked up | Following the arrow still leads to the AED. Note how far off it is, in degrees | ____ degrees | |
-| 109 | Carried arrow in `compressions` with the AED above the view, then below it | The pointer sits at the band's edge beside the Push pulse, and "Push" stays readable | ____ | |
+| 109 | Carried arrow in `compressions` with the AED above the view, then below it | The pointer sits at the band's edge, and its words keep off the beat's dot in the top-trailing corner | ____ | |
 | 110 | Carried arrow in `compressions`, then Scan room finding the AED again, then Done | Arrow still present when `compressions` comes back | ____ | |
 | 111 | After `aed_found`, bring the AED to the patient, then a collapse | Arrow reads "AED seen earlier". After AED here, no arrow on any way back to `compressions` | ____ | |
 | 112 | Tap Scan room with the phone pointing at the patient, then pan to the AED | Arrow within the 20 s. Note the time to the arrow, and the locate tries on the HUD | ____ s | |
@@ -232,3 +232,24 @@ Pose and the locator, on the phone. The Simulator's staged camera shows only whe
 | 76 | Volunteer consent, covering video sent to Google | On file | ____ | |
 | 77 | Freeze: tag `demo-v1` once all of the above pass | Tagged | ____ | |
 | 78 | After the demo: key rotated, and app removed from any daily phone | Done | ____ | |
+
+
+## Depth-fitted Blender patient: pending device verification
+
+Run on the iPhone 17 Pro with a manikin and an instructor-marked reference. These checks do not establish clinical validity.
+
+| Check | Expected behavior | Result |
+|---|---|---|
+| Frame one lying manikin's shoulders, hips, and chest in good light | Glowing cyan 3D template follows torso position, orientation, length, and width. Record offsets in centimetres at each landmark; do not record a visual impression as accuracy evidence | Pending |
+| Bend/move a limb or use a different body shape | Document the mismatch: the mesh retains the Blender limb pose and template shape | Pending |
+| Enter hand placement and the initial compressions guide | Chest disc is labeled "Estimated hand placement - Not a sternum detection". Record signed offset from the instructor's reference in centimetres from several camera angles | Pending |
+| Intake, awake states, and compressions after the hand guide ends | Detecting a person never adds a CPR instruction; no estimated chest disc outside the existing hand-placement guide | Pending |
+| Cover a hip, show two lying candidates, stand up, or lose reliable depth | No fitted 3D patient; existing local guidance and eligible 2D marks continue | Pending |
+| Hide the body, interrupt AR, stop/start camera, or shed AR for heat | No stale world-space patient or chest disc; pose fit expires within 0.75 s when no fresh fit is available | Pending |
+| Remove/disable scene depth or make the mesh unavailable | Flat overlay remains usable; no claim that a 3D model is rendering | Pending |
+| Move the phone around the patient and rehearse for 10 minutes | Record drift, fit dropouts, frame rate, and thermal state. Check the emissive mesh does not obscure the real chest or controls | Pending |
+
+
+### Independent chest-region marker: pending
+
+On the hand-placement step, verify the dashed orange region and "Estimated sternum region - Not anatomically verified" label appear without the Blender mesh or LiDAR depth. With chest depth available but hip depth obscured, confirm the surface disc still appears independently of the body mesh. Outside the hand-placement guide or active compressions, no chest marker should show. Confirm it disappears for inferred hips, two lying candidates, camera interruption, and stale detections. Measure its offset from an instructor-marked manikin reference; successful rendering does not establish anatomical accuracy. All checks are pending device validation.

@@ -8,6 +8,7 @@ A phone app that guides a bystander through an emergency using voice, camera, an
 
 ## What it does
 
+- **Assess first.** With an AI key, the app opens on the camera and one line, "Point the camera at what's happening, and tell me what's going on." The AI watches and listens, and the screen shows what it thinks so far, in fixed words and marked as possibilities. A sure report routes to the right flow, a collapse goes to the breathing question, and with nothing worked out in 20 s it asks "Are they responding?". Start CPR, 911 script and Tap instead are there from the first second, and the AI may highlight one of them, or a tap choice, as "AI suggests". It never presses one. With no key it opens on the arrest questions as before.
 - **Cardiac arrest.** "Are they responding?", then "Are they breathing normally?", then the call prompt, hand placement, a metronome, the AED steps, and a handoff card. No reply on this path goes to CPR. A rescue that never enters an awake state runs exactly as it did before them, apart from a What's going on? button on the static responsive card, which leads to triage.
 - **Triage, after a Yes tap.** Once a person taps that the patient is responding, the app asks what's going on. A person taps Chest pain or heart symptoms, Injured arm or leg, or Something else, or the AI routes from what it hears, only upward in urgency. The screen says "possible" and "Not a diagnosis", and the why panel shows whether the AI chose or a person tapped.
 - **Possible heart attack.** The call prompt, sitting comfortably with a guide card, an aspirin check, a wait step, and a room scan for the AED. The aspirin check asks about risks, so Yes means a risk and no aspirin, and only a person's No reaches the one approved dose.
@@ -17,6 +18,12 @@ A phone app that guides a bystander through an emergency using voice, camera, an
 - **Collapse.** "Not responding now", Start CPR, or the AI hearing a collapse in any awake state goes to the breathing question or compressions.
 
 Everything works offline by taps. The AI adds to the local steps and replaces none of them.
+
+While the camera is active, on-device pose detection shows blue, named dots for shoulders, elbows, wrists, and hips, with a translucent arm-and-torso outline for each person. Left and right are the detected person's sides. Face and leg points are hidden, and missing or uncertain joints leave gaps. The shaded outline follows 2D image points; it is not a depth-accurate 3D body mesh, a sternum detector, or a compression-depth measurement. The existing hand-placement guide remains separate. Test alignment and left/right labels on a device before a demo.
+
+On a scene-depth-capable device, the AR view can additionally fit the actual Blender `Patient` and `PatientOutline` meshes from `Ghost.usdz` to one clearly detected lying patient's measured shoulders and hips. It draws emissive cyan glass in world space and expires the fit after 0.75 seconds without fresh measurements. High-confidence depth from the same captured frame is required at all four torso landmarks and the estimated chest point; inferred hips, ambiguous patients, uncertain depth, and standing bodies do not produce a 3D fit. If the asset or depth is unavailable, the existing 2D overlay stays available.
+
+This is a torso-fitted mannequin template: its limb pose and body shape are not reconstructed from the person. The chest disc is the existing unvalidated `TorsoMap` estimate placed on measured chest-surface depth, displayed only during the hand-placement guide with the label "Estimated hand placement - Not a sternum detection". It does not detect the sternum, measure compression depth, or establish clinical accuracy.
 
 ## Layout
 
@@ -139,3 +146,8 @@ HEALTHAI_LIVE_EVAL=1 swift test --filter 'LiveEvalTests/triage\(\)' 2>&1 | grep 
 ```
 
 Never run `echo`, `printenv`, or `set -x` with the key set. [evals/README.md](evals/README.md) lists every test and what it measures. These use synthesised speech on a Mac, so they say nothing about a phone's mic or network, which stay device checks in [docs/device_checks.md](docs/device_checks.md).
+
+
+### Estimated sternum-region marker
+
+The hand-placement step and active compressions show a dashed orange, palm-sized region with the label "Estimated sternum region - Not anatomically verified". It reuses the existing unvalidated torso mapping; it does not recognize the sternum or infer a new clinically approved location. A single lying-person candidate, measured shoulders and hips, and fresh tracking are required. The 2D marker works without scene depth or the Blender asset. If depth at the estimated chest surface is usable, a separate 3D disc appears there even when the full-body mesh cannot fit. The marker is never shown merely because an awake person entered the camera view. Test it on a manikin with an instructor-marked reference; it is not validated for real emergencies.

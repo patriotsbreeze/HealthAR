@@ -19,6 +19,8 @@ public enum LiveEvent: Sendable, Equatable {
     case connected(resumed: Bool)
     case disconnected(LiveDisconnectReason)
     case proposal(ModelProposal)
+    /// The voice model's read of the camera view. For the screen only; the engine never sees it.
+    case scene(SceneReport)
     case modelAudio(Data)
     case interrupted
     case turnComplete
@@ -348,6 +350,7 @@ public actor LiveSession {
         for call in calls {
             let routed = router.route(call)
             if let proposal = routed.proposal { eventSink.yield(.proposal(proposal)) }
+            if let scene = routed.scene { eventSink.yield(.scene(scene)) }
             if let response = routed.response { responses.append(response) }
         }
         if !responses.isEmpty {

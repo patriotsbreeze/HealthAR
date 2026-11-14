@@ -182,11 +182,94 @@ public struct VisionOverlay: Sendable, Equatable {
         }
     }
 
+    /// A camera-aligned body outline, not a depth measurement or a clinical assessment.
+    public struct DetectedBody: Sendable, Equatable {
+        public var joints: [BodyJoint: CGPoint]
+
+        public init(joints: [BodyJoint: CGPoint]) {
+            self.joints = joints.filter { BodyJoint.cprJoints.contains($0.key) }
+        }
+
+        /// Only connect endpoints measured on this person. Missing joints leave gaps.
+        public var segments: [Figure.Segment] {
+            let edges: [(BodyJoint, BodyJoint)] = [
+                (.leftShoulder, .rightShoulder),
+                (.leftShoulder, .leftHip), (.rightShoulder, .rightHip),
+                (.leftHip, .rightHip),
+                (.leftShoulder, .leftElbow), (.leftElbow, .leftWrist),
+                (.rightShoulder, .rightElbow), (.rightElbow, .rightWrist),
+                (.leftHip, .leftKnee), (.leftKnee, .leftAnkle),
+                (.rightHip, .rightKnee), (.rightKnee, .rightAnkle),
+                (.neck, .nose),
+            ]
+            return edges.compactMap { a, b in
+                guard let from = joints[a], let to = joints[b] else { return nil }
+                return Figure.Segment(from: from, to: to)
+            }
+        }
+    }
+
+    public var bodies: [DetectedBody] = []
+    /// The patient pose found lying down, drawn see-through under the step's mark, so the helper sees
+    /// the phone has the right person and the marks sit on them. Where things are, never what to do.
+    public struct Outline: Sendable, Equatable {
+        public struct Limb: Sendable, Equatable {
+            public var from: CGPoint
+            public var to: CGPoint
+            /// Full width, as a fraction of the view's width.
+            public var width: Double
+            public var isLocked: Bool
+
+            public init(from: CGPoint, to: CGPoint, width: Double, isLocked: Bool) {
+                self.from = from
+                self.to = to
+                self.width = width
+                self.isLocked = isLocked
+            }
+        }
+
+        public struct Head: Sendable, Equatable {
+            public var center: CGPoint
+            /// A fraction of the view's width.
+            public var radius: Double
+            public var isLocked: Bool
+
+            public init(center: CGPoint, radius: Double, isLocked: Bool) {
+                self.center = center
+                self.radius = radius
+                self.isLocked = isLocked
+            }
+        }
+
+        /// Shoulders then hips, going round. Normalized view coordinates, like every point here.
+        public var torso: [CGPoint]
+        public var torsoLocked: Bool
+        public var head: Head?
+        public var limbs: [Limb]
+
+        public init(torso: [CGPoint], torsoLocked: Bool, head: Head? = nil, limbs: [Limb] = []) {
+            self.torso = torso
+            self.torsoLocked = torsoLocked
+            self.head = head
+            self.limbs = limbs
+        }
+    }
+
+    /// Detected CPR joints in normalized view coordinates, origin top-left.
+    public var joints: [CGPoint] = []
     public var ring: Ring?
+    public var outline: Outline?
     public var aedArrow: AEDArrow?
     public var ghost: Ghost?
     /// The AR view draws realistic hands on the chest, so the flat ghost hands stay off.
     public var handsIn3D = false
+    /// A fresh, depth-fitted Blender template replaces the flat patient outlines.
+    public var patientIn3D = false
+    public var chestEstimateLabel: String?
+    /// Palm-sized uncertainty region, never a claim to have identified a bone.
+    public var sternumEstimate: Ring?
+    /// Guides the rescuer's hand onto the sternum region while hands are being placed.
+    public var handGuide: HandGuide?
     public var injuryPin: InjuryPin?
     /// The camera is live and nothing is placed, and nothing else would say a tap does anything.
     public var showsInjuryHint: Bool
@@ -202,9 +285,11 @@ public struct VisionOverlay: Sendable, Equatable {
         showsInjuryHint: Bool = false,
         zones: [BodyZone] = [],
         items: [ItemCallout] = [],
-        ghost: Ghost? = nil
+        ghost: Ghost? = nil,
+        outline: Outline? = nil
     ) {
         self.ghost = ghost
+        self.outline = outline
         self.ring = ring
         self.aedArrow = aedArrow
         self.injuryPin = injuryPin
@@ -215,12 +300,38 @@ public struct VisionOverlay: Sendable, Equatable {
 
     public static let empty = VisionOverlay()
 
+    public struct HandGuide: Sendable, Equatable {
+        /// Where the hand should go, in normalized view coordinates.
+        public var target: Ring
+        /// The heel of the rescuer's hand, normalized view coordinates, when one is seen.
+        public var hand: CGPoint?
+        /// Nil until a hand is seen.
+        public var guidance: HandGuidance?
+
+        public init(target: Ring, hand: CGPoint? = nil, guidance: HandGuidance? = nil) {
+            self.target = target
+            self.hand = hand
+            self.guidance = guidance
+        }
+
+        public var text: String { guidance?.text ?? HandGuidance.noHandText }
+        public var onTarget: Bool { guidance?.move == .onTarget }
+    }
+
+    /// The guide keeps the ring this long after the patient was last seen, because the rescuer's
+    /// hands hide the chest as they reach it.
+    static let handGuideHold: TimeInterval = 2
+    /// A hand is only followed while it is this fresh.
+    static let maxHandAge: TimeInterval = 0.5
+
     /// With no camera frame this recent, nothing on screen can be trusted to line up.
     static let maxCameraAge: TimeInterval = 0.5
     /// The pin doesn't follow a limb that moves, so it doesn't stay up for long on trust.
     static let pinSeconds: TimeInterval = 20
     /// Pads and limbs run at a capped pose rate, so they get a little longer than the ring's 0.2 s.
     static let maxZoneAge: TimeInterval = 0.35
+    /// Allow on-device inference latency without holding old dots indefinitely.
+    static let maxJointAge: TimeInterval = 0.75
 
     /// - Parameters:
     ///   - pose: Body regions from the latest pose frame. The chest zone shows only with the ring,
@@ -237,6 +348,8 @@ public struct VisionOverlay: Sendable, Equatable {
         carriedAED: SIMD3<Float>? = nil,
         injuryPin: PlacedPin? = nil,
         pose: TimedPose? = nil,
+        jointPose: TimedPose? = nil,
+        posing: Bool = true,
         items: [Material: PlacedObject] = [:],
         handsGuide: Bool = false,
         ghost: (anchor: GhostAnchor, push: Double, practice: Bool)? = nil,
@@ -295,6 +408,27 @@ public struct VisionOverlay: Sendable, Equatable {
         // Only on a step with no target of its own, which is compressions, beside whatever else it draws.
         if target == nil, camera.tracking == .normal, let ghost {
             overlay.ghost = mapping.ghost(ghost.anchor, push: ghost.push, practice: ghost.practice, camera: camera.pose)
+        }
+
+        // The patient under the step's mark, on the steps that look for someone lying down. From the
+        // same frame and the same freshness gate as that mark, so the two never disagree.
+        let looksForLying = target == .chestCenter || target == .padZones || (target == nil && handsGuide)
+        if looksForLying, overlay.ghost == nil, let outline = (target == .padZones ? (zoneFresh ? regions : nil) : chest)?.outline {
+            overlay.outline = mapping.outline(outline)
+        }
+
+        // Only while the step has pose running: a frame left over from a step that stopped looking, as
+        // the hands guide ending, mustn't hang a body on screen after the camera's done with it.
+        let detectedJoints = posing ? (jointPose ?? pose) : nil
+        if let detectedJoints, (0...maxJointAge).contains(detectedJoints.age(at: now)) {
+            overlay.bodies = detectedJoints.skeletons.map { skeleton in
+                DetectedBody(joints: skeleton.joints.mapValues { mapping.viewPoint(fromImage: $0) })
+            }
+            if overlay.bodies.isEmpty {
+                overlay.joints = detectedJoints.joints.map { mapping.viewPoint(fromImage: $0) }
+            } else {
+                overlay.joints = overlay.bodies.flatMap { body in BodyJoint.cprJoints.compactMap { body.joints[$0] } }
+            }
         }
 
         // World points, so only with tracking that holds the world steady.

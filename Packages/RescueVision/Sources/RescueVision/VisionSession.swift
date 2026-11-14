@@ -93,6 +93,7 @@ public final class VisionSession: Sendable {
         var worldEpoch: UInt64 = 0
         var wantsRunning = false
         var arActive = false
+        var patientModelReady = false
         var failed = false
 
         enum DriverAction { case none, run, pause }
@@ -120,6 +121,11 @@ public final class VisionSession: Sendable {
 
         func pinLive(at now: TimeInterval) -> Bool {
             injuryPin.map { now - $0.placedAt < VisionOverlay.pinSeconds } ?? false
+        }
+
+        func showsChestEstimate(at now: TimeInterval) -> Bool {
+            overlayTarget == .chestCenter || showsHandsGuide(at: now)
+                || (overlayTarget == nil && ghostBeatStart != nil)
         }
 
         func showsHandsGuide(at now: TimeInterval) -> Bool {
@@ -160,7 +166,7 @@ public final class VisionSession: Sendable {
         }
 
         func needsPixels(at now: TimeInterval, holdsLimb: Bool) -> Bool {
-            poseDemand(at: now, holdsLimb: holdsLimb) != .none || uplink.isOpen || !pendingLocate.isEmpty
+            arActive || poseDemand(at: now, holdsLimb: holdsLimb) != .none || uplink.isOpen || !pendingLocate.isEmpty
         }
 
         /// The pin in this frame's capture image, while it lasts and is in front of the camera.
@@ -194,6 +200,9 @@ public final class VisionSession: Sendable {
     /// Latest wins, so a slow socket can't build a queue. Has one consumer.
     public let uplinkFrames: AsyncStream<UplinkFrame>
     private let uplinkContinuation: AsyncStream<UplinkFrame>.Continuation
+    /// Callers waiting on the next frame as a JPEG, each with its own deadline.
+    private let snapshotWaiters = Mutex<[UInt64: CheckedContinuation<Data?, Never>]>([:])
+    private let nextSnapshotID = Mutex<UInt64>(0)
 
     /// On a device this owns the AR session. In the Simulator and on macOS it is a clean no-op.
     public convenience init(locator: any ObjectLocating) {
@@ -207,6 +216,7 @@ public final class VisionSession: Sendable {
             locator: locator,
             driver: driver,
             detect: { await detector.detect($0, rotation: $1) },
+            detectFrame: { await detector.detectFrame($0, rotation: $1) },
             clock: { ProcessInfo.processInfo.systemUptime },
             runsPump: true
         )
@@ -220,6 +230,7 @@ public final class VisionSession: Sendable {
         locator: any ObjectLocating,
         driver: any CameraDriver,
         detect: @escaping PoseDetector,
+        detectFrame: PoseFrameDetector? = nil,
         clock: @escaping @Sendable () -> TimeInterval,
         runsPump: Bool,
         encode: (@Sendable (CapturedFrame, CaptureRotation) async -> Data?)? = nil
@@ -228,7 +239,7 @@ public final class VisionSession: Sendable {
         self.clock = clock
         let encoder = FrameEncoder()
         self.encode = encode ?? { await encoder.encode($0, rotation: $1) }
-        pose = PoseWorker(detect: detect)
+        pose = PoseWorker(detect: detect, detectFrame: detectFrame)
         objects = ObjectLocator(locator: locator, clock: clock) { [driver] ray in
             await driver.surfacePoint(along: ray)
         }
@@ -256,6 +267,28 @@ public final class VisionSession: Sendable {
     func finishStreams() {
         framesContinuation.finish()
         uplinkContinuation.finish()
+        resumeSnapshots(with: nil)
+    }
+
+    /// The next camera frame as a JPEG, or nil if none comes before the deadline. The caller decides
+    /// whether a frame may leave the phone; this only takes the picture.
+    public func snapshot(timeout: TimeInterval = 1.5) async -> Data? {
+        let id = nextSnapshotID.withLock { $0 += 1; return $0 }
+        return await withCheckedContinuation { continuation in
+            snapshotWaiters.withLock { $0[id] = continuation }
+            Task.detached { [weak self] in
+                try? await Task.sleep(for: .seconds(timeout))
+                self?.snapshotWaiters.withLock { $0.removeValue(forKey: id) }?.resume(returning: nil)
+            }
+        }
+    }
+
+    private func resumeSnapshots(with jpeg: Data?) {
+        let waiting = snapshotWaiters.withLock { waiters in
+            defer { waiters = [:] }
+            return Array(waiters.values)
+        }
+        waiting.forEach { $0.resume(returning: jpeg) }
     }
 
     // MARK: - Driving
@@ -461,6 +494,59 @@ public final class VisionSession: Sendable {
 
     // MARK: - Reading
 
+    /// Called only after the renderer has loaded both patient meshes successfully.
+    func patientModelDidLoad() { state.withLock { $0.patientModelReady = true } }
+
+    /// Depth-backed patient template. It expires instead of staying at an old body location.
+    public func patientBodyPlacement() -> PatientBodyPlacement? {
+        let now = clock()
+        guard let fitted = pose.patientBody, (0...VisionOverlay.maxJointAge).contains(now - fitted.capturedAt) else { return nil }
+        return state.withLock { state in
+            guard state.arActive, let camera = state.ledger.latest, camera.tracking == .normal,
+                  (0...VisionOverlay.maxCameraAge).contains(now - camera.timestamp),
+                  state.mapping != nil, !state.ghostPractice else {
+                return nil
+            }
+            var placement = fitted.placement
+            placement.showsChestEstimate = placement.lying && (state.overlayTarget == .chestCenter || state.showsHandsGuide(at: now))
+            return placement
+        }
+    }
+
+    /// The sternum ring, and which way the rescuer's hand has to slide to reach it, on place_hands,
+    /// the hands guide, and compressions. Hand detection runs only while this can show.
+    private func handGuide(at now: TimeInterval) -> VisionOverlay.HandGuide? {
+        let mapping: DisplayMapping? = state.withLock { state in
+            guard state.arActive, state.showsChestEstimate(at: now), !state.ghostPractice,
+                  let camera = state.ledger.latest, camera.tracking == .normal,
+                  (0...VisionOverlay.maxCameraAge).contains(now - camera.timestamp) else { return nil }
+            return state.mapping
+        }
+        pose.setWantsHands(mapping != nil)
+        guard let mapping, let chest = pose.chestEstimate,
+              (0...VisionOverlay.handGuideHold).contains(now - chest.capturedAt) else { return nil }
+        var guide = VisionOverlay.HandGuide(target: mapping.ring(for: chest.target))
+        if let seen = pose.hands, (0...VisionOverlay.maxHandAge).contains(now - seen.capturedAt),
+           let hand = HandPlacementGuide.nearest(seen.hands, to: chest.target, imageAspect: mapping.imageAspect) {
+            guide.hand = mapping.viewPoint(fromImage: hand.heel)
+            guide.guidance = HandPlacementGuide.guide(hand: hand.heel, target: chest.target, torso: chest.torso, imageAspect: mapping.imageAspect)
+        }
+        return guide
+    }
+
+    /// The 3D surface marker works independently of the Blender asset and body fit.
+    public func chestSurfacePlacement() -> ChestSurfacePlacement? {
+        let now = clock()
+        guard let estimate = pose.chestEstimate,
+              (0...VisionOverlay.maxJointAge).contains(now - estimate.capturedAt) else { return nil }
+        return state.withLock { state in
+            guard state.arActive, state.showsChestEstimate(at: now), !state.ghostPractice,
+                  let camera = state.ledger.latest, camera.tracking == .normal,
+                  (0...VisionOverlay.maxCameraAge).contains(now - camera.timestamp), state.mapping != nil else { return nil }
+            return estimate.surface
+        }
+    }
+
     /// The overlay for this instant, cheap enough to call every display frame.
     public func overlay() -> VisionOverlay {
         let now = clock()
@@ -468,6 +554,7 @@ public final class VisionSession: Sendable {
         let aedPoint = objects.worldPoint(.aed)
         let carriedPoint = objects.carriedPoint(.aed)
         let callouts = objects.callouts()
+        let holdsLimb = pose.holdsLimb
         var overlay = state.withLock { state in
             VisionOverlay.compose(
                 target: state.overlayTarget,
@@ -478,6 +565,9 @@ public final class VisionSession: Sendable {
                 carriedAED: state.showsCarriedAED ? carriedPoint : nil,
                 injuryPin: state.injuryPin,
                 pose: latestPose,
+                jointPose: pose.jointPose,
+                // Pose runs while the camera is live, for the joints, or while the step wants it.
+                posing: state.arActive || state.poseDemand(at: now, holdsLimb: holdsLimb) != .none,
                 items: callouts.filter { state.wanted.contains($0.key) },
                 handsGuide: state.showsHandsGuide(at: now),
                 ghost: state.ghostAnchor.flatMap { anchor in
@@ -489,7 +579,27 @@ public final class VisionSession: Sendable {
             )
         }
         // The 3D hands take over from the flat ones wherever they show.
-        overlay.handsIn3D = handsPlacement() != nil
+        let patientBody = patientBodyPlacement()
+        overlay.patientIn3D = patientBody != nil && state.withLock { $0.patientModelReady }
+        if overlay.patientIn3D {
+            overlay.chestEstimateLabel = patientBody?.showsChestEstimate == true
+                ? "Estimated hand placement - Not a sternum detection"
+                : "3D body fit - Template estimate"
+        }
+        let chest = pose.chestEstimate
+        if let chest, (0...VisionOverlay.maxJointAge).contains(now - chest.capturedAt) {
+            overlay.sternumEstimate = state.withLock { state in
+                guard state.arActive, state.showsChestEstimate(at: now), !state.ghostPractice,
+                      let camera = state.ledger.latest, camera.tracking == .normal,
+                      (0...VisionOverlay.maxCameraAge).contains(now - camera.timestamp), let mapping = state.mapping else { return nil }
+                return mapping.ring(for: chest.target)
+            }
+        }
+        if overlay.sternumEstimate != nil {
+            overlay.chestEstimateLabel = "Estimated sternum region - Not anatomically verified"
+        }
+        overlay.handGuide = handGuide(at: now)
+        overlay.handsIn3D = chestSurfacePlacement() != nil || handsPlacement() != nil
         return overlay
     }
 
@@ -596,6 +706,7 @@ public final class VisionSession: Sendable {
             state.worldEpoch += 1
         }
         objects.clear()
+        pose.reset()
     }
 
     // MARK: - Frames in
@@ -612,7 +723,8 @@ public final class VisionSession: Sendable {
         pixels: CVPixelBuffer,
         pose: CameraPose,
         tracking: TrackingQuality,
-        imageToView: CGAffineTransform?
+        imageToView: CGAffineTransform?,
+        bodyDepth: BodyDepth? = nil
     ) -> CapturedFrame? {
         // Stamped here rather than from ARFrame.timestamp, whose clock Apple doesn't document,
         // so every age in this package reads one clock. It under-counts by the delivery delay.
@@ -626,7 +738,7 @@ public final class VisionSession: Sendable {
             return state.needsPixels(at: now, holdsLimb: holdsLimb) ? record.id : nil
         }
         guard let wanted else { return nil }
-        let frame = CapturedFrame(id: wanted, pixels: pixels)
+        let frame = CapturedFrame(id: wanted, pixels: pixels, bodyDepth: bodyDepth)
         framesContinuation.yield(frame)
         return frame
     }
@@ -746,6 +858,9 @@ public final class VisionSession: Sendable {
     /// Returns true if this frame went out on the uplink.
     @discardableResult
     func process(_ frame: CapturedFrame) async -> Bool {
+        if snapshotWaiters.withLock({ !$0.isEmpty }) {
+            resumeSnapshots(with: await encode(frame, Self.jpegRotation))
+        }
         let now = clock()
         let holdsLimb = pose.holdsLimb
         let job: FrameJob? = state.withLock { state in
@@ -757,12 +872,16 @@ public final class VisionSession: Sendable {
                 state.pendingLocate.subtract(locate)
             }
             let demand = state.poseDemand(at: now, holdsLimb: holdsLimb)
-            let rate = demand.framesPerSecond(load: state.load, now: now)
+            // Joint visualization runs locally whenever the camera is active, including intake
+            // and an untapped injury view. It never opens either network gate.
+            let rate = demand == .none && state.arActive
+                ? min(state.load.poseFramesPerSecond, 10)
+                : demand.framesPerSecond(load: state.load, now: now)
             var request: PoseRequest?
             if rate > 0, now - state.lastPoseAt >= 1 / rate {
                 state.lastPoseAt = now
                 switch demand {
-                case .none: break
+                case .none: request = .joints
                 case .lying: request = .lying
                 case .nearPin: request = .nearPin(anchor: state.pinAnchor(in: record, at: now))
                 case .rescuer: request = .rescuer

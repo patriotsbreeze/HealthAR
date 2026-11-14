@@ -117,6 +117,15 @@
       "text": "Do not give aspirin. Wait for EMS.",
       "voice": "Kore"
     },
+    "assess_intro": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 3.37,
+      "sha256": "89f8ab512308bde46ee32ea9d11f91a577c5e6a63f4d3b5774d7d573f8c3231e",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Point the camera at what's happening, and tell me what's going on.",
+      "voice": "Kore"
+    },
     "assign_helper": {
       "engine": "gemini",
       "model": "gemini-3.8-flash-tts",

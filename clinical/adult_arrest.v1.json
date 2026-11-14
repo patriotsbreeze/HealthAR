@@ -29,7 +29,6 @@
       "metronome": "off",
       "frame_uplink": true,
       "allowed_say": ["gasping_not_normal", "no_pulse_check", "assign_helper"],
-      "timeout": { "seconds": 30, "to": "call_911" },
       "repeating": [{ "phrase": "ask_responsive", "every_seconds": 10 }],
       "transitions": [
         { "on": "human.no", "to": "intake_breathing" },
@@ -52,7 +51,6 @@
       "metronome": "off",
       "frame_uplink": true,
       "allowed_say": ["gasping_not_normal", "no_pulse_check", "assign_helper"],
-      "timeout": { "seconds": 30, "to": "call_911" },
       "repeating": [{ "phrase": "ask_breathing", "every_seconds": 10 }],
       "transitions": [
         { "on": "human.no", "to": "call_911" },
@@ -92,7 +90,6 @@
       "metronome": "off",
       "frame_uplink": false,
       "allowed_say": ["gasping_not_normal", "no_pulse_check", "assign_helper"],
-      "timeout": { "seconds": 30, "to": "call_911" },
       "repeating": [{ "phrase": "ask_still_breathing", "every_seconds": 10 }],
       "transitions": [
         { "on": "human.yes", "to": "watch_breathing" },
@@ -229,7 +226,6 @@
         { "phrase": "push_hard", "every_seconds": 60 },
         { "phrase": "switch_compressors", "every_seconds": 120 }
       ],
-      "timeout": { "seconds": 20, "to": "compressions" },
       "transitions": [
         { "on": "human.done", "to": "compressions" },
         { "on": "human.aed_here", "to": "aed_on" },

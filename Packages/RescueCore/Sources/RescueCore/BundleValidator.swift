@@ -127,6 +127,11 @@ public enum BundleValidator {
         for state in owned {
             let phrases = state.entryPhrases + state.allowedSay + state.repeating.map(\.phrase) + (state.timeout?.phrases ?? [])
             if let missing = phrases.first(where: { !phraseIDs.contains($0) }) { return "dangling phrase \(missing): \(state.id)" }
+            // Only the rescuer moves the rescue on, so assess waits for a tap or their words. Start CPR
+            // and Not responding are always on its panel.
+            if state.id == ScenarioModule.assessState, state.timeout != nil {
+                return "assess must wait for the rescuer, with no timeout: \(state.id)"
+            }
 
             for target in [state.timeout?.to, state.timeout?.ifBreathsAtLeast?.to].compactMap({ $0 }) {
                 guard let to = states[target] else { return "dangling timeout to \(target): \(state.id)" }
@@ -284,9 +289,10 @@ public enum BundleValidator {
         state.id == ScenarioModule.breathingQuestion || (state.kind.isAwake && !isHumanOnly(state))
     }
 
-    /// Only a tap gets here. A report or a silence must never choose triage or a dose.
+    /// Only a tap gets here. A report or a silence must never choose triage or a dose. Assess is only
+    /// ever the first step, so nothing may lead back to it.
     private static func isHumanOnly(_ state: StateDefinition) -> Bool {
-        state.id == ScenarioModule.triageState || state.logOnEnter == .aspirinAdvised
+        state.id == ScenarioModule.triageState || state.id == ScenarioModule.assessState || state.logOnEnter == .aspirinAdvised
     }
 
     /// Never `uniqueKeysWithValues`, because this can run on data that hasn't passed yet.

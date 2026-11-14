@@ -5,8 +5,11 @@ import Foundation
 struct FrameUplinkPolicy: Sendable {
     static let burstDuration: TimeInterval = 3
     static let baseBurstInterval: TimeInterval = 1
-    static let baseIdleInterval: TimeInterval = 5
-    static let maxIdleInterval: TimeInterval = 10
+    /// One a second, the rate Live takes video at, so what it reports on screen is the scene now and
+    /// not five seconds ago. Awake steps are bursts only, so this only runs where frames are open.
+    static let baseIdleInterval: TimeInterval = 1
+    /// Heat can stretch it this far and no further.
+    static let maxIdleInterval: TimeInterval = 4
 
     private(set) var isOpen = false
     private var burstEndsAt: TimeInterval?

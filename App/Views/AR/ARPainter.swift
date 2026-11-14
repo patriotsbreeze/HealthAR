@@ -1,3 +1,4 @@
+import RescueVision
 import SwiftUI
 
 /// Draws a scene into one Canvas. Every stroke is four layers: a wide 40% black under-stroke, the fill,
@@ -13,7 +14,13 @@ enum ARPainter {
         guard scene.hasMarks || scene.hint != nil else { return }
         // Nothing is drawn under the deck. A body zone that runs past the band is cut at its edge.
         context.clip(to: Path(scene.band))
+        if !scene.patientIn3D { paintDetectedBodies(scene, in: &context) }
         if let ghost = scene.ghost { paintGhost(ghost, in: &context) }
+        if let outline = scene.outline {
+            appearing(appear[ARSceneBuilder.outlineID], around: outline.center, style: style, in: &context) { layer in
+                paintOutline(outline, in: &layer)
+            }
+        }
         if let zone = scene.zone {
             appearing(appear[zone.id], around: zone.center, style: style, in: &context) { layer in
                 paintZone(zone, handsIn3D: scene.handsIn3D, in: &layer)
@@ -25,9 +32,114 @@ enum ARPainter {
             }
         }
         if let pointer = scene.pointer { paintPointer(pointer, style: style, in: &context) }
+        for point in scene.joints {
+            let dot = Path(ellipseIn: CGRect(x: point.x - 4, y: point.y - 4, width: 8, height: 8))
+            context.stroke(dot, with: .color(.black.opacity(0.7)), lineWidth: 3)
+            context.fill(dot, with: .color(.blue))
+        }
+        for body in scene.bodies {
+            for name in BodyJoint.cprJoints {
+                guard let point = body.joints[name], let label = name.cprLabel else { continue }
+                let text = context.resolve(Text(label).font(.system(size: 10, weight: .semibold)).foregroundStyle(.white))
+                let size = text.measure(in: CGSize(width: 90, height: 20))
+                let frame = CGRect(x: point.x + 7, y: point.y - size.height / 2, width: size.width + 6, height: size.height + 2)
+                context.fill(Path(roundedRect: frame, cornerRadius: 3), with: .color(.black.opacity(0.65)))
+                context.draw(text, at: CGPoint(x: frame.midX, y: frame.midY))
+            }
+        }
         if let zoneChip = scene.zone?.chip { chip(zoneChip, style: style, in: &context) }
         for case let itemChip? in scene.items.map(\.chip) { chip(itemChip, style: style, in: &context) }
         if let hint = scene.hint { chip(hint, style: style, in: &context) }
+        if let guide = scene.handGuide {
+            paintHandGuide(guide, below: scene.chestEstimateLabel == nil ? 0 : 34, band: scene.band, in: &context)
+        } else if let region = scene.sternumEstimate {
+            let ring = Path(ellipseIn: region)
+            context.fill(ring, with: .color(.orange.opacity(0.12)))
+            context.stroke(ring, with: .color(.black.opacity(0.8)), lineWidth: 5)
+            context.stroke(ring, with: .color(.orange), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+            var cross = Path()
+            cross.move(to: CGPoint(x: region.midX - 5, y: region.midY))
+            cross.addLine(to: CGPoint(x: region.midX + 5, y: region.midY))
+            cross.move(to: CGPoint(x: region.midX, y: region.midY - 5))
+            cross.addLine(to: CGPoint(x: region.midX, y: region.midY + 5))
+            context.stroke(cross, with: .color(.orange), lineWidth: 2)
+        }
+        if let label = scene.chestEstimateLabel {
+            let text = context.resolve(Text(label).font(.system(size: 11, weight: .semibold)).foregroundStyle(.white))
+            let box = scene.band.insetBy(dx: 8, dy: 8)
+            let size = text.measure(in: CGSize(width: max(1, box.width - 12), height: 50))
+            let frame = CGRect(x: box.midX - (size.width + 12) / 2, y: box.minY, width: size.width + 12, height: size.height + 8)
+            context.fill(Path(roundedRect: frame, cornerRadius: 5), with: .color(.black.opacity(0.8)))
+            context.draw(text, in: frame.insetBy(dx: 6, dy: 4))
+        }
+    }
+
+    /// The ring goes green with the hand on it. Until then an arrow runs from the heel of the hand to
+    /// the ring, and the line under the label says which way to slide, in the patient's own terms.
+    private static func paintHandGuide(_ guide: ARHandGuide, below top: CGFloat, band: CGRect, in context: inout GraphicsContext) {
+        let color: Color = guide.onTarget ? .green : .orange
+        let ring = Path(ellipseIn: guide.target)
+        context.fill(ring, with: .color(color.opacity(guide.onTarget ? 0.3 : 0.12)))
+        context.stroke(ring, with: .color(.black.opacity(0.8)), lineWidth: 5)
+        context.stroke(ring, with: .color(color), style: StrokeStyle(lineWidth: guide.onTarget ? 3 : 2, dash: guide.onTarget ? [] : [6, 4]))
+        let center = CGPoint(x: guide.target.midX, y: guide.target.midY)
+        var cross = Path()
+        cross.move(to: CGPoint(x: center.x - 5, y: center.y))
+        cross.addLine(to: CGPoint(x: center.x + 5, y: center.y))
+        cross.move(to: CGPoint(x: center.x, y: center.y - 5))
+        cross.addLine(to: CGPoint(x: center.x, y: center.y + 5))
+        context.stroke(cross, with: .color(color), lineWidth: 2)
+
+        if let hand = guide.hand {
+            let dx = center.x - hand.x, dy = center.y - hand.y
+            let length = (dx * dx + dy * dy).squareRoot()
+            // Stop short of the ring's middle, so the head sits on the ring rather than hiding the cross.
+            if !guide.onTarget, length > guide.target.width / 2 {
+                let unit = CGPoint(x: dx / length, y: dy / length)
+                let tip = CGPoint(x: center.x - unit.x * guide.target.width / 2, y: center.y - unit.y * guide.target.width / 2)
+                var arrow = Path()
+                arrow.move(to: hand)
+                arrow.addLine(to: tip)
+                for side in [CGFloat(1), -1] {
+                    arrow.move(to: tip)
+                    arrow.addLine(to: CGPoint(x: tip.x - unit.x * 12 - unit.y * 8 * side, y: tip.y - unit.y * 12 + unit.x * 8 * side))
+                }
+                context.stroke(arrow, with: .color(.black.opacity(0.8)), style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
+                context.stroke(arrow, with: .color(.orange), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+            }
+            let dot = Path(ellipseIn: CGRect(x: hand.x - 7, y: hand.y - 7, width: 14, height: 14))
+            context.fill(dot, with: .color(color))
+            context.stroke(dot, with: .color(.black.opacity(0.8)), lineWidth: 2)
+            context.stroke(dot, with: .color(.white), lineWidth: 1)
+        }
+
+        let text = context.resolve(Text(guide.text).font(.system(size: 15, weight: .bold)).foregroundStyle(guide.onTarget ? .black : .white))
+        let box = band.insetBy(dx: 8, dy: 8)
+        let size = text.measure(in: CGSize(width: max(1, box.width - 16), height: 80))
+        let frame = CGRect(x: box.midX - (size.width + 16) / 2, y: box.minY + top, width: size.width + 16, height: size.height + 10)
+        context.fill(Path(roundedRect: frame, cornerRadius: 8), with: .color(guide.onTarget ? .green : .black.opacity(0.85)))
+        context.draw(text, in: frame.insetBy(dx: 8, dy: 5))
+    }
+
+    /// Layered round strokes give the measured torso and arms a translucent tube appearance.
+    /// This remains a 2D camera overlay: no invented depth, joints, or compression measurements.
+    private static func paintDetectedBodies(_ scene: ARScene, in context: inout GraphicsContext) {
+        for body in scene.bodies {
+            let shoulders = [body.joints[.leftShoulder], body.joints[.rightShoulder]].compactMap { $0 }
+            let span = shoulders.count == 2
+                ? hypot(shoulders[0].x - shoulders[1].x, shoulders[0].y - shoulders[1].y)
+                : 70
+            let width = min(20, max(7, span * 0.09))
+            for segment in body.segments {
+                var path = Path()
+                path.move(to: segment.from)
+                path.addLine(to: segment.to)
+                context.stroke(path, with: .color(.black.opacity(0.4)), style: solid(width + 3))
+                context.stroke(path, with: .color(.blue.opacity(0.35)), style: solid(width))
+                context.stroke(path, with: .color(.cyan.opacity(0.65)), style: solid(width * 0.45))
+                context.stroke(path, with: .color(.white.opacity(0.5)), style: solid(1))
+            }
+        }
     }
 
     /// First lock only: 0.28 s from a touch larger and clear to in place. Under Reduce Motion it only fades.
@@ -101,6 +213,33 @@ enum ARPainter {
             }
         case .limb, .press:
             zoneLayers(zone.path, lock: zone.lock, in: &context)
+        }
+    }
+
+    /// One silhouette, not a pile of shapes: every part's line is drawn, then every part's inside is cut
+    /// out of the lines, so only the body's edge is left, solid or dashed part by part. The fill goes in
+    /// once over the whole body, so where a limb lies on the torso it doesn't read darker.
+    private static func paintOutline(_ outline: AROutline, in context: inout GraphicsContext) {
+        // Opacity on the context a layer is drawn into fades the layer whole. Set inside, it would fade
+        // each shape, and overlaps would stack.
+        var fill = context
+        fill.opacity *= DS.AR.Outline.fill
+        fill.drawLayer { layer in
+            for part in outline.parts { layer.fill(part.path, with: .color(DS.AR.Outline.color)) }
+        }
+        var lines = context
+        lines.opacity *= DS.AR.Outline.opacity
+        lines.drawLayer { layer in
+            for part in outline.parts {
+                layer.stroke(part.path, with: .color(DS.Colors.keyline), style: solid(DS.AR.Outline.keyline))
+            }
+            for part in outline.parts {
+                let style = colorStroke(DS.AR.Outline.stroke, lock: part.lock, size: part.path.boundingRect.size)
+                layer.stroke(part.path, with: .color(DS.AR.Outline.color), style: style)
+            }
+            // Part by part: one path of them all could cancel where two wind opposite ways.
+            layer.blendMode = .destinationOut
+            for part in outline.parts { layer.fill(part.path, with: .color(.black)) }
         }
     }
 

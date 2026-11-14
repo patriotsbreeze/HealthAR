@@ -326,13 +326,13 @@ private let dangerPhrases = ["call_911", "limb_danger_care", "limb_tourniquet"]
         var entries = 0
         for state in definition.states where !limb.contains(state.id) {
             for edge in state.transitions where edge.on.hasPrefix("model.") && limb.contains(edge.to) {
-                #expect(["triage", "general_talk"].contains(state.id), "\(state.id) \(edge.on)")
+                #expect(["assess", "triage", "general_talk"].contains(state.id), "\(state.id) \(edge.on)")
                 #expect(edge.to == (edge.on == "model.limb_injury" ? "limb_start" : "limb_danger"), "\(state.id) \(edge.on)")
                 #expect(edge.minConfidence == .medium, "\(state.id) \(edge.on)")
                 entries += 1
             }
         }
-        #expect(entries == 8)
+        #expect(entries == 12)
 
         var inside = 0
         for state in definition.states where limb.contains(state.id) {

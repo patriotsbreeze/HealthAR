@@ -242,3 +242,62 @@ private func armsSwapped(_ body: DetectedPerson) -> DetectedPerson {
     #expect(abs(width - 2 * ring.radius) < 1e-9, "the same scale as the ring")
     #expect(zone.kind == .limb(.forearm))
 }
+
+// MARK: - Outline
+
+@Test func theOutlineHasTheWholeBodyWhenPoseSeesIt() throws {
+    let body = fullPerson(axisDegrees: 20)
+    let outline = try #require(BodyRegionMap.outline(body, imageAspect: 1))
+    #expect(outline.torso == [body.leftShoulder.position, body.rightShoulder.position, body.rightHip.position, body.leftHip.position])
+    #expect(outline.torsoLocked)
+    let head = try #require(outline.head)
+    let nose = try #require(body.extras[.nose])
+    #expect(isClose(head.center, nose.position))
+    #expect(isClose(head.radius, BodyRegionMap.headRadiusFraction * 0.3), "sized from the shoulders")
+    #expect(Set(outline.limbs.map(\.segment)) == Set(LimbSegment.allCases))
+    #expect(outline.limbs.count == 8)
+    #expect(outline.limbs.allSatisfy { $0.isLocked })
+}
+
+@Test func theOutlineLimbsAreTheSameCapsulesAsTheLimbZone() throws {
+    let body = fullPerson(axisDegrees: 75, aspect: 4.0 / 3)
+    let outline = try #require(BodyRegionMap.outline(body, imageAspect: 4.0 / 3))
+    let capsules = LimbBone.all.compactMap { BodyRegionMap.capsule(for: $0, person: body, imageAspect: 4.0 / 3) }
+    #expect(outline.limbs == capsules)
+}
+
+@Test func faintLimbsDashAndUnseenOnesAreLeftOut() throws {
+    let faint = try #require(BodyRegionMap.outline(fullPerson(axisDegrees: 0, limbConfidence: 0.4), imageAspect: 1))
+    #expect(faint.limbs.count == 8)
+    #expect(faint.limbs.allSatisfy { !$0.isLocked })
+    #expect(faint.torsoLocked, "the torso is judged on its own joints")
+
+    let unseen = try #require(BodyRegionMap.outline(fullPerson(axisDegrees: 0, limbConfidence: 0.2), imageAspect: 1))
+    #expect(unseen.limbs.isEmpty)
+}
+
+@Test func anEstimatedTorsoDrawsDashedWithNoThighs() throws {
+    let body = fullPerson(axisDegrees: 0)
+    var joints = body.extras
+    joints[.leftShoulder] = body.leftShoulder
+    joints[.rightShoulder] = body.rightShoulder
+    let estimated = try #require(DetectedPerson(joints: joints, imageAspect: 1))
+    #expect(estimated.torsoEstimated)
+    let outline = try #require(BodyRegionMap.outline(estimated, imageAspect: 1))
+    #expect(!outline.torsoLocked)
+    #expect(!outline.limbs.contains { $0.segment == .thigh }, "no thigh from hips nobody saw")
+    #expect(outline.limbs.contains { $0.segment == .forearm })
+}
+
+@Test func noHeadSeenMeansNoHeadDrawn() throws {
+    var body = fullPerson(axisDegrees: 0)
+    body.extras[.nose] = nil
+    let outline = try #require(BodyRegionMap.outline(body, imageAspect: 1))
+    #expect(outline.head == nil)
+}
+
+@Test func theLyingRegionsCarryTheOutline() throws {
+    let body = fullPerson(axisDegrees: 0)
+    let regions = try #require(BodyRegionMap.lying(body, imageAspect: 1))
+    #expect(regions.outline == BodyRegionMap.outline(body, imageAspect: 1))
+}

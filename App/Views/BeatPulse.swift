@@ -4,10 +4,10 @@ import SwiftUI
 /// The beat, in the target color, because it says where and when to act. Not tied to the audio clock,
 /// so its phase may differ from the clicks, but the rate is the same.
 struct BeatPulse: View {
-    static let standardDiameter: CGFloat = DS.Pulse.standard
+    /// Only where it is big enough to read: the stop confirmation.
     static let label = "Push"
 
-    var diameter = Self.standardDiameter
+    var diameter = DS.Pulse.docked
     var showsLabel = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 

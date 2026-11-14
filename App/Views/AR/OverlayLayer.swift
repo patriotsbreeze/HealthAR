@@ -11,15 +11,15 @@ extension AppCoordinator {
             invitesInjuryTap: invitesInjuryTap,
             pinMessage: pinMessage?.text,
             carriedAED: mayShowCarriedAED,
-            pulse: showsBeatPulse ? (pulseDocked ? .docked : .centered) : .hidden,
+            pulse: showsBeatPulse ? .docked : .hidden,
             guideInCorner: definition?.guide != nil,
             handsGuide: showsHandsGuide,
             cameraLive: cameraLive
         )
     }
 
-    /// The beat moves out of the middle on a step that also draws on the camera, so the body stays clear.
-    var pulseDocked: Bool { showsBeatPulse && (overlayTarget != nil || showsHandsGuide) }
+    /// The beat only ever sits in the band's top-trailing corner, so the body and the AR on it stay clear.
+    var pulseDocked: Bool { showsBeatPulse }
 
     /// The pads are drawn on the body where they can be seen, so the diagram can go. Only when the
     /// overlay last drew both inside the band: pads imaged under the deck are cut away and only pointed
@@ -58,7 +58,7 @@ struct OverlayLayer: View {
         GeometryReader { geometry in
             // AR shed for heat, or failed, has nothing to draw, and a phone shedding load shouldn't
             // redraw at display rate.
-            TimelineView(.animation(paused: coordinator.overlayIdle || !coordinator.cameraLive)) { timeline in
+            TimelineView(.animation(paused: !coordinator.cameraLive)) { timeline in
                 let built = scene(at: timeline.date.timeIntervalSinceReferenceDate, in: geometry)
                 let style = ARPainter.Style(typeSize: typeSize, reduceMotion: reduceMotion)
                 Canvas { context, _ in
@@ -83,7 +83,7 @@ struct OverlayLayer: View {
         )
         var context = frame.context
         context.coachingCue = memory.heldCue(coordinator.vision.compressionFeedback()?.cue, now: now)
-        let scene = ARSceneBuilder.build(
+        var scene = ARSceneBuilder.build(
             overlay: frame.overlay,
             zones: frame.zones,
             items: frame.items,
@@ -93,6 +93,41 @@ struct OverlayLayer: View {
             previousSides: memory.sides,
             measure: { [typeSize] in ARText.chipSize($0, typeSize: typeSize) }
         )
+        // Use the current detections, never ARMemory's held marks after a dropout.
+        if coordinator.cameraLive {
+            scene.chestEstimateLabel = seen.chestEstimateLabel
+            if let marker = seen.sternumEstimate {
+                let radius = marker.radius * geometry.size.width
+                scene.sternumEstimate = CGRect(
+                    x: marker.center.x * geometry.size.width - radius,
+                    y: marker.center.y * geometry.size.height - radius,
+                    width: radius * 2, height: radius * 2
+                )
+            }
+            if let guide = seen.handGuide {
+                let radius = guide.target.radius * geometry.size.width
+                scene.handGuide = ARHandGuide(
+                    target: CGRect(
+                        x: guide.target.center.x * geometry.size.width - radius,
+                        y: guide.target.center.y * geometry.size.height - radius,
+                        width: radius * 2, height: radius * 2
+                    ),
+                    hand: guide.hand.map { CGPoint(x: $0.x * geometry.size.width, y: $0.y * geometry.size.height) },
+                    text: guide.text,
+                    onTarget: guide.onTarget
+                )
+            }
+            scene.patientIn3D = seen.patientIn3D
+            if seen.patientIn3D { scene.outline = nil }
+            scene.bodies = seen.bodies.map { body in
+                VisionOverlay.DetectedBody(joints: body.joints.mapValues {
+                    CGPoint(x: $0.x * geometry.size.width, y: $0.y * geometry.size.height)
+                })
+            }
+            scene.joints = seen.joints.map {
+                CGPoint(x: $0.x * geometry.size.width, y: $0.y * geometry.size.height)
+            }
+        }
         coordinator.noteDrawn(scene)
         return (scene, memory.noteBuilt(scene, now: now))
     }
@@ -140,7 +175,8 @@ final class ARMemory {
     ) -> Frame {
         if stateID != self.stateID { reset(stateID) }
         var context = context
-        let hasMarks = overlay.ring != nil || overlay.aedArrow != nil || overlay.injuryPin != nil || !zones.isEmpty || !items.isEmpty
+        let hasMarks = overlay.ring != nil || overlay.aedArrow != nil || overlay.injuryPin != nil || overlay.outline != nil
+            || !zones.isEmpty || !items.isEmpty
         // A pin that timed out brings the tap hint back. That's not a loss, so there's nothing to hold.
         if overlay.showsInjuryHint { last = nil }
         if hasMarks {

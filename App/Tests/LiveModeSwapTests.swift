@@ -256,8 +256,10 @@ private func intoTriage(_ fixture: Fixture) async throws {
         coordinator.perform(.triageChest)
         #expect(coordinator.state.stateID == "chest_call")
         #expect(fixture.audio.played.contains("chest_possible"))
-        fixture.run(seconds: 15.2)
-        #expect(coordinator.state.stateID == "chest_aspirin_check", "the timer doesn't wait on the session")
+        fixture.run(seconds: 10.2)
+        #expect(fixture.audio.played.filter { $0 == "chest_sit" }.count == 2, "the repeat doesn't wait on the session")
+        coordinator.perform(.done)
+        #expect(coordinator.state.stateID == "chest_aspirin_check")
     }
 
     @Test func theSwapTimeShowsOnTheHUD() async throws {

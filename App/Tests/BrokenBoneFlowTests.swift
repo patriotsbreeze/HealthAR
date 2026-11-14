@@ -84,18 +84,32 @@ import Testing
 
     // MARK: - By timeouts
 
-    @Test func theWholeFlowByTimeoutsTakesTheDangerBranchAndNeverStartsCPR() throws {
+    /// No step moves on by itself: each says its line again every 10 s, and an unsure answer takes the
+    /// danger branch.
+    @Test func withNoReplyEachStepWaitsAndUnsureTakesTheDangerBranchAndNeverStartsCPR() throws {
         let fixture = try inFlow()
         let coordinator = fixture.coordinator
         fixture.audio.clearCalls()
 
-        fixture.run(seconds: 6.2)
+        fixture.run(seconds: 30.2)
+        #expect(coordinator.state.stateID == "limb_start")
+        #expect(fixture.audio.played == ["limb_possible", "limb_possible", "limb_possible"])
+        coordinator.perform(.done)
         #expect(coordinator.state.stateID == "limb_flags")
-        fixture.run(seconds: 10.2)
+        fixture.audio.clearCalls()
+
+        fixture.run(seconds: 30.2)
+        #expect(coordinator.state.stateID == "limb_flags", "a danger question waits for an answer")
+        #expect(fixture.audio.played.filter { $0 == "limb_danger_ask" }.count == 3)
+        #expect(fixture.logDetails(.callPrompted).isEmpty)
+        fixture.audio.clearCalls()
+
+        fixture.run(seconds: 1.2)
+        coordinator.performStep(.unsure)
         #expect(coordinator.state.stateID == "limb_danger")
-        #expect(fixture.logDetails(.answer).last == "danger_signs=no_reply")
+        #expect(fixture.logDetails(.answer).last == "danger_signs=unsure")
         #expect(fixture.logDetails(.callPrompted).count == 1)
-        #expect(fixture.audio.played == ["limb_danger_ask", "call_911", "limb_danger_care", "limb_tourniquet"])
+        #expect(fixture.audio.played == ["call_911", "limb_danger_care", "limb_tourniquet"])
 
         fixture.run(seconds: 95)
         #expect(coordinator.state.stateID == "limb_danger", "no reply never leaves for CPR here")
@@ -105,14 +119,18 @@ import Testing
         expectOffline(fixture)
     }
 
-    @Test func theSplintStepEndsOnItsOwnAndTheWaitReAsks() throws {
+    @Test func theSplintStepWaitsForDoneAndTheWaitReAsks() throws {
         let fixture = try inFlow()
         let coordinator = fixture.coordinator
         coordinator.perform(.done)
         coordinator.perform(.no)
         fixture.audio.clearCalls()
 
-        fixture.run(seconds: 10.2)
+        fixture.run(seconds: 20.2)
+        #expect(coordinator.state.stateID == "limb_splint")
+        #expect(fixture.audio.played == ["limb_support", "limb_support"])
+        fixture.audio.clearCalls()
+        coordinator.perform(.done)
         #expect(coordinator.state.stateID == "limb_wait")
         #expect(fixture.audio.played == ["limb_seek_care"])
 
@@ -126,8 +144,9 @@ import Testing
 
     // MARK: - A collapse
 
+    /// With no reply the breathing question goes to the call step in 30 s, which is one tap from compressions.
     @Test(arguments: ["limb_start", "limb_flags", "limb_splint", "limb_wait", "limb_danger"])
-    func aTappedCollapseFromAnyStepIsCompressingWithin30Seconds(id: String) throws {
+    func aTappedCollapseFromAnyStepWaitsOnTheBreathingQuestion(id: String) throws {
         let fixture = try inFlow()
         let coordinator = fixture.coordinator
         coordinator.force(stateID: id)
@@ -139,7 +158,9 @@ import Testing
         #expect(fixture.audio.calls.contains(.cut), "whatever was playing stops at once")
         #expect(explanation(fixture) == nil, "the why panel is about a flow they've left")
 
-        fixture.run(seconds: 25.6)
+        fixture.run(seconds: 30.2)
+        #expect(coordinator.state.stateID == "intake_breathing", "only the rescuer moves it on")
+        coordinator.perform(.startCpr)
         #expect(coordinator.state.stateID == "compressions")
         #expect(coordinator.showsPulse)
         expectOffline(fixture)
