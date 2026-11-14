@@ -111,11 +111,18 @@ enum PatientModelFit {
         let headward = simd_normalize(shoulders - hips)
         let acrossRaw = rs - ls - simd_dot(rs - ls, headward) * headward
         guard simd_length(acrossRaw) > 0.15 else { return nil }
-        var across = simd_normalize(acrossRaw)
-        var normal = simd_normalize(simd_cross(across, headward))
-        if simd_dot(normal, camera.position - shoulders) < 0 { normal = -normal; across = -across }
+        // Which way the chest faces comes from gravity, not from the two shoulder depths: one of those
+        // landing on the floor or a spread arm tips it, and the body draws rolled onto its side. A body
+        // lying roughly level faces up; an upright one faces the camera.
+        let flat = abs(simd_dot(headward, GhostAnchor.up)) < 0.5
+        let reference = flat ? GhostAnchor.up : camera.position - shoulders
+        let normalRaw = reference - simd_dot(reference, headward) * headward
+        guard simd_length(normalRaw) > 1e-3 else { return nil }
+        let normal = simd_normalize(normalRaw)
+        // Head, chest-out, across: the same right-handed frame as before, so nothing renders mirrored.
+        let across = simd_cross(headward, normal)
         // A face-up, approximately level adult/manikin, unless any pose is allowed.
-        let lying = simd_dot(normal, GhostAnchor.up) >= 0.65 && abs(simd_dot(headward, GhostAnchor.up)) < 0.5
+        let lying = flat
         guard lying || !requireLying else { return nil }
         guard abs(simd_dot(chest - shoulders, normal)) < 0.15 else { return nil }
         // A standing or twisting body's hips sit well off its shoulder plane; a lying one's don't.

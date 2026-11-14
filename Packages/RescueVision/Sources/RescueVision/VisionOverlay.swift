@@ -198,6 +198,9 @@ public struct VisionOverlay: Sendable, Equatable {
                 (.leftHip, .rightHip),
                 (.leftShoulder, .leftElbow), (.leftElbow, .leftWrist),
                 (.rightShoulder, .rightElbow), (.rightElbow, .rightWrist),
+                (.leftHip, .leftKnee), (.leftKnee, .leftAnkle),
+                (.rightHip, .rightKnee), (.rightKnee, .rightAnkle),
+                (.neck, .nose),
             ]
             return edges.compactMap { a, b in
                 guard let from = joints[a], let to = joints[b] else { return nil }

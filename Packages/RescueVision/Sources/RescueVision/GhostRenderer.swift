@@ -31,9 +31,10 @@ final class GhostRenderer {
     private let detectedShell = Entity()
     private let chestAnchor = AnchorEntity(world: .zero)
     private let chestEstimate = Entity()
-    private var patientLoaded = false
-    /// The real head and legs, placed on their own rather than carried by the torso's transform.
+    /// The head, apart from the body, so it can sit where depth found the real one.
     private let detectedHead = Entity()
+    private var patientLoaded = false
+    /// The real legs, placed on their own rather than carried by the torso's transform.
     private let detectedLegs = TrackedLegs()
 
     init(arView: ARView, vision: VisionSession) {
@@ -142,11 +143,9 @@ final class GhostRenderer {
             // Eases toward each new fit so frame-to-frame depth noise doesn't shake the body, but
             // snaps straight there when it first shows.
             let target = Transform(matrix: placement.transform)
-            var headTarget = target
-            headTarget.translation = placement.head ?? (placement.transform * SIMD4(PatientModelFit.headCenter, 1)).xyz
             let ease: Float = detectedAnchor.isEnabled ? Self.bodyEasing : 1
             detectedModel.transform = Self.eased(detectedModel.transform, toward: target, by: ease)
-            detectedHead.transform = Self.eased(detectedHead.transform, toward: headTarget, by: ease)
+            placeHead(placement)
             detectedLegs.update(placement, scale: target.scale.y, easing: ease)
             detectedAnchor.isEnabled = true
         } else {
@@ -188,6 +187,22 @@ final class GhostRenderer {
         // The depth-fitted real body replaces the older rigid ghost-patient shell.
         patientOutline.isEnabled = placement.practice || trackedBody == nil
         patientOutline.components.set(OpacityComponent(opacity: GhostPlacement.outlineOpacity))
+    }
+
+    /// The head where depth found it, or where the fitted body's own head would be when no face was
+    /// seen. It turns and sizes with the body, but isn't stretched by the torso's own length and width.
+    private func placeHead(_ placement: PatientBodyPlacement) {
+        guard !detectedHead.children.isEmpty else { return }
+        let template = placement.transform * SIMD4(PatientModelFit.headCenter, 1)
+        let target = placement.head ?? SIMD3(template.x, template.y, template.z)
+        let body = detectedModel.transform
+        let size = (body.scale.x + body.scale.y + body.scale.z) / 3
+        detectedHead.orientation = body.rotation
+        detectedHead.scale = SIMD3(repeating: size)
+        detectedHead.position = detectedAnchor.isEnabled && detectedHead.isEnabled
+            ? simd_mix(detectedHead.position, target, SIMD3(repeating: Self.bodyEasing))
+            : target
+        detectedHead.isEnabled = true
     }
 
     private func paint(_ entity: Entity, color: UIColor) {
