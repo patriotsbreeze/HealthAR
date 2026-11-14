@@ -144,6 +144,18 @@ final class AppCoordinator {
     private(set) var dispatcherOpen = false
     /// The latest read of the scene. It only informs, and goes when the session or the rescue does.
     private(set) var sceneRead: SituationAssessment?
+    /// On assess, the voice AI's sense of a collapse, held as a suggestion: core moves nothing on it
+    /// there, and a person taps the ringed button or says "confirm".
+    private(set) var voiceSuggestion: SituationAssessment.Suggestion?
+
+    /// The one button the AI points to on assess, from the voice AI's report first, else the scene read
+    /// at medium or high confidence. It only ever rings a button; nothing moves until a person acts.
+    var assessSuggestion: SituationAssessment.Suggestion? {
+        guard state.stateID == ScenarioModule.assessState else { return nil }
+        if let voiceSuggestion { return voiceSuggestion }
+        guard let read = sceneRead, read.confidence != .low else { return nil }
+        return read.suggests
+    }
     /// Everything the voice AI saw, did, heard and said, newest first, for the drop-down under the read.
     private(set) var assessmentLog: [AssessmentLogEntry] = []
     private(set) var assessing = false
@@ -628,6 +640,7 @@ final class AppCoordinator {
     func dispatch(_ event: RescueEvent, seeded: Bool = false) {
         let now = clock()
         commit(engine.reduce(state, event, at: now), at: now, seeded: seeded)
+        if case let .model(proposal) = event { holdAsSuggestion(proposal) }
     }
 
     /// Runs the time-based rules. The loop calls this, and so do the tests with their own clock.
@@ -683,6 +696,7 @@ final class AppCoordinator {
             locateAED(at: now)
         }
         if enters {
+            voiceSuggestion = nil
             // Vision ends its guide on every overlay change, so this follows it.
             handsGuideUntil = nil
             if opensHandsGuide(result.effects) { beginHandsGuide(at: now) }
@@ -1118,6 +1132,7 @@ final class AppCoordinator {
         case let .inputTranscript(text):
             heardTranscript = trimmed(heardTranscript + text)
             heardPending += text
+            confirmIfSaid()
         case let .outputTranscript(text):
             saidTranscript = trimmed(saidTranscript + text)
             // The AI answering closes what the rescuer said, so the log keeps the order they spoke in.
@@ -1316,6 +1331,28 @@ final class AppCoordinator {
         if assessmentLog.count > Self.maxLogEntries { assessmentLog.removeLast(assessmentLog.count - Self.maxLogEntries) }
     }
 
+    /// A collapse report on assess, which core held, becomes the ringed button.
+    private func holdAsSuggestion(_ proposal: ModelProposal) {
+        guard state.stateID == ScenarioModule.assessState,
+              case let .reportFinding(finding, _, confidence) = proposal.action, confidence != .low else { return }
+        switch finding {
+        case .unresponsive: voiceSuggestion = .notResponding
+        case .notBreathing, .abnormalBreathing: voiceSuggestion = .notBreathing
+        default: break
+        }
+    }
+
+    /// "Confirm" from the rescuer presses the ringed button, as a tap would. Their own words, from the
+    /// live transcript of the mic: the AI's speech is a separate transcript and can't confirm anything.
+    private func confirmIfSaid() {
+        guard let suggestion = assessSuggestion, let action = suggestion.confirmAction,
+              heardPending.range(of: #"\bconfirm(ed)?\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+        else { return }
+        flushHeard()
+        appendLog(.heard, "Confirmed by voice: \(suggestion.rawValue.replacingOccurrences(of: "_", with: " "))")
+        perform(action)
+    }
+
     private func flushHeard() {
         appendLog(.heard, heardPending)
         heardPending = ""
@@ -1324,6 +1361,7 @@ final class AppCoordinator {
     private func clearAssessment() {
         assessRound += 1
         sceneRead = nil
+        voiceSuggestion = nil
         assessmentLog = []
         assessmentFailed = false
         assessing = false
@@ -1436,5 +1474,18 @@ final class AppCoordinator {
 
     private func trimmed(_ text: String) -> String {
         String(text.suffix(Self.maxTranscriptCharacters))
+    }
+}
+
+extension SituationAssessment.Suggestion {
+    /// The tap "confirm" stands in for. None for the 911 script, which opens a sheet rather than a step.
+    var confirmAction: HumanAction? {
+        switch self {
+        case .startCpr: .startCpr
+        case .notResponding: .patientUnresponsive
+        case .notBreathing: .patientNotBreathing
+        case .awake: .patientAwake
+        case .callForHelp: nil
+        }
     }
 }

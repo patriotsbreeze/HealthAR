@@ -41,7 +41,6 @@ import Testing
         (Finding.chestPain, "chest_call"), (.otherHeartSigns, "chest_call"),
         (.limbInjury, "limb_start"), (.heavyBleeding, "limb_danger"), (.limbDiscolored, "limb_danger"), (.neckBackInjury, "limb_danger"),
         (.choking, "choking_talk"), (.otherConcern, "general_talk"),
-        (.unresponsive, "intake_breathing"), (.notBreathing, "intake_breathing"), (.abnormalBreathing, "intake_breathing"),
     ])
     func aSureReportRoutes(finding: Finding, to target: String) throws {
         var session = Session(engine: try engine())
@@ -58,11 +57,26 @@ import Testing
         #expect(session.entries(.observation).last?.detail == "\(finding.rawValue),seen,low")
     }
 
-    /// A collapse needs no confidence threshold, as on every awake step.
-    @Test func aLowCollapseReportStillGoesToTheBreathingQuestion() throws {
-        var session = Session(engine: try engine())
-        report(.unresponsive, .low, in: &session)
-        #expect(session.state.stateID == "intake_breathing")
+    /// On assess the AI's sense of a collapse only suggests: it is noted, the button is ringed, and a
+    /// person taps or says "confirm". However sure it is, it moves nothing.
+    @Test(arguments: [Finding.unresponsive, .notBreathing, .abnormalBreathing])
+    func aCollapseReportOnAssessOnlySuggests(finding: Finding) throws {
+        for confidence in [Confidence.low, .medium, .high] {
+            var session = Session(engine: try engine())
+            report(finding, confidence, in: &session)
+            #expect(session.state.stateID == "assess", "\(finding) \(confidence)")
+            #expect(!session.effects.contains(.cutPhrases))
+        }
+    }
+
+    /// The person's own taps still go straight on from assess.
+    @Test func aTapStillMovesOnFromAssess() throws {
+        var unresponsive = Session(engine: try engine())
+        unresponsive.human(.patientUnresponsive)
+        #expect(unresponsive.state.stateID == "intake_breathing")
+        var cpr = Session(engine: try engine())
+        cpr.human(.startCpr)
+        #expect(cpr.state.stateID == "compressions")
     }
 
     /// "They're fine" can never take the rescue anywhere, and only a person's tap says they're awake.

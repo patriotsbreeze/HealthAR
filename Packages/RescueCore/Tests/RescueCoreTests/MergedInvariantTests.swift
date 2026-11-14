@@ -93,6 +93,11 @@ private let everyAwakeState = [
         for state in try loadMergedBundle().definition.states where state.kind.isAwake {
             for (key, target) in targets {
                 let edges = state.transitions.filter { $0.on == key }
+                // Assess holds the AI's collapse reports as suggestions, so they carry no edge there.
+                if state.id == ScenarioModule.assessState, ScenarioModule.assessHeldReports.contains(key) {
+                    #expect(edges.isEmpty, "assess \(key) must only suggest")
+                    continue
+                }
                 #expect(edges.count == 1, "\(state.id) \(key)")
                 #expect(edges.first?.to == target, "\(state.id) \(key)")
                 #expect(edges.first?.cutsPhrases == collapses.contains(key), "\(state.id) \(key)")
@@ -119,6 +124,10 @@ private let everyAwakeState = [
                 var session = try session(engine, in: state.id)
                 trigger(&session)
                 let reached = session.state.stateID
+                if state.id == ScenarioModule.assessState, name.hasPrefix("report") {
+                    #expect(reached == state.id, "assess, \(name): a report only suggests")
+                    continue
+                }
                 #expect(["intake_breathing", "compressions"].contains(reached), "\(state.id), \(name)")
                 #expect(session.effects.contains(.cutPhrases), "\(state.id), \(name)")
                 let urgency = try #require(engine.definition(of: reached)).urgency
@@ -146,6 +155,13 @@ private let everyAwakeState = [
             for first in collapses {
                 for second in collapses {
                     var session = try session(engine, in: state.id)
+                    if state.id == ScenarioModule.assessState {
+                        session.modelFinding(first)
+                        session.now += 0.5
+                        session.modelFinding(second)
+                        #expect(session.state.stateID == state.id, "assess \(first) \(second): reports only suggest")
+                        continue
+                    }
                     session.modelFinding(first)
                     #expect(session.state.stateID == "intake_breathing", "\(state.id) \(first)")
                     session.now += 0.5

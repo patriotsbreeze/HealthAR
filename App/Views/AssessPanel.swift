@@ -207,10 +207,7 @@ struct AssessPanel: View {
 
     /// The button the scene read points to, at medium or high confidence. It only ever highlights
     /// one of the fixed buttons, which stay where they are; nothing happens until a person taps.
-    private var suggestion: SituationAssessment.Suggestion? {
-        guard let read = coordinator.sceneRead, read.confidence != .low else { return nil }
-        return read.suggests
-    }
+    private var suggestion: SituationAssessment.Suggestion? { coordinator.assessSuggestion }
 
     private func suggestionLine(_ suggestion: SituationAssessment.Suggestion) -> some View {
         let reason = coordinator.sceneRead?.sees ?? coordinator.sceneRead?.headline
@@ -220,6 +217,10 @@ struct AssessPanel: View {
                 .foregroundStyle(Self.suggestColor)
             Text("AI suggests \(suggestion.buttonTitle)").font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(DS.Colors.textPrimary)
+            if suggestion.confirmAction != nil {
+                Text("· say \u{201C}confirm\u{201D} or tap").font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Self.suggestColor)
+            }
             if let reason {
                 Text("· \(reason)").font(.system(size: 12))
                     .foregroundStyle(DS.Colors.textSecondary)

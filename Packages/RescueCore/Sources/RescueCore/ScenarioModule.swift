@@ -62,6 +62,14 @@ public struct ScenarioModule: Sendable, Equatable, Codable {
         .init(on: "human.patient_not_breathing", to: "call_911", cutsPhrases: true),
     ]
 
+    /// On assess the AI's sense that someone is unresponsive or not breathing only suggests: it rings
+    /// the matching button, and a person taps it or says "confirm". Assess opens before anyone has
+    /// looked, and in testing the AI took a person who was simply not answering it, standing up, for
+    /// unresponsive, so a report alone reached compressions about 30 s later with no tap. Every other
+    /// awake state keeps these edges, so once a person has said the patient is awake, a collapse the
+    /// AI hears still moves the flow.
+    public static let assessHeldReports: Set<String> = ["model.unresponsive", "model.not_breathing", "model.abnormal_breathing"]
+
     static let injectedKeys = Set((injectedEdges(triageLoaded: true) + assessEdges).map(\.on))
 
     public var version: String
@@ -218,7 +226,10 @@ extension ProtocolBundle {
         next.definition.states += module.states.map { state in
             var state = state
             state.transitions += ScenarioModule.injectedEdges(triageLoaded: triageLoaded)
-            if state.id == ScenarioModule.assessState { state.transitions += ScenarioModule.assessEdges }
+            if state.id == ScenarioModule.assessState {
+                state.transitions.removeAll { ScenarioModule.assessHeldReports.contains($0.on) }
+                state.transitions += ScenarioModule.assessEdges
+            }
             return state
         }
         next.phrases.phrases += module.phrases
