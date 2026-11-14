@@ -85,6 +85,9 @@ private func step(_ session: VisionSession, pose: CameraPose = cameraPose(), tra
     #expect(session.overlay().zones.count == 2)
     clock.advance(VisionOverlay.maxZoneAge - 0.3 + 0.01)
     session.ingest(pixels: makePixels(), pose: cameraPose(), tracking: .normal, imageToView: portraitTransform)
+    #expect(session.overlay().zones.isEmpty)
+    clock.advance(VisionOverlay.maxJointAge)
+    session.ingest(pixels: makePixels(), pose: cameraPose(), tracking: .normal, imageToView: portraitTransform)
     #expect(session.overlay() == .empty)
 }
 
@@ -452,7 +455,7 @@ private func locate(_ session: VisionSession, _ materials: Set<Material>, pose: 
     #expect(!expected.isEmpty)
     #expect(session.overlay().joints == expected)
 
-    clock.advance(VisionOverlay.maxZoneAge + 0.01)
+    clock.advance(VisionOverlay.maxJointAge + 0.01)
     session.ingest(pixels: makePixels(), pose: cameraPose(), tracking: .normal, imageToView: portraitTransform)
     #expect(session.overlay().joints.isEmpty)
 }
@@ -467,4 +470,31 @@ private func locate(_ session: VisionSession, _ materials: Set<Material>, pose: 
         .rightAnkle: .init(position: [1.1, 0.5], confidence: 1),
     ]
     #expect(body.visibleJoints == [body.leftShoulder.position, [0.2, 0.3], body.rightShoulder.position])
+}
+
+
+@Test func activeCameraShowsPartialBodyJointsWithoutSelectingAPatientOrUploading() async {
+    let clock = TestClock()
+    let points: [SIMD2<Double>] = [[0.4, 0.4], [0.5, 0.5]]
+    let session = VisionSession(
+        locator: FixedLocator(box: nil),
+        driver: FakeDriver(surface: wall),
+        detect: { _, _ in [] },
+        detectFrame: { _, _ in PoseDetection(people: [], joints: points) },
+        clock: { clock.now },
+        runsPump: false
+    )
+    session.viewportSize = portraitMapping.viewSize
+    session.start()
+    // No overlay target, lying patient, torso, injury tap, or network permission.
+    let result = await step(session)
+    #expect(result.wantedPixels)
+    #expect(!result.sentUplink)
+    #expect(session.overlay().joints == points.map { portraitMapping.viewPoint(fromImage: $0) })
+    #expect(session.latestTarget == nil)
+    #expect(session.overlay().zones.isEmpty)
+
+    clock.advance(VisionOverlay.maxJointAge + 0.01)
+    session.ingest(pixels: makePixels(), pose: cameraPose(), tracking: .normal, imageToView: portraitTransform)
+    #expect(session.overlay().joints.isEmpty)
 }

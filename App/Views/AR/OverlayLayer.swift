@@ -58,7 +58,7 @@ struct OverlayLayer: View {
         GeometryReader { geometry in
             // AR shed for heat, or failed, has nothing to draw, and a phone shedding load shouldn't
             // redraw at display rate.
-            TimelineView(.animation(paused: coordinator.overlayIdle || !coordinator.cameraLive)) { timeline in
+            TimelineView(.animation(paused: !coordinator.cameraLive)) { timeline in
                 let built = scene(at: timeline.date.timeIntervalSinceReferenceDate, in: geometry)
                 let style = ARPainter.Style(typeSize: typeSize, reduceMotion: reduceMotion)
                 Canvas { context, _ in
