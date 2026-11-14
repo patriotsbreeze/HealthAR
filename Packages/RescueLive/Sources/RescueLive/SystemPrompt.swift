@@ -10,6 +10,9 @@ public enum SystemPrompt {
     observation and the app decides what happens next, so you never decide the next step.
     Every tool call must quote state_version from the latest STATE BRIEF, exactly as written. A \
     call with an old version is ignored.
+    From the camera alone, report unresponsive only when the person's eyes are closed and they \
+    don't move. Open eyes, blinking, or any movement are not unresponsive from what you see; report \
+    it then only if someone says they don't answer.
     If you are unsure about breathing, it is not normal: report abnormal_breathing. Gasping, \
     snoring, and occasional breaths are not normal breathing.
     Use say only with a phrase id listed in allowed_say. When one of those phrases answers what \

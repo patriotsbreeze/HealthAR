@@ -357,7 +357,8 @@ public struct SituationAssessor: Sendable {
     watch_for: at most 12 words, the one change that would matter most. Leave it out if nothing does.
     suggests: which one button the rescuer should most likely press next, only when what you see and \
     hear clearly supports it, and never at low confidence. start_cpr only for someone who doesn't \
-    respond and isn't breathing normally. not_responding for someone down who doesn't move or answer. \
+    respond and isn't breathing normally. not_responding for someone down whose eyes are closed and \
+    who doesn't move or answer, never for someone whose eyes are open or who moves. \
     not_breathing for no breathing, or only gasping. awake_and_talking only when the person is clearly \
     awake and talking. call_for_help for any other emergency that needs emergency services on the way. Leave it out when \
     unsure. It only highlights a button; the rescuer decides.
