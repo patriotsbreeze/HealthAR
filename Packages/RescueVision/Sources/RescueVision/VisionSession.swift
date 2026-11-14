@@ -94,6 +94,7 @@ public final class VisionSession: Sendable {
         var wantsRunning = false
         var arActive = false
         var patientModelReady = false
+        var patientRigReady = false
         var failed = false
 
         enum DriverAction { case none, run, pause }
@@ -497,6 +498,8 @@ public final class VisionSession: Sendable {
     /// Called only after the renderer has loaded both patient meshes successfully.
     func patientModelDidLoad() { state.withLock { $0.patientModelReady = true } }
 
+    func patientRigDidLoad() { state.withLock { $0.patientRigReady = true } }
+
     /// Depth-backed patient template. It expires instead of staying at an old body location.
     public func patientBodyPlacement() -> PatientBodyPlacement? {
         let now = clock()
@@ -563,7 +566,7 @@ public final class VisionSession: Sendable {
         if overlay.patientIn3D {
             overlay.chestEstimateLabel = patientBody?.showsChestEstimate == true
                 ? "Estimated hand placement - Not a sternum detection"
-                : "3D body fit - Template estimate"
+                : state.withLock { $0.patientRigReady ? "3D body fit - Smooth joint-driven mesh" : "3D body fit - Rigid template" }
         }
         let chest = pose.chestEstimate
         if let chest, (0...VisionOverlay.maxJointAge).contains(now - chest.capturedAt) {

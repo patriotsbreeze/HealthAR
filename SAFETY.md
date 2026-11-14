@@ -12,6 +12,8 @@ The glowing patient uses the Blender practice mannequin, fitted to measured shou
 
 The adult hand-placement reference is the [AHA adult BLS guideline](https://cpr.heart.org/en/resuscitation-science/cpr-and-ecc-guidelines/adult-basic-life-support). The guideline does not validate this camera-based localization method.
 
+The smooth tracked body now has a skeletal skin driven by measured limb joints, with the Blender root-axis conversion retained. Unmeasured joints can remain in their bind pose. This remains approximate visualization: skin weights, soft tissue shape, partial detections, and depth errors can all misalign it. Asset-level deformation tests do not establish clinical or device-level accuracy. The practice animation and anatomical chest-estimation limits are unchanged.
+
 The separately rendered dashed sternum-region estimate uses the same unvalidated torso mapping and does not claim anatomical recognition. It can render without the full-body mesh: image-space guidance requires one selected lying candidate with confident, measured hips and shoulders, and a surface disc additionally requires fresh chest depth. It is limited to the protocol's hand-placement guide and active compressions, disappears on ambiguity or stale tracking, and never changes engine decisions or network gates.
 
 ## Rules for running it

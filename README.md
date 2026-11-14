@@ -151,3 +151,12 @@ Never run `echo`, `printenv`, or `set -x` with the key set. [evals/README.md](ev
 ### Estimated sternum-region marker
 
 The hand-placement step and active compressions show a dashed orange, palm-sized region with the label "Estimated sternum region - Not anatomically verified". It reuses the existing unvalidated torso mapping; it does not recognize the sternum or infer a new clinically approved location. A single lying-person candidate, measured shoulders and hips, and fresh tracking are required. The 2D marker works without scene depth or the Blender asset. If depth at the estimated chest surface is usable, a separate 3D disc appears there even when the full-body mesh cannot fit. The marker is never shown merely because an awake person entered the camera view. Test it on a manikin with an instructor-marked reference; it is not validated for real emergencies.
+
+
+### Smooth tracked-body skin
+
+`TrackedPatient.usdz` preserves the original Blender tracked-body and outline vertices, with the asset-root rotation baked into model space and a 13-joint skin added. The phone deforms that smooth surface from measured shoulders, elbows, wrists, hips, knees, and ankles; it does not replace it with spheres or cylinders. Missing measurements use the bind pose for those joints, so partial detections still do not establish accurate limb placement or body shape.
+
+When the skin imports successfully, the camera caption says "3D body fit - Smooth joint-driven mesh". "3D body fit - Rigid template" means the loader fell back to the older non-articulated mesh. The original practice animation and `Ghost.usdz` remain unchanged. The tracked head retains its Blender root transform too, fixing the lost-axis conversion when cloning asset children.
+
+To rebuild the derived skin, use Python with `usd-core` (validated here with Python 3.12): `python tools/rig_tracked_patient.py`. Run `python tools/test_rig_tracked_patient.py` to check original geometry/topology, baked coordinates, normalized weights, rest-pose fidelity, and smooth arm deformation. Swift joint-retargeting tests and RealityKit rendering still require macOS/Xcode and device verification.
