@@ -21,6 +21,8 @@ public enum HumanAction: String, Sendable, Codable, CaseIterable {
     case triageChoking = "triage_choking"
     case triageOpen = "triage_open"
     case notThis = "not_this"
+    case cantCough = "cant_cough"
+    case objectOut = "object_out"
     // These never change state.
     case breathMarked = "breath_marked"
     case shockDelivered = "shock_delivered"
@@ -50,6 +52,12 @@ public enum Finding: String, Sendable, Codable, CaseIterable {
     case choking
     case otherConcern = "other_concern"
     case aspirinUnsafe = "aspirin_unsafe"
+    /// The rescuer says they finished what the step asked, such as five back blows.
+    case stepDone = "step_done"
+    /// The choking patient is coughing hard, talking, or breathing freely.
+    case canCough = "can_cough"
+    /// Someone says the object came out.
+    case objectOut = "object_out"
 
     /// What `contracts/tools.v1.json` declares. Awake findings stay out of an arrest session.
     public static let arrestCases: Set<Finding> = [
@@ -61,12 +69,15 @@ public enum Finding: String, Sendable, Codable, CaseIterable {
     public static let awakeCases: Set<Finding> = [
         .unresponsive, .notBreathing, .abnormalBreathing, .dispatcherSpeaking, .chestPain, .otherHeartSigns,
         .limbInjury, .limbDiscolored, .heavyBleeding, .neckBackInjury, .choking, .otherConcern, .aspirinUnsafe,
+        .stepDone, .canCough, .objectOut,
     ]
 
     /// Acting on these would reduce urgency, so the model can never trigger them.
     public var wouldLowerUrgency: Bool {
         switch self {
-        case .responsive, .breathingNormally, .patientMoving, .emsArrived: true
+        // A cough that works, or the object out, would take the rescuer off back blows. Only a person
+        // may choose that, so the app rings the button and waits for a tap or "confirm".
+        case .responsive, .breathingNormally, .patientMoving, .emsArrived, .canCough, .objectOut: true
         default: false
         }
     }
@@ -127,6 +138,10 @@ public enum OverlayTarget: String, Sendable, Codable, CaseIterable {
     case aedDevice = "aed_device"
     case padZones = "pad_zones"
     case injurySite = "injury_site"
+    /// Between the shoulder blades of a standing patient, for back blows.
+    case upperBack = "upper_back"
+    /// Just above the navel of a standing patient, for abdominal thrusts.
+    case upperAbdomen = "upper_abdomen"
 }
 
 /// A tool call from the model. All arguments are enums, and each call names the state version it saw.

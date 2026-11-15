@@ -101,6 +101,10 @@ struct BodyRegions: Sendable, Equatable {
     var padTwo: OrientedRect?
     var padsLocked = false
     var limb: LimbCapsule?
+    /// Between the shoulder blades and just above the navel of a standing patient, for choking.
+    var upperBack: OrientedRect?
+    var upperAbdomen: OrientedRect?
+    var uprightLocked = false
     /// The patient found lying down, on the steps that look for one.
     var outline: BodyOutline?
 }
@@ -131,6 +135,31 @@ enum BodyRegionMap {
             regions.padTwo = pads.two
             regions.padsLocked = pads.labelsAgree && !person.torsoEstimated
         }
+        return regions
+    }
+
+    /// How far from the shoulders toward the hips each choking mark sits. UNVALIDATED DEMO ESTIMATE,
+    /// like TorsoMap: our own fractions of an adult torso, for the space between the shoulder
+    /// blades and a fist's width above the navel. A clinician must confirm them. Both use only the
+    /// shoulder and hip midpoints, which are the same from the front or the back, so they hold
+    /// whichever way the patient faces the camera.
+    static let upperBackAlong = 0.25
+    static let upperAbdomenAlong = 0.70
+
+    /// A standing or seated patient, for back blows and abdominal thrusts. Nil wherever TorsoMap would
+    /// give no ring, since the torso is too small or too foreshortened to place anything on.
+    static func upright(_ person: DetectedPerson, imageAspect: Double, alone: Bool) -> BodyRegions? {
+        let torso = person.torso
+        guard TorsoMap.target(for: torso, imageAspect: imageAspect) != nil,
+              let frame = Frame(torso, imageAspect: imageAspect)
+        else { return nil }
+        let w = frame.shoulderWidth
+        let l = frame.length
+        var regions = BodyRegions(outline: outline(person, imageAspect: imageAspect))
+        regions.upperBack = frame.rect(right: 0, down: upperBackAlong * l, halfLength: 0.12 * l, halfWidth: 0.22 * w)
+        regions.upperAbdomen = frame.rect(right: 0, down: upperAbdomenAlong * l, halfLength: 0.08 * l, halfWidth: 0.14 * w)
+        // Solid only for one well-seen person: with the rescuer in frame too, the mark may be on them.
+        regions.uprightLocked = alone && !person.torsoEstimated && person.lowestConfidence >= 0.5
         return regions
     }
 

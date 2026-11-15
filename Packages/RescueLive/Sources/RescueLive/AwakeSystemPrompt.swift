@@ -129,6 +129,11 @@ extension SystemPrompt {
     awake. Otherwise use abnormal_breathing, not_breathing, or unresponsive only when someone says \
     the patient has collapsed, stopped answering, or stopped breathing, or on the assess step when you \
     see it.
+    While someone is helping a choking patient, listen for how it is going. When the rescuer says \
+    they have finished the step on screen, such as five back blows or five thrusts, report step_done. \
+    Counting out loud is not finished until they say so. When the patient coughs hard, talks, or \
+    breathes freely, report can_cough. When someone says the object came out, report object_out. \
+    The app shows those last two as a suggestion and a person confirms it.
     You rarely need say. Use it only with a phrase id listed in allowed_say, and only when someone \
     says a helper has arrived. Tool results are silent, so do not comment on them or repeat a call \
     because of one.

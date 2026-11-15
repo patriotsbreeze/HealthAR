@@ -12,6 +12,7 @@ struct AwakeRows: View {
     var body: some View {
         let layout = RescueControls.awakeLayout(coordinator.controls)
         VStack(spacing: DS.Space.betweenButtons) {
+            if let suggestion = coordinator.flowSuggestion { suggestionLine(suggestion) }
             if !layout.answers.isEmpty {
                 HStack(spacing: DS.Space.betweenButtons) {
                     ForEach(layout.answers) { stepButton($0, kind: .answer) }
@@ -71,9 +72,28 @@ struct AwakeRows: View {
 
     /// A new step puts different buttons here, so a tap aimed at the last step could answer this one.
     private func stepButton(_ control: RescueControl, kind: CommandButtonStyle.Kind) -> some View {
-        Button(control.title) { coordinator.performStep(control.action) }
+        let suggested = coordinator.flowSuggestion == control.action
+        return Button(control.title) { coordinator.performStep(control.action) }
             .buttonStyle(CommandButtonStyle(kind: kind, height: DS.Height.awake))
+            .suggested(suggested, RoundedRectangle(cornerRadius: DS.Radius.row, style: .continuous))
             .accessibilityLabel(control.title)
+            .accessibilityHint(suggested ? "The AI suggests this. Say confirm or tap." : "")
+    }
+
+    /// What the AI thinks the answer is, over the buttons. Only a tap or "confirm" acts on it.
+    private func suggestionLine(_ action: HumanAction) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(AssessPanel.suggestColor)
+            Text("AI suggests \(RescueControls.title(for: action))").font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(DS.Colors.textPrimary)
+            Text("· say \u{201C}confirm\u{201D} or tap").font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AssessPanel.suggestColor)
+            Spacer(minLength: 0)
+        }
+        .lineLimit(1)
+        .accessibilityElement(children: .combine)
     }
 }
 

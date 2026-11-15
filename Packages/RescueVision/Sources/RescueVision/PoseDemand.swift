@@ -9,6 +9,8 @@ enum PoseDemand: Sendable, Equatable {
     case lying(since: TimeInterval)
     /// The person nearest the tapped injury, seated or lying.
     case nearPin
+    /// The nearest person, standing or seated, for the choking marks.
+    case upright(since: TimeInterval)
     /// The person compressing, measured against the ghost rescuer in compressions.
     case rescuer
 
@@ -38,6 +40,8 @@ enum PoseDemand: Sendable, Equatable {
         case .injurySite:
             // No pin, no pose: a limb step costs the camera nothing until someone taps.
             return pinLive || holdsLimb ? .nearPin : .none
+        case .upperBack, .upperAbdomen:
+            return .upright(since: enteredAt)
         case .aedDevice:
             return .none
         case nil:
@@ -53,7 +57,7 @@ enum PoseDemand: Sendable, Equatable {
         switch self {
         case .none:
             0
-        case let .lying(since):
+        case let .lying(since), let .upright(since):
             now - since < Self.fastLockSeconds ? load.poseFramesPerSecond : min(load.poseFramesPerSecond, Self.lyingCap)
         case .nearPin:
             min(load.poseFramesPerSecond, Self.nearPinCap)

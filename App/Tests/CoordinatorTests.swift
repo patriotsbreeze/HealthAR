@@ -418,6 +418,26 @@ import Testing
         #expect(coordinator.state.stateID == "position_patient", "the agent's call moves no step")
     }
 
+    /// A choking patient who can't cough or speak gets the same background call, and the agent says
+    /// what the rescuer is doing instead of CPR.
+    @Test func theCallerAgentCallsForSevereChoking() throws {
+        let fixture = try Fixture(bundle: try mergedBundle())
+        let coordinator = fixture.coordinator
+        coordinator.beginRescue()
+        coordinator.perform(.yes)
+        coordinator.perform(.triageChoking)
+        #expect(coordinator.state.stateID == "choke_check")
+        #expect(coordinator.callerAgentStatus == .idle, "no call before the answer")
+        fixture.clock.advance(1)
+        coordinator.perform(.no)
+        #expect(coordinator.state.stateID == "choke_back_blows")
+        #expect(coordinator.callerAgentStatus == .calling)
+        #expect(fixture.audio.played.contains("choke_calling"))
+        let lines = AppCoordinator.callerAgentLines(coordinator.callerScript, choking: true)
+        #expect(lines.contains { $0.contains("back blows and abdominal thrusts") })
+        #expect(!lines.contains { $0.contains("CPR") })
+    }
+
     /// Start CPR skips setup, and the call still starts.
     @Test func startCprStartsTheCallerAgentToo() throws {
         let fixture = try Fixture()

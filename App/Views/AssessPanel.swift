@@ -291,7 +291,7 @@ private extension SituationAssessment.Suggestion {
     var isTapChoice: Bool { self == .notResponding || self == .notBreathing || self == .awake }
 }
 
-private extension View {
+extension View {
     /// A yellow ring round the one button the AI points to. It never moves or resizes the button.
     func suggested(_ on: Bool, _ shape: some InsettableShape) -> some View {
         overlay {

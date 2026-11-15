@@ -6,8 +6,10 @@ import Testing
     private let kinds: Set<String> = [
         "unresponsive", "not_breathing", "abnormal_breathing", "dispatcher_speaking", "chest_pain",
         "other_heart_signs", "limb_injury", "limb_discolored", "heavy_bleeding", "neck_back_injury",
-        "choking", "other_concern", "aspirin_unsafe",
+        "choking", "other_concern", "aspirin_unsafe", "step_done", "can_cough", "object_out",
     ]
+    /// The gate refuses these as moves, so they only ever ring a button for a person to confirm.
+    private let suggestOnly: Set<String> = ["can_cough", "object_out"]
 
     private func tools(_ file: String) throws -> [[String: Any]] {
         let url = repoRoot().appendingPathComponent("contracts/\(file)")
@@ -29,7 +31,7 @@ import Testing
         #expect(Set(declared).isSubset(of: Set(Finding.allCases.map(\.rawValue))))
         #expect(Set(declared).isDisjoint(with: ["responsive", "patient_moving", "breathing_normally", "ems_arrived", "aed_prompting"]))
         for finding in Finding.allCases where kinds.contains(finding.rawValue) {
-            #expect(!finding.wouldLowerUrgency, "\(finding)")
+            #expect(finding.wouldLowerUrgency == suggestOnly.contains(finding.rawValue), "\(finding)")
         }
     }
 

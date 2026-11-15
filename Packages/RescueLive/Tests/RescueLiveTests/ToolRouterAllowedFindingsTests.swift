@@ -37,7 +37,7 @@ import Testing
 
     @Test func awakeFindingsAreRefusedByDefault() {
         let router = ToolRouter(clock: { 500 })
-        #expect(newFindings.count == 9)
+        #expect(newFindings.count == 12)
         for finding in newFindings {
             let routed = router.route(report(finding))
             #expect(routed.proposal == nil, "\(finding)")
@@ -64,7 +64,7 @@ import Testing
 
     @Test func anAwakeSessionRefusesWhatItsContractOmits() throws {
         let allowed = try awakeFindings()
-        #expect(allowed.count == 13)
+        #expect(allowed.count == 16)
         let router = ToolRouter(clock: { 500 }, allowedFindings: allowed)
         for finding in [Finding.responsive, .patientMoving, .breathingNormally, .emsArrived, .aedPrompting] {
             let routed = router.route(report(finding))

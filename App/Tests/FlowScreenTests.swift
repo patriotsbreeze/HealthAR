@@ -6,8 +6,9 @@ import Testing
 private let flowSteps = [
     "chest_call", "chest_aspirin_check", "chest_aspirin", "chest_wait", "chest_scan",
     "limb_start", "limb_flags", "limb_splint", "limb_wait", "limb_danger",
+    "choke_check", "choke_cough", "choke_back_blows", "choke_thrusts", "choke_out",
 ]
-private let awakeStates = ["triage", "general_talk", "choking_talk"] + flowSteps
+private let awakeStates = ["triage", "general_talk"] + flowSteps
 
 /// What the awake screens offer, with no key, no model, and no network. The drawing itself is checked
 /// in the Simulator.
@@ -44,14 +45,15 @@ private let awakeStates = ["triage", "general_talk", "choking_talk"] + flowSteps
     @Test func triageOffersTheFlowsInReadingOrder() throws {
         let fixture = try forced("triage")
         let group = RescueControls.triageGroup(fixture.coordinator.controls)
-        #expect(group.map(\.action) == [.triageChest, .triageLimb, .triageOther])
+        #expect(group.map(\.action) == [.triageChest, .triageLimb, .triageChoking, .triageOther])
         #expect(group.allSatisfy { $0.role == .triage })
-        #expect(fixture.coordinator.controls.filter { $0.role == .triage }.count == 3, "none left out of the group")
+        #expect(fixture.coordinator.controls.filter { $0.role == .triage }.count == 4, "none left out of the group")
     }
 
     @Test(arguments: [
-        ("possible_heart_attack.v1", [HumanAction.triageLimb, .triageOther]),
-        ("possible_broken_bone.v1", [HumanAction.triageChest, .triageOther]),
+        ("possible_heart_attack.v1", [HumanAction.triageLimb, .triageChoking, .triageOther]),
+        ("possible_broken_bone.v1", [HumanAction.triageChest, .triageChoking, .triageOther]),
+        ("possible_choking.v1", [HumanAction.triageChest, .triageLimb, .triageOther]),
     ])
     func aDroppedFlowTakesItsButtonWithIt(dropped: String, left: [HumanAction]) throws {
         let bundle = try merged(dropping: [dropped])
@@ -61,7 +63,7 @@ private let awakeStates = ["triage", "general_talk", "choking_talk"] + flowSteps
     }
 
     @Test func noFlowsLeaveTheOtherButtonAndTheCollapse() throws {
-        let bundle = try merged(dropping: ["possible_heart_attack.v1", "possible_broken_bone.v1"])
+        let bundle = try merged(dropping: ["possible_heart_attack.v1", "possible_broken_bone.v1", "possible_choking.v1"])
         let fixture = try forced("triage", bundle: bundle)
         #expect(RescueControls.triageGroup(fixture.coordinator.controls).map(\.action) == [.triageOther])
         #expect(role(fixture, .startCpr) == .primary)
@@ -107,10 +109,30 @@ private let awakeStates = ["triage", "general_talk", "choking_talk"] + flowSteps
         #expect(RescueControls.triageGroup(fixture.coordinator.controls).map(\.action) == [.triageChoking])
         fixture.clock.advance(1)
         fixture.coordinator.performStep(.triageChoking)
-        #expect(fixture.coordinator.state.stateID == "choking_talk")
-        #expect(fixture.coordinator.instruction == fixture.coordinator.engine.bundle.text(forPhrase: "choking_steps"))
-        fixture.run(seconds: 9)
-        #expect(fixture.coordinator.instruction == fixture.coordinator.engine.bundle.text(forPhrase: "choking_steps"), "the steps outlast a passing prompt")
+        #expect(fixture.coordinator.state.stateID == "choke_check")
+        #expect(fixture.coordinator.instruction == fixture.coordinator.engine.bundle.text(forPhrase: "choke_ask"))
+        #expect(RescueControls.awakeLayout(fixture.coordinator.controls).answers.map(\.action) == [.yes, .no, .unsure])
+    }
+
+    /// Each hands-on step shows its guide card's line, a way on, and a way out once it's cleared.
+    @Test func backBlowsAndThrustsOfferNextAndItCameOut() throws {
+        for (id, next) in [("choke_back_blows", "choke_thrusts"), ("choke_thrusts", "choke_back_blows")] {
+            let fixture = try forced(id)
+            let steps = RescueControls.awakeLayout(fixture.coordinator.controls).steps.map(\.action)
+            #expect(steps.contains(.done) && steps.contains(.objectOut), "\(id): \(steps)")
+            #expect(RescueControls.title(for: .objectOut) == "It came out")
+            fixture.clock.advance(1)
+            fixture.coordinator.performStep(.done)
+            #expect(fixture.coordinator.state.stateID == next)
+        }
+    }
+
+    @Test func aWorkingCoughCanStillTurnSevere() throws {
+        let fixture = try forced("choke_cough")
+        #expect(RescueControls.awakeLayout(fixture.coordinator.controls).steps.map(\.action).contains(.cantCough))
+        fixture.clock.advance(1)
+        fixture.coordinator.performStep(.cantCough)
+        #expect(fixture.coordinator.state.stateID == "choke_back_blows")
     }
 
     @Test(arguments: awakeStates)
@@ -124,7 +146,7 @@ private let awakeStates = ["triage", "general_talk", "choking_talk"] + flowSteps
     }
 
     /// The child and adult holds pair up off triage, and the panel lays out any pair.
-    @Test(arguments: ["general_talk", "choking_talk"] + flowSteps)
+    @Test(arguments: ["general_talk"] + flowSteps)
     func notThisIsHeldAndGoesBackToTriage(id: String) throws {
         let fixture = try forced(id)
         #expect(role(fixture, .notThis) == .holdStep)
@@ -207,9 +229,11 @@ private let awakeStates = ["triage", "general_talk", "choking_talk"] + flowSteps
         let guides = try mergedBundle().definition.states.compactMap { state in
             state.guide.map { (state.id, $0) }
         }
-        #expect(guides.count == 2)
+        #expect(guides.count == 4)
         #expect(guides.first { $0.0 == "chest_call" }?.1 == .sitRest)
         #expect(guides.first { $0.0 == "limb_splint" }?.1 == .supportLimb)
+        #expect(guides.first { $0.0 == "choke_back_blows" }?.1 == .backBlows)
+        #expect(guides.first { $0.0 == "choke_thrusts" }?.1 == .abdominalThrusts)
     }
 
     @Test(arguments: awakeStates)

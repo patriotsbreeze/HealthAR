@@ -149,6 +149,13 @@ final class StagedVision: VisionPort, @unchecked Sendable {
                 overlay = VisionOverlay(injuryPin: .init(position: pin, isOnScreen: true, angle: .pi / 2))
                 overlay.zones = [Self.limb(through: pin), Self.pressRing(at: pin)]
             }
+        case .upperBack, .upperAbdomen:
+            // Standing, facing the camera, head at the top.
+            let isBack = now.target == .upperBack
+            let center = CGPoint(x: 0.5, y: isBack ? 0.36 : 0.52)
+            overlay = VisionOverlay(zones: [
+                BodyZone(kind: isBack ? .upperBack : .upperAbdomen, shape: .polygon(Self.rect(center: center, half: CGSize(width: isBack ? 0.09 : 0.06, height: 0.04))), axis: .pi / 2, isLocked: true),
+            ])
         case .padZones:
             // Lying across the screen, head to the left: the patient's right is toward the top.
             overlay = VisionOverlay(zones: [

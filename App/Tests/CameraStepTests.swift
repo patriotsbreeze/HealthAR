@@ -10,6 +10,7 @@ import UIKit
 private let limbSteps = ["limb_start", "limb_flags", "limb_splint", "limb_wait", "limb_danger"]
 private let otherTargets: [(String, OverlayTarget?)] = [
     ("chest_scan", .aedDevice), ("resource_scan", .aedDevice), ("place_hands", .chestCenter), ("pads", .padZones),
+    ("choke_back_blows", .upperBack), ("choke_thrusts", .upperAbdomen),
     ("compressions", nil), ("triage", nil), ("chest_wait", nil), ("responsive_patient", nil), ("handoff", nil),
 ]
 
@@ -25,6 +26,8 @@ private func walk(_ fixture: Fixture, to id: String) {
     case "limb_splint": [HumanAction.triageLimb, .done, .no].forEach(coordinator.perform)
     case "limb_wait": [HumanAction.triageLimb, .done, .no, .done].forEach(coordinator.perform)
     case "limb_danger": [HumanAction.triageLimb, .done, .yes].forEach(coordinator.perform)
+    case "choke_back_blows": [HumanAction.triageChoking, .no].forEach(coordinator.perform)
+    case "choke_thrusts": [HumanAction.triageChoking, .no, .done].forEach(coordinator.perform)
     default: break
     }
     #expect(coordinator.state.stateID == id)

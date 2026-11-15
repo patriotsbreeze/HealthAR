@@ -87,13 +87,15 @@ private let awakeKinds: [StateDefinition.Kind] = [.triage, .flow]
         ])
     }
 
-    @Test func noNewFindingCountsAsLowering() {
+    /// Only the two choking answers that would take the rescuer off back blows lower urgency, and the
+    /// gate refuses them as moves, so they can only ring a button.
+    @Test func onlyTheChokingAnswersCountAsLowering() {
         let new = Finding.allCases.filter { !Finding.arrestCases.contains($0) }
         #expect(Set(new) == [
             .chestPain, .otherHeartSigns, .limbInjury, .limbDiscolored, .heavyBleeding,
-            .neckBackInjury, .choking, .otherConcern, .aspirinUnsafe,
+            .neckBackInjury, .choking, .otherConcern, .aspirinUnsafe, .stepDone, .canCough, .objectOut,
         ])
-        for finding in new { #expect(!finding.wouldLowerUrgency, "\(finding)") }
+        for finding in new { #expect(finding.wouldLowerUrgency == [.canCough, .objectOut].contains(finding), "\(finding)") }
     }
 
     @Test func confidenceOrdersLowToHigh() {

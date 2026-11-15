@@ -94,6 +94,7 @@ public struct StateDefinition: Sendable, Equatable, Codable {
         case responsive, breathing
         case aspirinRiskReported = "aspirin_risk_reported"
         case dangerSigns = "danger_signs"
+        case canCoughOrSpeak = "can_cough_or_speak"
     }
 
     public struct BreathGuard: Sendable, Equatable, Codable {
@@ -152,6 +153,8 @@ public struct StateDefinition: Sendable, Equatable, Codable {
     public enum Guide: String, Sendable, Codable {
         case sitRest = "sit_rest"
         case supportLimb = "support_limb"
+        case backBlows = "back_blows"
+        case abdominalThrusts = "abdominal_thrusts"
     }
 
     public var id: String

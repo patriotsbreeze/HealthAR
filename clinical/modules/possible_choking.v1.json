@@ -1,0 +1,292 @@
+{
+  "version": "possible_choking.v1",
+  "status": "DRAFT",
+  "reviewer": null,
+  "flow": {
+    "id": "possible_choking",
+    "title": "Possible choking",
+    "rule": "Something stuck in the throat of an awake adult",
+    "sources": [
+      "AHA 2025 Part 7, adult foreign-body airway obstruction algorithm",
+      "ILCOR First Aid 2025, choking, weak"
+    ]
+  },
+  "open_states": [
+    "choke_cough",
+    "choke_out"
+  ],
+  "entries": [
+    {
+      "state": "assess",
+      "edge": {
+        "on": "model.choking",
+        "to": "choke_check",
+        "min_confidence": "medium"
+      }
+    },
+    {
+      "state": "triage",
+      "edge": {
+        "on": "human.triage_choking",
+        "to": "choke_check"
+      }
+    },
+    {
+      "state": "triage",
+      "edge": {
+        "on": "model.choking",
+        "to": "choke_check",
+        "min_confidence": "medium"
+      }
+    },
+    {
+      "state": "general_talk",
+      "edge": {
+        "on": "human.triage_choking",
+        "to": "choke_check"
+      }
+    },
+    {
+      "state": "general_talk",
+      "edge": {
+        "on": "model.choking",
+        "to": "choke_check",
+        "min_confidence": "medium"
+      }
+    }
+  ],
+  "states": [
+    {
+      "id": "choke_check",
+      "kind": "flow",
+      "urgency": 2,
+      "flow": "possible_choking",
+      "question": "can_cough_or_speak",
+      "entry_phrases": [
+        "choke_ask"
+      ],
+      "metronome": "off",
+      "frame_uplink": false,
+      "allowed_say": [],
+      "repeating": [
+        {
+          "phrase": "choke_ask",
+          "every_seconds": 8
+        }
+      ],
+      "transitions": [
+        {
+          "on": "human.yes",
+          "to": "choke_cough"
+        },
+        {
+          "on": "human.no",
+          "to": "choke_back_blows",
+          "phrases": [
+            "choke_calling"
+          ],
+          "log": "call_prompted"
+        },
+        {
+          "on": "human.unsure",
+          "to": "choke_back_blows",
+          "phrases": [
+            "choke_calling"
+          ],
+          "log": "call_prompted"
+        },
+        {
+          "on": "model.choking",
+          "to": "choke_back_blows",
+          "min_confidence": "medium",
+          "phrases": [
+            "choke_calling"
+          ],
+          "log": "call_prompted"
+        }
+      ],
+      "citation": "AHA 2025 Part 7, choking: severe signs are a weak or absent cough or being unable to speak. Not sure takes the severe branch, a project proposal, needs clinician approval. A report that they can cough only rings Yes"
+    },
+    {
+      "id": "choke_cough",
+      "kind": "flow",
+      "urgency": 2,
+      "flow": "possible_choking",
+      "entry_phrases": [
+        "choke_keep_coughing"
+      ],
+      "metronome": "off",
+      "frame_uplink": false,
+      "allowed_say": [],
+      "repeating": [
+        {
+          "phrase": "choke_keep_coughing",
+          "every_seconds": 15
+        }
+      ],
+      "transitions": [
+        {
+          "on": "human.cant_cough",
+          "to": "choke_back_blows",
+          "phrases": [
+            "choke_calling"
+          ],
+          "log": "call_prompted"
+        },
+        {
+          "on": "human.object_out",
+          "to": "choke_out"
+        },
+        {
+          "on": "model.choking",
+          "to": "choke_back_blows",
+          "min_confidence": "medium",
+          "phrases": [
+            "choke_calling"
+          ],
+          "log": "call_prompted"
+        }
+      ],
+      "citation": "AHA 2025 Part 7, choking: with no severe signs, encourage coughing and keep checking. The 15 s re-ask is a project proposal, needs clinician approval"
+    },
+    {
+      "id": "choke_back_blows",
+      "kind": "flow",
+      "urgency": 2,
+      "flow": "possible_choking",
+      "entry_phrases": [
+        "choke_blows"
+      ],
+      "metronome": "off",
+      "frame_uplink": false,
+      "overlay": "upper_back",
+      "guide": "back_blows",
+      "allowed_say": [],
+      "repeating": [
+        {
+          "phrase": "choke_blows",
+          "every_seconds": 12
+        }
+      ],
+      "transitions": [
+        {
+          "on": "human.done",
+          "to": "choke_thrusts"
+        },
+        {
+          "on": "human.object_out",
+          "to": "choke_out"
+        },
+        {
+          "on": "model.step_done",
+          "to": "choke_thrusts",
+          "min_confidence": "medium"
+        }
+      ],
+      "citation": "AHA 2025 Part 7, choking: activate EMS, then 5 back blows. The 911 call is said on the way in and placed by the simulated agent in the background. The rescuer saying they are done moves it on, a project proposal. The 12 s re-ask is a project proposal, needs clinician approval"
+    },
+    {
+      "id": "choke_thrusts",
+      "kind": "flow",
+      "urgency": 2,
+      "flow": "possible_choking",
+      "entry_phrases": [
+        "choke_thrusts_line"
+      ],
+      "metronome": "off",
+      "frame_uplink": false,
+      "overlay": "upper_abdomen",
+      "guide": "abdominal_thrusts",
+      "allowed_say": [],
+      "repeating": [
+        {
+          "phrase": "choke_repeat",
+          "every_seconds": 12
+        }
+      ],
+      "transitions": [
+        {
+          "on": "human.done",
+          "to": "choke_back_blows"
+        },
+        {
+          "on": "human.object_out",
+          "to": "choke_out"
+        },
+        {
+          "on": "model.step_done",
+          "to": "choke_back_blows",
+          "min_confidence": "medium"
+        }
+      ],
+      "citation": "AHA 2025 Part 7, choking: 5 abdominal thrusts after 5 back blows, repeated until the object is out or the patient is unresponsive. Pregnant or large patients take the not-adult card. The 12 s re-ask is a project proposal, needs clinician approval"
+    },
+    {
+      "id": "choke_out",
+      "kind": "flow",
+      "urgency": 2,
+      "flow": "possible_choking",
+      "entry_phrases": [
+        "choke_after"
+      ],
+      "metronome": "off",
+      "frame_uplink": false,
+      "allowed_say": [],
+      "repeating": [
+        {
+          "phrase": "choke_after",
+          "every_seconds": 30
+        }
+      ],
+      "transitions": [
+        {
+          "on": "human.cant_cough",
+          "to": "choke_back_blows"
+        },
+        {
+          "on": "model.choking",
+          "to": "choke_back_blows",
+          "min_confidence": "medium"
+        }
+      ],
+      "citation": "AHA 2025 Part 7 and ILCOR First Aid 2025: anyone given abdominal thrusts should be checked by EMS. The 30 s re-ask is a project proposal, needs clinician approval"
+    }
+  ],
+  "phrases": [
+    {
+      "id": "choke_ask",
+      "text": "Possible choking. Can they cough or speak?",
+      "citation": "AHA 2025 Part 7, choking, severe signs"
+    },
+    {
+      "id": "choke_keep_coughing",
+      "text": "Let them keep coughing. Stay close. Tap if they can't cough.",
+      "citation": "AHA 2025 Part 7, choking, mild: encourage coughing"
+    },
+    {
+      "id": "choke_calling",
+      "text": "Calling 911 for you.",
+      "citation": "AHA 2025 Part 7, activate EMS. Project design: the 911 agent places the call in the background, simulated in this build"
+    },
+    {
+      "id": "choke_blows",
+      "text": "Lean them forward. Five firm blows between the shoulder blades.",
+      "citation": "AHA 2025 Part 7, choking, 5 back blows with the heel of the hand"
+    },
+    {
+      "id": "choke_thrusts_line",
+      "text": "Fist just above the navel. Five quick thrusts, in and up.",
+      "citation": "AHA 2025 Part 7, choking, 5 abdominal thrusts"
+    },
+    {
+      "id": "choke_repeat",
+      "text": "Repeat until it's out. If they collapse, tap Not responding.",
+      "citation": "AHA 2025 Part 7, choking, repeat until expelled or unresponsive"
+    },
+    {
+      "id": "choke_after",
+      "text": "Good. Stay with them. They still need to be checked by EMS.",
+      "citation": "AHA 2025 Part 7, choking: anyone given abdominal thrusts needs evaluation"
+    }
+  ]
+}

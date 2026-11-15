@@ -475,7 +475,7 @@ import Testing
         let bundle = try appLayout(modules: ["triage.v1": Self.triage])
         let merged = try #require(ProtocolLoader.loadMerged(from: bundle))
 
-        #expect(merged.moduleFailures.map(\.id) == ["possible_heart_attack.v1", "possible_broken_bone.v1"])
+        #expect(merged.moduleFailures.map(\.id) == ["possible_heart_attack.v1", "possible_broken_bone.v1", "possible_choking.v1"])
         #expect(yesTarget(merged) == "triage")
         #expect(merged.definition.speechGate.openStates.contains("triage"))
     }

@@ -301,3 +301,37 @@ private func armsSwapped(_ body: DetectedPerson) -> DetectedPerson {
     let regions = try #require(BodyRegionMap.lying(body, imageAspect: 1))
     #expect(regions.outline == BodyRegionMap.outline(body, imageAspect: 1))
 }
+
+// MARK: - Choking
+
+@Test(arguments: [90.0, 0, 270])
+func theChokingMarksSitAlongTheTorsoBetweenShouldersAndHips(degrees: Double) throws {
+    let body = person(axisDegrees: degrees)
+    let regions = try #require(BodyRegionMap.upright(body, imageAspect: 1, alone: true))
+    let back = try #require(regions.upperBack)
+    let belly = try #require(regions.upperAbdomen)
+    let shoulders = TorsoMap.bilinear(body.torso, u: 0.5, v: 0)
+    let hips = TorsoMap.bilinear(body.torso, u: 0.5, v: 1)
+    #expect(isClose(back.center, simd_mix(shoulders, hips, SIMD2(repeating: BodyRegionMap.upperBackAlong))))
+    #expect(isClose(belly.center, simd_mix(shoulders, hips, SIMD2(repeating: BodyRegionMap.upperAbdomenAlong))))
+    #expect(isClose(back.axis, axis(degrees)), "head to feet")
+    #expect(regions.outline != nil)
+}
+
+@Test func theChokingMarksHoldWhenTheLabelsSwap() throws {
+    let body = person(axisDegrees: 90)
+    let front = try #require(BodyRegionMap.upright(body, imageAspect: 1, alone: true))
+    let back = try #require(BodyRegionMap.upright(swapped(body), imageAspect: 1, alone: true))
+    #expect(isClose(try #require(front.upperBack).center, try #require(back.upperBack).center), "front or back, same place")
+    #expect(isClose(try #require(front.upperAbdomen).center, try #require(back.upperAbdomen).center))
+}
+
+@Test func theChokingMarksDashWithSomeoneElseInFrame() throws {
+    let body = person(axisDegrees: 90)
+    #expect(try #require(BodyRegionMap.upright(body, imageAspect: 1, alone: true)).uprightLocked)
+    #expect(try !#require(BodyRegionMap.upright(body, imageAspect: 1, alone: false)).uprightLocked)
+}
+
+@Test func noChokingMarksWhereTheRingWouldBeADot() {
+    #expect(BodyRegionMap.upright(person(axisDegrees: 90, length: 0.05, width: 0.05), imageAspect: 1, alone: true) == nil)
+}

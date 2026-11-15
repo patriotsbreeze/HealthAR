@@ -6,9 +6,10 @@ Everything here is a DRAFT until a named reviewer signs it. Every file has `stat
 |---|---|
 | `adult_arrest.v1.json` | The arrest protocol: states, transitions, timeouts, and the speech gate |
 | `phrases.v1.json` | The arrest protocol's phrases, each with a citation |
-| `modules/triage.v1.json` | Triage after a person taps that the patient is responding, Something else, and choking |
+| `modules/triage.v1.json` | Assess, triage after a person taps that the patient is responding, and Something else |
 | `modules/possible_heart_attack.v1.json` | The possible heart attack flow, with the aspirin check and the one approved dose |
 | `modules/possible_broken_bone.v1.json` | The possible broken bone flow, with its danger step for bleeding and neck or back injury |
+| `modules/possible_choking.v1.json` | The possible choking flow: the cough question, back blows and abdominal thrusts in turn, and the check after |
 | `knowledge_pack.v1.json` | Approved text the AI voice draws on in the awake states, paraphrased from the guidelines with a source on each topic and no milligram doses |
 
 The arrest files are frozen. Modules merge over them at load, in the order above, and a module that fails the loader's checks is dropped whole and named on the operator panel, with the arrest path exactly as shipped. Without the knowledge pack the flows still run by their local phrases, and the AI voice stays closed. `BundleValidator` in `Packages/RescueCore` holds the checks, and `SAFETY.md` the invariants they keep.

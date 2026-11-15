@@ -208,8 +208,8 @@ import Testing
         ("triage", Finding.chestPain, "chest_call"),
         ("triage", .otherHeartSigns, "chest_call"),
         ("triage", .otherConcern, "general_talk"),
-        ("triage", .choking, "choking_talk"),
-        ("general_talk", .choking, "choking_talk"),
+        ("triage", .choking, "choke_check"),
+        ("general_talk", .choking, "choke_check"),
         ("general_talk", .chestPain, "chest_call"),
         ("general_talk", .otherHeartSigns, "chest_call"),
     ])
@@ -243,27 +243,6 @@ import Testing
         #expect(session.entries(.flowEntered).map(\.detail) == ["possible_heart_attack"])
         #expect(session.entries(.flowEntered).last?.source == .aiInferred)
         #expect(session.phrases == ["chest_possible", "call_911", "chest_sit"])
-    }
-
-    /// Its own step, so the steps stay on screen and don't depend on the AI.
-    @Test func chokingPlaysItsOwnStepsAtOnce() throws {
-        var heard = try inTriage()
-        heard.modelFinding(.choking)
-        #expect(heard.state.stateID == "choking_talk")
-        #expect(heard.phrases == ["choking_steps", "general_intro"])
-        #expect(heard.entries(.callPrompted).count == 1)
-
-        var tapped = try inTriage()
-        tapped.human(.triageOther)
-        tapped.human(.triageChoking)
-        #expect(tapped.state.stateID == "choking_talk")
-        #expect(tapped.phrases == ["choking_steps", "general_intro"])
-        tapped.advance(29)
-        #expect(tapped.phrases.isEmpty)
-        tapped.advance(1)
-        #expect(tapped.phrases == ["choking_steps"])
-        tapped.advance(600)
-        #expect(tapped.state.stateID == "choking_talk", "no reply never leaves for CPR here")
     }
 
     /// Someone talking in `general_talk` can still say their chest hurts or a limb is hurt, and nothing else moves it.

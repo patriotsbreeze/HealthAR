@@ -887,6 +887,7 @@ public final class VisionSession: Sendable {
                 case .none: request = .joints
                 case .lying: request = .lying
                 case .nearPin: request = .nearPin(anchor: state.pinAnchor(in: record, at: now))
+                case .upright: request = .upright
                 case .rescuer: request = .rescuer
                 }
             }

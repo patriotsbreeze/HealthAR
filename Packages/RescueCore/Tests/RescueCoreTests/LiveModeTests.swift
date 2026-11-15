@@ -296,7 +296,7 @@ import Testing
         let bundle = try loadMergedBundle()
         let lines = bundle.awakeLines
         #expect(Set(lines).count == lines.count)
-        for id in ["triage_ask", "triage_recheck", "general_intro", "choking_steps", "chest_possible", "aspirin_check", "aspirin_skip",
+        for id in ["triage_ask", "triage_recheck", "general_intro", "choke_ask", "chest_possible", "aspirin_check", "aspirin_skip",
                    "aspirin_stop", "chest_wait_line", "aed_look", "limb_possible", "limb_danger_ask", "limb_danger_care", "limb_gloves"] {
             #expect(lines.contains(try #require(bundle.text(forPhrase: id))), "\(id)")
         }
