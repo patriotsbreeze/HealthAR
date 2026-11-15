@@ -224,6 +224,8 @@ protocol VisionPort: AnyObject, Sendable {
     var showsGhost: Bool { get }
     /// The next camera frame as a JPEG, for the scene read. Nil with no camera or none in time.
     func snapshot(timeout: TimeInterval) async -> Data?
+    var supportsFrontCamera: Bool { get }
+    func setFrontCamera(_ front: Bool)
 }
 
 extension VisionPort {
@@ -234,6 +236,8 @@ extension VisionPort {
     func compressionFeedback() -> CompressionFeedback? { nil }
     var showsGhost: Bool { false }
     func snapshot(timeout: TimeInterval) async -> Data? { nil }
+    var supportsFrontCamera: Bool { false }
+    func setFrontCamera(_ front: Bool) {}
 }
 
 extension VisionSession: VisionPort {}

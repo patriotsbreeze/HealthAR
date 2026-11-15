@@ -184,18 +184,6 @@ struct MainScreen: View {
                 .padding(.trailing, assessmentTrailingClearance)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            if coordinator.offersPracticePatient {
-                // Bottom-trailing is free in compressions. The patient lands where the band's middle meets the floor.
-                PracticePatientButton(placed: coordinator.practicePatientPlaced) {
-                    if coordinator.practicePatientPlaced {
-                        coordinator.clearPracticePatient()
-                    } else {
-                        coordinator.placePracticePatient(at: CGPoint(x: freeArea.midX, y: freeArea.midY))
-                    }
-                }
-                .padding(DS.Space.m)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-            }
             if coordinator.overlayTarget == .padZones {
                 // Vision finds the body some frames in, and nothing here would redraw when it does.
                 TimelineView(.periodic(from: .now, by: 0.5)) { _ in

@@ -5,6 +5,7 @@ import Testing
 import AVFoundation
 import RealityKit
 import simd
+import Synchronization
 @testable import RescueVision
 
 /// In front of a camera at the origin looking along -z, below eye level.
@@ -42,6 +43,30 @@ private let floor = chest - SIMD3<Float>(0, GhostRescuer.chestHeight, 0)
     #expect(isClose(GhostRescuer.push(sinceBeatStart: beat / 2, beatInterval: beat), 0))
     #expect(isClose(GhostRescuer.push(sinceBeatStart: beat * 7, beatInterval: beat), 1, 1e-9))
     #expect(GhostRescuer.push(sinceBeatStart: -1, beatInterval: beat) == 0)
+}
+
+@Test func thePushDrivesDownFasterThanItComesBack() {
+    let beat = GhostRescuer.beatInterval
+    // The same time either side of the click: the press covers more ground in it than the release.
+    let goingIn = GhostRescuer.push(sinceBeatStart: beat * 0.85, beatInterval: beat)
+    let comingOut = GhostRescuer.push(sinceBeatStart: beat * 0.15, beatInterval: beat)
+    #expect(comingOut > goingIn)
+    // A moment fully up around the half beat.
+    #expect(GhostRescuer.push(sinceBeatStart: beat * 0.45, beatInterval: beat) == 0)
+    #expect(GhostRescuer.push(sinceBeatStart: beat * 0.7, beatInterval: beat) == 0)
+}
+
+@Test func theUpperBodyHingesOverHandsThatGoStraightDown() {
+    let rest = GhostRescuer.upperBody(push: 0)
+    #expect(isClose((rest * SIMD4(0, 0.6, 0.05, 1)).xyz, [0, 0.6, 0.05]))
+    let pressed = GhostRescuer.upperBody(push: 1)
+    let hands = (pressed * SIMD4(0, 0, 0, 1)).xyz
+    #expect(isClose(hands, [0, -GhostRescuer.depth, 0]), "no slide across the chest")
+    // The shoulders, above and just to the rescuer's side of the hands, drop and come forward over them.
+    let shoulders = (pressed * SIMD4(0, 0.6, 0.05, 1)).xyz
+    #expect(shoulders.y < 0.6 - GhostRescuer.depth + 0.01)
+    #expect(shoulders.z < 0.05 - 0.03)
+    #expect(abs(shoulders.z) < 0.03, "shoulders end over the hands")
 }
 
 @Test func theGhostKeepsTheMetronomesBeat() {
@@ -283,6 +308,36 @@ private func frame(_ session: VisionSession, tracking: TrackingQuality = .normal
     let placement = try #require(session.ghostPlacement())
     #expect(!placement.practice, "the real body shows through, with a line round it")
     #expect(GhostAnchor.bodyScales.contains(placement.patientScale))
+}
+
+@Test func theGhostLeavesWhenThePatientDoes() async throws {
+    let clock = TestClock()
+    let lying = person(center: [0.5, 0.6], axisDegrees: 0, aspect: 4.0 / 3)
+    let seen = Mutex([lying])
+    let session = VisionSession(
+        locator: FixedLocator(box: nil),
+        driver: FakeDriver(surface: { _ in chest }),
+        detect: { _, _ in seen.withLock { $0 } },
+        clock: { clock.now },
+        runsPump: false
+    )
+    session.viewportSize = portraitMapping.viewSize
+    session.apply(.overlay(nil))
+    session.beginHandsGuide()
+    await frame(session)
+    #expect(await waitUntil { session.hasGhostAnchor })
+    session.setGhostBeat(on: true)
+    #expect(session.ghostPlacement() != nil)
+
+    // Nobody in view any more: frames keep coming, but the ghost goes once the hold runs out.
+    seen.withLock { $0 = [] }
+    for _ in 0..<Int((VisionSession.ghostPatientHold + 0.5) * 15) {
+        clock.advance(1.0 / 15)
+        await frame(session)
+    }
+    #expect(session.ghostPlacement() == nil)
+    #expect(session.overlay().ghost == nil)
+    #expect(session.compressionFeedback() == nil)
 }
 
 @MainActor

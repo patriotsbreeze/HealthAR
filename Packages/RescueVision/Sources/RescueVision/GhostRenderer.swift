@@ -17,7 +17,7 @@ final class GhostRenderer {
     private let patientFill = Entity()
     private let patientOutline = Entity()
     private var upper: Entity?
-    private var upperRest = SIMD3<Float>.zero
+    private var upperRest = simd_float4x4(1)
     private var tone: GhostPlacement.Tone?
     private var update: (any Cancellable)?
     /// The stacked hands on the chest, for place_hands and the hands guide.
@@ -157,7 +157,7 @@ final class GhostRenderer {
             parent.addChild(part)
         }
         self.upper = upper
-        upperRest = upper.position
+        upperRest = upper.transform.matrix
         paint(patientFill, color: Self.patientColor)
         // An inverted hull: only the back faces of a slightly bigger body show, as a line round the real one.
         var line = UnlitMaterial(color: Self.patientColor)
@@ -216,17 +216,17 @@ final class GhostRenderer {
         }
         anchor.isEnabled = true
         model.transform = Transform(matrix: placement.transform)
-        upper?.position = upperRest - SIMD3(0, GhostPlacement.depth * Float(placement.push), 0)
+        upper?.transform = Transform(matrix: GhostRescuer.upperBody(push: placement.push) * upperRest)
         if placement.tone != tone {
             tone = placement.tone
-            paint(rescuer, color: Self.color(placement.tone))
+            apply(PhysicallyBasedMaterial.glassBody(tint: Self.color(placement.tone)), to: rescuer)
         }
         rescuer.components.set(OpacityComponent(opacity: GhostPlacement.opacity + GhostPlacement.pushOpacity * Float(placement.push)))
         patientGroup.scale = SIMD3(repeating: placement.patientScale)
-        patientFill.isEnabled = placement.practice
-        patientFill.components.set(OpacityComponent(opacity: GhostPlacement.patientOpacity))
-        // The depth-fitted real body replaces the older rigid ghost-patient shell.
-        patientOutline.isEnabled = placement.practice || trackedBody == nil
+        // No stand-in body on the floor: the ghost only kneels beside a real patient, so the outline
+        // only ever traces one, and the depth-fitted body replaces it where there is one.
+        patientFill.isEnabled = false
+        patientOutline.isEnabled = trackedBody == nil
         patientOutline.components.set(OpacityComponent(opacity: GhostPlacement.outlineOpacity))
     }
 
@@ -301,10 +301,10 @@ final class GhostRenderer {
         for child in entity.children { visit(child, body) }
     }
 
-    /// The app's target cyan, the system's green and amber.
+    /// The hands' blue, the system's green and amber.
     private static func color(_ tone: GhostPlacement.Tone) -> UIColor {
         switch tone {
-        case .neutral: UIColor(red: 0x3C / 255, green: 0xD3 / 255, blue: 0xFE / 255, alpha: 1)
+        case .neutral: UIColor(red: 0.18, green: 0.48, blue: 1, alpha: 1)
         case .matching: UIColor(red: 0x34 / 255, green: 0xC7 / 255, blue: 0x59 / 255, alpha: 1)
         case .correcting: UIColor(red: 0xFF / 255, green: 0xB0 / 255, blue: 0x20 / 255, alpha: 1)
         }
@@ -331,6 +331,23 @@ final class GhostRenderer {
 extension PhysicallyBasedMaterial {
     /// Clear blue glass: see-through so the chest shows, glossy so the room's light catches its edges
     /// and gives each hand a rim, and faintly lit from within so it reads in a dim room.
+    /// The same glass for the ghost rescuer, in its tone's colour. Its opacity comes from the
+    /// renderer, which brightens it a little on each push.
+    static func glassBody(tint: UIColor) -> PhysicallyBasedMaterial {
+        var material = PhysicallyBasedMaterial()
+        material.baseColor = .init(tint: tint)
+        material.roughness = 0.12
+        material.metallic = 0.0
+        material.specular = 1.0
+        material.clearcoat = 1.0
+        material.clearcoatRoughness = 0.05
+        material.emissiveColor = .init(color: tint)
+        material.emissiveIntensity = 0.25
+        material.blending = .transparent(opacity: .init(floatLiteral: 1))
+        material.faceCulling = .back
+        return material
+    }
+
     static var glassHand: PhysicallyBasedMaterial {
         var material = PhysicallyBasedMaterial()
         material.baseColor = .init(tint: UIColor(red: 0.18, green: 0.48, blue: 1, alpha: 1))
