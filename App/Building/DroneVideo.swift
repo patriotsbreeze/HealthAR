@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// `drone_video.json`, schema `drone_video.v1`: for each AED, one short clip per scan spot flying to
 /// the next spot, and a final push-in on the AED. Each clip ends on the pose the next one starts from,
@@ -133,6 +134,8 @@ struct DroneVideo: Sendable, Equatable {
         }
         return best.map { ($0, true) }
     }
+
+    static let log = Logger(subsystem: "HealthAI", category: "drone")
 
     static let nearestNote = "Starting from the nearest recorded spot"
 

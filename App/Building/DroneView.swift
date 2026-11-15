@@ -5,7 +5,7 @@ import UIKit
 /// flight when `drone_video.json` has a whole one from this start, else the older frame slideshow,
 /// else nothing.
 struct DronePreviewButton: View {
-    static let title = "Drone preview"
+    static let title = "Sample flight from the entrance"
     static let hint = "Plays a fly-through of the building from here to the AED."
 
     let building: BuildingBrief
@@ -191,7 +191,10 @@ struct DroneFromHereButton: View {
 
     var body: some View {
         if let plan {
-            Button(Self.title, systemImage: "airplane.departure") { flying = true }
+            Button(Self.title, systemImage: "airplane.departure") {
+                DroneVideo.log.info("drone from here: located \(pano, privacy: .public) start \(plan.flight.first?.pano ?? "-", privacy: .public) hops \(plan.flight.count) nearest \(plan.nearest)")
+                flying = true
+            }
                 .buttonStyle(CommandButtonStyle(kind: .primary, height: DS.Height.awake))
                 .accessibilityHint(Self.hint)
                 .fullScreenCover(isPresented: $flying) {
@@ -201,6 +204,11 @@ struct DroneFromHereButton: View {
                         note: plan.nearest ? DroneVideo.nearestNote : nil
                     )
                 }
+            #if DEBUG
+            Text("from \(String((plan.flight.first { !$0.isIntro }?.pano ?? pano).prefix(6))) · \(plan.flight.filter { !$0.isIntro && !$0.isFinal }.count) hops\(plan.nearest ? " · nearest" : "")")
+                .dsFont(DS.Fonts.caption)
+                .foregroundStyle(DS.Colors.textSecondary)
+            #endif
         }
     }
 }

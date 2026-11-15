@@ -40,7 +40,10 @@ struct BuildingBriefSection: View {
                             .buttonStyle(CommandButtonStyle(kind: .primary, height: DS.Height.awake))
                             .disabled(!confirmed)
                             .accessibilityHint(BuildingWording.guideHint)
-                        DronePreviewButton(building: building, aedID: target.aed.id, lengthM: target.route.lengthM)
+                        // Once a photo has placed the person, their own flight replaces the entrance sample.
+                        if !locate.hasFound {
+                            DronePreviewButton(building: building, aedID: target.aed.id, lengthM: target.route.lengthM)
+                        }
                     }
                     PhotoLocateRows(coordinator: coordinator, building: building, confirmed: confirmed, locate: locate, guiding: $guiding)
                 } else {

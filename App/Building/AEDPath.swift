@@ -166,6 +166,14 @@ struct EntranceFrame: Equatable, Sendable {
         return EntranceFrame(origin: SIMD3(position.x, floor, position.z), forward: forward, right: right)
     }
 
+    /// The same frame swung round its origin, clockwise seen from above (the compass's sense).
+    func rotated(clockwiseDegrees degrees: Double) -> EntranceFrame {
+        let angle = Float(degrees * .pi / 180)
+        let c = cos(angle), s = sin(angle)
+        func turn(_ v: SIMD3<Float>) -> SIMD3<Float> { SIMD3(v.x * c - v.z * s, v.y, v.x * s + v.z * c) }
+        return EntranceFrame(origin: origin, forward: turn(forward), right: turn(right))
+    }
+
     /// A waypoint on the floor.
     func world(_ waypoint: SIMD2<Double>) -> SIMD3<Float> {
         origin + right * Float(waypoint.x) + forward * Float(waypoint.y)

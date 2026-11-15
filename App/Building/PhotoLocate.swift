@@ -294,6 +294,12 @@ final class PhotoLocate {
     nonisolated static let bundled = LocatorData.load()
 
     private(set) var state = State.idle
+
+    /// A photo has placed the person on a surveyed spot.
+    var hasFound: Bool {
+        if case .done(.found) = state { return true }
+        return false
+    }
     private(set) var check: Check?
     let locator: LocatorData?
     @ObservationIgnored private let index = VisualIndex()

@@ -93,13 +93,15 @@ struct PhotoLocateRows: View {
                     }
                 }
             }
+            // The person's own flight first: it is what the photo was for.
+            DroneFromHereButton(building: building, aedID: aedID, pano: pano.id, locator: locate.locator)
+                .id(pano.id)
             Button(Self.guideFromHere) {
                 let target = building.aeds.first { $0.id == aedID } ?? aed
-                guiding = AEDGuideTarget(building: building, aed: target, route: route, fromPhoto: true)
+                guiding = AEDGuideTarget(building: building, aed: target, route: route, fromPhoto: true, startPano: pano.id)
             }
             .buttonStyle(CommandButtonStyle(kind: .primary, height: DS.Height.awake))
             .disabled(!confirmed)
-            DroneFromHereButton(building: building, aedID: aedID, pano: pano.id, locator: locate.locator)
         case let .done(.fallback(message)):
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .dsFont(DS.Fonts.label)
