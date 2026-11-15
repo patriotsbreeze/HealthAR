@@ -7,10 +7,10 @@ extension SystemPrompt {
     public static func awake(pack: KnowledgePack?, appLines: [String] = []) -> String {
         let voice = appLines.isEmpty ? [] : [awakeAppVoice(appLines)]
         guard let pack else {
-            return ([awakeIntro, awakeSilent, awakeReporting(turns: nil), awakeAssessing, awakeBriefs] + voice + [awakeUntrusted]).joined(separator: "\n\n")
+            return ([awakeIntro, awakeSilent, awakeReporting(turns: nil), awakeButtons, awakeAssessing, awakeBriefs] + voice + [awakeUntrusted]).joined(separator: "\n\n")
         }
         let approved = pack.topics.map { "\($0.title)\n\($0.text)" }.joined(separator: "\n\n")
-        return ([awakeIntro, awakeTalking, awakeReporting(turns: awakeTurns), awakeAssessing, awakeBriefs, awakeCues] + voice + [awakeUntrusted, "APPROVED TEXT\n\(approved)"])
+        return ([awakeIntro, awakeTalking, awakeReporting(turns: awakeTurns), awakeButtons, awakeAssessing, awakeBriefs, awakeCues] + voice + [awakeUntrusted, "APPROVED TEXT\n\(approved)"])
             .joined(separator: "\n\n")
     }
 
@@ -139,6 +139,9 @@ extension SystemPrompt {
     because of one.
     """
     }
+
+    /// The same words the arrest session gets, so a press means one thing in both.
+    private static let awakeButtons = SystemPrompt.buttons
 
     private static let awakeBriefs = """
     STATE BRIEFS

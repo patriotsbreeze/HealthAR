@@ -294,6 +294,36 @@ private func gemini(_ text: String) -> Data {
         #expect(await PhotoMatcher(apiKey: "test-key-not-real", http: refused)?.pick(photo: Data([1]), among: [Data([2])]) == nil)
     }
 
+    @Test func aWideViewGivesThreeSquaresAndASquareOne() throws {
+        func image(_ width: Int, _ height: Int) throws -> CGImage {
+            try #require(UIGraphicsImageRenderer(size: CGSize(width: width, height: height), format: {
+                let format = UIGraphicsImageRendererFormat.default()
+                format.scale = 1
+                return format
+            }()).image { _ in }.cgImage)
+        }
+        let wide = VisualIndex.squares(try image(960, 540))
+        #expect(wide.count == 3)
+        #expect(wide.allSatisfy { $0.width == 540 && $0.height == 540 })
+        #expect(VisualIndex.squares(try image(540, 960)).count == 3)
+        #expect(VisualIndex.squares(try image(300, 300)).count == 1)
+    }
+
+    @Test func choosingASpotPlacesThePersonThereAndSaysSo() throws {
+        let data = try #require(LocatorData.decode(Data(locator.utf8)))
+        let locate = PhotoLocate(locator: data)
+        let routed = try #require(data.panos.indices.first { PhotoLocateOutcome.firstRouted([$0], locator: data, aedIDs: ["staged_1"]) != nil })
+        locate.choose(routed, aedIDs: ["staged_1"])
+        #expect(locate.currentIndex == routed)
+        #expect(locate.check == .picked)
+        #expect(locate.candidates.first == routed)
+        // A spot with no route, or one off the end, changes nothing.
+        locate.choose(data.panos.count, aedIDs: ["staged_1"])
+        #expect(locate.currentIndex == routed)
+        locate.choose(2, aedIDs: ["staged_1"])
+        #expect(locate.currentIndex == routed)
+    }
+
     @Test func thePhotoIsDownsizedTo640() throws {
         let big = UIGraphicsImageRenderer(size: CGSize(width: 2000, height: 1500)).image { context in
             UIColor.gray.setFill()
@@ -307,7 +337,8 @@ private func gemini(_ text: String) -> Data {
     @Test func theNewWordsAvoidTheBannedOnes() {
         let lines = [PhotoLocateRows.title, PhotoLocateRows.hint, PhotoLocateRows.locating, PhotoLocateRows.guideFromHere,
                      PhotoLocateRows.guideFromEntrance, PhotoLocateOutcome.couldNotPlace, PhotoLocateOutcome.noRoute,
-                     PhotoLocateOutcome.unavailable, PhotoMatcher.prompt(count: 12)] + AEDGuideWording.fixedStrings
+                     PhotoLocateOutcome.unavailable, PhotoMatcher.prompt(count: 12), PhotoLocateRows.picked,
+                     PhotoLocateRows.isThisYou, PhotoLocateRows.allSpots, PhotoLocateRows.fewerSpots] + AEDGuideWording.fixedStrings
         for line in lines {
             #expect(!line.lowercased().contains("nearest"), "\(line)")
             #expect(!line.lowercased().contains("proposed"), "\(line)")

@@ -1,6 +1,6 @@
 {
   "version": "tools.v1",
-  "note": "Everything the Live model may do. Enums must match RescueCore. The model has no tools for overlay coordinates, step changes, stopping the metronome, or dialing. report_scene only describes the camera view for the screen; it never reaches the protocol.",
+  "note": "Everything the Live model may do. Enums must match RescueCore. The model has no tools for overlay coordinates, stopping the metronome, or dialing. report_scene only describes the camera view for the screen; it never reaches the protocol. press_button asks the app to press a button the rescuer's own words chose; it never reaches the protocol either, and the app presses only a button on screen, never one that stops CPR or leaves the path, and only after the rescuer spoke.",
   "function_declarations": [
     {
       "name": "report_finding",
@@ -73,6 +73,19 @@
           "state_version": { "type": "INTEGER" }
         },
         "required": ["kind", "state_version"]
+      }
+    },
+    {
+      "name": "press_button",
+      "description": "Press a button on the rescuer's screen for them, when the rescuer's own words just answered the step or said they did what it asked, however they put it. Use only an id listed in buttons in the latest STATE BRIEF. Only for what the rescuer said: never for what you saw, inferred, or said yourself, and never for the app's own lines. The app checks it and may ignore it.",
+      "behavior": "NON_BLOCKING",
+      "parameters": {
+        "type": "OBJECT",
+        "properties": {
+          "button": { "type": "STRING", "enum": ["yes", "no", "unsure", "back", "called", "done", "scan", "start_cpr", "not_adult", "aed_here", "pads_on", "aed_says_cpr", "aed_analyzing", "ems_arrived", "patient_moving", "patient_awake", "patient_unresponsive", "patient_not_breathing", "resume_cpr", "triage_chest", "triage_limb", "triage_other", "triage_choking", "triage_open", "not_this", "breath_marked", "shock_delivered", "metronome_on", "metronome_off", "dispatcher_on", "dispatcher_off", "second_person", "cant_cough", "object_out"] },
+          "state_version": { "type": "INTEGER" }
+        },
+        "required": ["button", "state_version"]
       }
     },
     {

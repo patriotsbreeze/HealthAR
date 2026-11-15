@@ -152,6 +152,8 @@ final class PoseWorker: Sendable {
         var jointPose: TimedPose?
         var patientBody: TimedPatientBody?
         var chestEstimate: TimedChestEstimate?
+        /// When a lying patient was last picked out, in either pose mode. The ghost shows only while one is.
+        var patientSeenAt: TimeInterval?
         /// Hands are looked for only while the hand placement guide is up, since it costs a second request.
         var wantsHands = false
         var hands: TimedHands?
@@ -193,6 +195,7 @@ final class PoseWorker: Sendable {
     }
 
     var patientBody: TimedPatientBody? { state.withLock { $0.patientBody } }
+    var patientSeenAt: TimeInterval? { state.withLock { $0.patientSeenAt } }
 
     var latest: TimedTorsoTarget? { state.withLock { $0.latest } }
     var latestPose: TimedPose? { state.withLock { $0.latestPose } }
@@ -211,6 +214,7 @@ final class PoseWorker: Sendable {
             state.jointPose = nil
             state.patientBody = nil
             state.chestEstimate = nil
+            state.patientSeenAt = nil
             state.hands = nil
             state.lastNoTargetReason = nil
             state.smoother.reset()
@@ -271,15 +275,13 @@ final class PoseWorker: Sendable {
         } else {
             chest = nil
         }
+        // Only someone lying down gets the 3D body. Anyone sitting or standing gets none.
         if record.tracking == .normal, let depth, case let .patient(person) = sel {
             fitted = PatientModelFit.fit(person: person, depth: depth, camera: record.pose)
-        } else if record.tracking == .normal, let depth,
-                  let person = detection.people.max(by: { $0.shoulderSpan < $1.shoulderSpan }) {
-            // No lying patient: the nearest person, by shoulder span on screen, gets the outline in any pose.
-            fitted = PatientModelFit.fit(person: person, depth: depth, camera: record.pose, requireLying: false)
         }
         state.withLock { state in
             guard state.generation == generation else { return }
+            if case .patient = sel { state.patientSeenAt = record.timestamp }
             state.jointPose = TimedPose(regions: BodyRegions(), joints: detection.joints, skeletons: detection.skeletons, frameID: record.id, capturedAt: record.timestamp)
             // Never hold a chest marker on an ambiguous patient. One lost for a moment, as hands
             // cover the chest, keeps the last estimate, which still ages out where it's read.

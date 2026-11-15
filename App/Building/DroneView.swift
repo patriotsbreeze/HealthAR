@@ -5,7 +5,7 @@ import UIKit
 /// flight when `drone_video.json` has a whole one from this start, else the older frame slideshow,
 /// else nothing.
 struct DronePreviewButton: View {
-    static let title = "Drone preview"
+    static let title = "Sample flight from the entrance"
     static let hint = "Plays a fly-through of the building from here to the AED."
 
     let building: BuildingBrief
@@ -35,14 +35,8 @@ struct DronePreviewButton: View {
                 let length = lengthM ?? videoFlight.reduce(0) { $0 + $1.lengthM }
                 DroneVideoView(flight: videoFlight, arrivalText: DroneVideo.arrival(text: video?.targets[aedID]?.text ?? "", lengthM: length))
             }
-        } else if let frames, let drone, let target = drone.targets[aedID] {
-            button.fullScreenCover(isPresented: $flying) {
-                DronePlayer(
-                    frames: frames,
-                    arrival: DroneData.arrival(target, aed: building.aeds.first { $0.id == aedID }, lengthM: lengthM)
-                )
-            }
         }
+        // The old frame slideshow is no longer offered: only the continuous video flight shows.
     }
 
     private var button: some View {
@@ -169,6 +163,52 @@ private struct DroneFrame: View {
         .onAppear {
             guard push > 1 else { return }
             withAnimation(.linear(duration: seconds * 1.5)) { scale = push }
+        }
+    }
+}
+
+/// "Drone from where I'm standing": the video flight from the spot a photo placed the person, or the
+/// closest recorded spot to it. The entrance sample stays as Drone preview.
+struct DroneFromHereButton: View {
+    static let title = "Drone from where I'm standing"
+    static let hint = "Flies from the spot your photo matched to the AED."
+
+    let building: BuildingBrief
+    let aedID: String
+    let pano: String
+    let locator: LocatorData?
+    var video: DroneVideo? = DroneVideo.bundled
+    @State private var flying = false
+
+    private var plan: (flight: [DroneVideo.Segment], nearest: Bool, lengthM: Double)? {
+        guard let video, video.building == building.id,
+              let start = video.start(for: pano, aed: aedID, locator: locator),
+              let flight = video.flight(to: aedID, from: start.pano)
+        else { return nil }
+        let length = locator?.routes[aedID]?[start.pano]?.lengthM ?? flight.reduce(0) { $0 + $1.lengthM }
+        return (flight, start.nearest, length)
+    }
+
+    var body: some View {
+        if let plan {
+            Button(Self.title, systemImage: "airplane.departure") {
+                DroneVideo.log.info("drone from here: located \(pano, privacy: .public) start \(plan.flight.first?.pano ?? "-", privacy: .public) hops \(plan.flight.count) nearest \(plan.nearest)")
+                flying = true
+            }
+                .buttonStyle(CommandButtonStyle(kind: .primary, height: DS.Height.awake))
+                .accessibilityHint(Self.hint)
+                .fullScreenCover(isPresented: $flying) {
+                    DroneVideoView(
+                        flight: plan.flight,
+                        arrivalText: DroneVideo.arrival(text: video?.targets[aedID]?.text ?? "", lengthM: plan.lengthM),
+                        note: plan.nearest ? DroneVideo.nearestNote : nil
+                    )
+                }
+            #if DEBUG
+            Text("from \(String((plan.flight.first { !$0.isIntro }?.pano ?? pano).prefix(6))) · \(plan.flight.filter { !$0.isIntro && !$0.isFinal }.count) hops\(plan.nearest ? " · nearest" : "")")
+                .dsFont(DS.Fonts.caption)
+                .foregroundStyle(DS.Colors.textSecondary)
+            #endif
         }
     }
 }

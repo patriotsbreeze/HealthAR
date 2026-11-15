@@ -14,6 +14,8 @@ final class ARController: NSObject, ARSessionDelegate, CameraDriver, @unchecked 
     private let queue = DispatchQueue(label: "healthai.vision.ar-delegate", qos: .userInteractive)
     /// Only touched on `queue`.
     private var floorY: Float?
+    /// Only touched on `queue`.
+    private var front = false
 
     override init() {
         super.init()
@@ -23,9 +25,24 @@ final class ARController: NSObject, ARSessionDelegate, CameraDriver, @unchecked 
 
     var isSupported: Bool { ARWorldTrackingConfiguration.isSupported }
 
+    var supportsFrontCamera: Bool { ARFaceTrackingConfiguration.isSupported }
+
+    func setFrontCamera(_ front: Bool) {
+        queue.async { [self] in self.front = front }
+    }
+
     func run() {
         guard isSupported else { return }
         queue.async { [self] in
+            floorY = nil
+            if front {
+                // ARKit's only way to the front camera. It tracks faces, not the room, so raycasts find
+                // nothing and every world mark stays hidden, while frames and pose carry on.
+                let configuration = ARFaceTrackingConfiguration()
+                configuration.isLightEstimationEnabled = true
+                session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
+                return
+            }
             let configuration = ARWorldTrackingConfiguration()
             configuration.worldAlignment = .gravity
             configuration.planeDetection = .horizontal
@@ -34,7 +51,6 @@ final class ARController: NSObject, ARSessionDelegate, CameraDriver, @unchecked 
             if ARWorldTrackingConfiguration.supportsFrameSemantics(.sceneDepth) {
                 configuration.frameSemantics.insert(.sceneDepth)
             }
-            floorY = nil
             session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
         }
     }

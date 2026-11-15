@@ -288,6 +288,9 @@ extension DS {
         static let openMaxHeight: CGFloat = 84
         /// A soft blue for the AI's read, never the cyan of the beat.
         static let tint = Color(hex: 0x6E9BF2)
+        /// The assess step's big read: rounder, and darker under it, since its type is larger and longer.
+        static let heroRadius: CGFloat = 20
+        static let heroFloor = Color(hex: 0x0E1117, opacity: 0.45)
     }
 
     /// No bounce anywhere. Motion explains a change, or it doesn't happen.

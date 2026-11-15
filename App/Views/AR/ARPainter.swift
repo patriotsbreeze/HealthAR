@@ -51,7 +51,7 @@ enum ARPainter {
         for case let itemChip? in scene.items.map(\.chip) { chip(itemChip, style: style, in: &context) }
         if let hint = scene.hint { chip(hint, style: style, in: &context) }
         if let guide = scene.handGuide {
-            paintHandGuide(guide, below: scene.chestEstimateLabel == nil ? 0 : 34, band: scene.band, in: &context)
+            paintHandGuide(guide, in: &context)
         } else if let region = scene.sternumEstimate {
             let ring = Path(ellipseIn: region)
             context.fill(ring, with: .color(.orange.opacity(0.12)))
@@ -75,8 +75,8 @@ enum ARPainter {
     }
 
     /// The ring goes green with the hand on it. Until then an arrow runs from the heel of the hand to
-    /// the ring, and the line under the label says which way to slide, in the patient's own terms.
-    private static func paintHandGuide(_ guide: ARHandGuide, below top: CGFloat, band: CGRect, in context: inout GraphicsContext) {
+    /// the ring. No words: the ring and the arrow say it.
+    private static func paintHandGuide(_ guide: ARHandGuide, in context: inout GraphicsContext) {
         let color: Color = guide.onTarget ? .green : .orange
         let ring = Path(ellipseIn: guide.target)
         context.fill(ring, with: .color(color.opacity(guide.onTarget ? 0.3 : 0.12)))
@@ -112,13 +112,6 @@ enum ARPainter {
             context.stroke(dot, with: .color(.black.opacity(0.8)), lineWidth: 2)
             context.stroke(dot, with: .color(.white), lineWidth: 1)
         }
-
-        let text = context.resolve(Text(guide.text).font(.system(size: 15, weight: .bold)).foregroundStyle(guide.onTarget ? .black : .white))
-        let box = band.insetBy(dx: 8, dy: 8)
-        let size = text.measure(in: CGSize(width: max(1, box.width - 16), height: 80))
-        let frame = CGRect(x: box.midX - (size.width + 16) / 2, y: box.minY + top, width: size.width + 16, height: size.height + 10)
-        context.fill(Path(roundedRect: frame, cornerRadius: 8), with: .color(guide.onTarget ? .green : .black.opacity(0.85)))
-        context.draw(text, in: frame.insetBy(dx: 8, dy: 5))
     }
 
     /// Layered round strokes give the measured torso and arms a translucent tube appearance.

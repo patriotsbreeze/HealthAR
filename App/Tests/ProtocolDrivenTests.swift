@@ -187,7 +187,7 @@ import Testing
         fixture.coordinator.beginRescue()
         fixture.coordinator.force(stateID: "watch_reask")
         #expect(fixture.coordinator.state.stateID == "watch_reask")
-        #expect(fixture.audio.played.last == "ask_still_breathing")
+        #expect(!fixture.audio.played.contains("ask_still_breathing"), "The re-ask is on screen only")
     }
 
     /// Stage control has to work after the pads too, or a button on the panel would silently do

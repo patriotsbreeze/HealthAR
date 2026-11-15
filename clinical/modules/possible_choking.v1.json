@@ -19,6 +19,13 @@
     {
       "state": "assess",
       "edge": {
+        "on": "human.triage_choking",
+        "to": "choke_check"
+      }
+    },
+    {
+      "state": "assess",
+      "edge": {
         "on": "model.choking",
         "to": "choke_check",
         "min_confidence": "medium"

@@ -10,17 +10,28 @@ struct AEDGuideTarget: Identifiable, Equatable {
     let route: BuildingBrief.Route
     /// From where a photo was matched, not from the entrance.
     let fromPhoto: Bool
+    /// The survey spot the photo matched, for the "face this way" picture.
+    let startPano: String?
 
     init?(building: BuildingBrief) {
         guard let aed = BuildingWording.guideTarget(building), let route = aed.routeFromEntrance else { return nil }
         self.init(building: building, aed: aed, route: route)
     }
 
-    init(building: BuildingBrief, aed: BuildingBrief.AED, route: BuildingBrief.Route, fromPhoto: Bool = false) {
+    init(building: BuildingBrief, aed: BuildingBrief.AED, route: BuildingBrief.Route, fromPhoto: Bool = false, startPano: String? = nil) {
         self.building = building
         self.aed = aed
         self.route = route
         self.fromPhoto = fromPhoto
+        self.startPano = startPano
+    }
+
+    /// The recorded view from the start spot looking along the way to go, when the drone pack has one.
+    var startView: URL? {
+        guard let startPano, let drone = DroneData.bundled, drone.building == building.id,
+              let frame = drone.targets[aed.id]?.frames[startPano]
+        else { return nil }
+        return DroneData.imageURL(frame.img)
     }
 
     var id: String { "\(building.id)/\(aed.id)/\(fromPhoto ? "photo" : "entrance")" }
@@ -47,10 +58,16 @@ enum AEDGuideWording {
     static let facing = "Facing the right way"
     static let anyway = "Calibrate anyway"
     static let noCompass = "No compass reading. Face down the route as best you can, then tap I'm here."
+    static let startView = "This is the way to go from here"
+    static let turnLeft = "Turn line left"
+    static let turnRight = "Turn line right"
+    static let lineUp = "If the line doesn't follow the hallway, turn it until it does."
+    /// Each tap of the turn buttons swings the drawn route this far round where it starts.
+    static let nudgeDegrees = 10.0
 
     static func calibrate(_ route: BuildingBrief.Route, fromPhoto: Bool = false) -> String {
         if fromPhoto {
-            return "Stand where you took the photo, hold the phone upright facing the way the arrow shows, then tap I'm here."
+            return "Stand where you took the photo, hold the phone upright, roughly facing the way the arrow shows, then tap I'm here."
         }
         let doorway = BuildingWording.clean(route.anchorText)
         let place = doorway.isEmpty ? "the entrance doorway" : "the entrance doorway (\(doorway))"
@@ -88,7 +105,7 @@ enum AEDGuideWording {
 
     static var fixedStrings: [String] {
         [here, recalibrate, done, finding, upright, settling, noAR, noCamera, turnUntilUp, facing, anyway, noCompass,
-         markHere, markHint, markTooShort]
+         startView, turnLeft, turnRight, lineUp, markHere, markHint, markTooShort]
     }
 }
 
@@ -151,12 +168,25 @@ final class AEDGuide {
         default:
             break
         }
-        guard let frame = EntranceFrame.calibrate(camera: camera.transform, floorY: floorY(below: camera.transform, in: arView)) else {
+        guard var frame = EntranceFrame.calibrate(camera: camera.transform, floorY: floorY(below: camera.transform, in: arView)) else {
             problem = AEDGuideWording.upright
             return
         }
+        // The person needn't face the first leg exactly: the compass says how far off they are, and the
+        // frame swings by that much. Works from any spot a photo placed them, not only the doorway.
+        if let bearing = target.route.startBearingDeg, let heading = compass.degrees {
+            frame = frame.rotated(clockwiseDegrees: Compass.rotation(bearing: bearing, heading: heading))
+        }
         calibrated(frame)
         draw(frame, in: arView)
+    }
+
+    /// Swings the drawn route round its start, for when the compass was off and the line cuts through a wall.
+    func nudge(clockwiseDegrees degrees: Double) {
+        guard let frame else { return }
+        let turned = frame.rotated(clockwiseDegrees: degrees)
+        self.frame = turned
+        if let arView, !preview { draw(turned, in: arView) }
     }
 
     /// Only from the entrance: a walk from a photo spot is in another frame.
@@ -370,8 +400,6 @@ struct AEDGuideView: View {
             VStack(spacing: 0) {
                 Spacer(minLength: DS.Space.l)
                 panel
-                    .padding(.horizontal, DS.Space.deckInset)
-                    .padding(.bottom, DS.Glass.deckGap)
             }
         }
         .background(DS.Colors.canvas)
@@ -399,9 +427,7 @@ struct AEDGuideView: View {
 
     @ViewBuilder private var panel: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
-            Text(target.name)
-                .dsFont(DS.Fonts.label)
-                .foregroundStyle(target.aed.isFromScan ? DS.Colors.textSecondary : DS.Colors.caution)
+            StatusDot(text: target.fromPhoto ? "Guide · from your photo" : "Guide · from the entrance", color: DS.Colors.ok)
             if let blocked {
                 Text(blocked).dsFont(DS.Fonts.prompt)
                 doneButton(kind: .primary)
@@ -413,9 +439,7 @@ struct AEDGuideView: View {
             }
         }
         .foregroundStyle(DS.Colors.textPrimary)
-        .padding(DS.Space.deckPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glassSurface(RoundedRectangle(cornerRadius: DS.Glass.deckRadius, style: .continuous), tint: DS.Glass.deckTint)
+        .buildingDeck()
     }
 
     /// Why there's nothing to draw on. Never a prompt: a camera prompt is onboarding's alone.
@@ -430,6 +454,20 @@ struct AEDGuideView: View {
         Text(AEDGuideWording.calibrate(target.route, fromPhoto: target.fromPhoto))
             .dsFont(DS.Fonts.detail)
             .fixedSize(horizontal: false, vertical: true)
+        if let url = target.startView, let image = UIImage(contentsOfFile: url.path) {
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 120)
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.row / 2, style: .continuous))
+                    .accessibilityHidden(true)
+                Text(AEDGuideWording.startView)
+                    .dsFont(DS.Fonts.caption)
+                    .foregroundStyle(DS.Colors.textSecondary)
+            }
+        }
         if let problem = guide.problem {
             Label(problem, systemImage: "exclamationmark.triangle.fill")
                 .dsFont(DS.Fonts.label)
@@ -440,19 +478,14 @@ struct AEDGuideView: View {
                 let heading = guide.heading(now: context.date)
                 let facing = heading.map { Compass.isFacing(bearing: bearing, heading: $0) } ?? false
                 CompassArrow(rotation: heading.map { Compass.rotation(bearing: bearing, heading: $0) }, facing: facing)
+                // Never held back: the compass corrects for however far off the person is facing.
                 Button(AEDGuideWording.here, action: guide.iAmHere)
-                    .buttonStyle(CommandButtonStyle(kind: .primary, height: DS.Height.arrest))
-                    // No reading at all can't be waited out, so it doesn't hold the button.
-                    .disabled(heading != nil && !facing)
-                    .accessibilityHint("Sets where the way is drawn from. Face along the arrow first.")
+                    .buttonStyle(DeckCapsuleButtonStyle(prominent: true))
+                    .accessibilityHint("Sets where the way is drawn from. Face roughly along the arrow first.")
             }
-            Button(AEDGuideWording.anyway, action: guide.iAmHere)
-                .dsFont(DS.Fonts.label)
-                .foregroundStyle(DS.Colors.textSecondary)
-                .frame(maxWidth: .infinity, minHeight: DS.Height.control)
         } else {
             Button(AEDGuideWording.here, action: guide.iAmHere)
-                .buttonStyle(CommandButtonStyle(kind: .primary, height: DS.Height.arrest))
+                .buttonStyle(DeckCapsuleButtonStyle(prominent: true))
                 .accessibilityHint("Sets where the way is drawn from. Stand in the doorway facing in first.")
         }
         doneButton(kind: .quiet)
@@ -460,7 +493,7 @@ struct AEDGuideView: View {
 
     private func doneButton(kind: CommandButtonStyle.Kind) -> some View {
         Button(AEDGuideWording.done) { dismiss() }
-            .buttonStyle(CommandButtonStyle(kind: kind, height: DS.Height.control))
+            .buttonStyle(DeckCapsuleButtonStyle(prominent: kind == .primary))
     }
 }
 
@@ -508,14 +541,28 @@ private struct GuideHUD: View {
                 }
                 if guide.canMark {
                     Button(AEDGuideWording.markHere) { guide.markHere() }
-                        .buttonStyle(CommandButtonStyle(kind: .secondary, height: DS.Height.control, font: DS.Fonts.buttonCompact))
+                        .buttonStyle(DeckCapsuleButtonStyle())
                         .accessibilityHint(AEDGuideWording.markHint)
+                }
+                Text(AEDGuideWording.lineUp)
+                    .dsFont(DS.Fonts.caption)
+                    .foregroundStyle(DS.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: DS.Space.betweenButtons) {
+                    Button(AEDGuideWording.turnLeft, systemImage: "arrow.counterclockwise") {
+                        guide.nudge(clockwiseDegrees: -AEDGuideWording.nudgeDegrees)
+                    }
+                    .buttonStyle(DeckCapsuleButtonStyle())
+                    Button(AEDGuideWording.turnRight, systemImage: "arrow.clockwise") {
+                        guide.nudge(clockwiseDegrees: AEDGuideWording.nudgeDegrees)
+                    }
+                    .buttonStyle(DeckCapsuleButtonStyle())
                 }
                 HStack(spacing: DS.Space.betweenButtons) {
                     Button(AEDGuideWording.recalibrate, action: guide.recalibrate)
-                        .buttonStyle(CommandButtonStyle(kind: .secondary, height: DS.Height.awake, font: DS.Fonts.buttonCompact))
+                        .buttonStyle(DeckCapsuleButtonStyle())
                     Button(AEDGuideWording.done, action: done)
-                        .buttonStyle(CommandButtonStyle(kind: .primary, height: DS.Height.awake, font: DS.Fonts.buttonCompact))
+                        .buttonStyle(DeckCapsuleButtonStyle(prominent: true))
                 }
                 .padding(.top, DS.Space.xs)
             }

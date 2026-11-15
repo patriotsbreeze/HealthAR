@@ -116,6 +116,21 @@ import Testing
         #expect(SituationAssessor.screenEmergency("He is dead", mode: .arrest) == nil)
     }
 
+    @Test func anEmergencyNeedsTheRestOfTheReadToBackIt() {
+        let down = "Person down on the floor"
+        #expect(SituationAssessor.backed(down, confidence: .high, prediction: "Possible cardiac arrest") == down)
+        #expect(SituationAssessor.backed(down, confidence: .low, prediction: "Possible cardiac arrest") == nil)
+        #expect(SituationAssessor.backed(down, confidence: .high, prediction: "Not enough information yet") == nil)
+        #expect(SituationAssessor.backed(down, confidence: .high, prediction: "Possible normal activity with no immediate emergency.") == nil)
+        #expect(SituationAssessor.backed(down, confidence: .medium, prediction: "Possible awake individual working on computer") == nil)
+        #expect(SituationAssessor.backed("Person seated at table, conscious and talking.", confidence: .high, prediction: "Possible conversation") == nil)
+        #expect(SituationAssessor.backed(down, confidence: .high, prediction: "Possible normal conversation in a public lounge area.") == nil)
+        #expect(SituationAssessor.backed("Person sitting down, looking down", confidence: .high, prediction: "Possible rest") == nil)
+        // Words a real emergency can share with a calm one don't count.
+        #expect(SituationAssessor.backed("Gasping on the floor", confidence: .high, prediction: "Possible abnormal breathing") != nil)
+        #expect(SituationAssessor.backed("Hands at throat", confidence: .high, prediction: "Possible choking, awake and standing") != nil)
+    }
+
     /// A model can't describe a picture it was never sent.
     @Test func withoutAPictureSeesIsDropped() async throws {
         let assessment = try await assess(#"{"sees":"A person lying down","headline":"Chest pain","prediction":"Possible heart attack","confidence":"low"}"#)

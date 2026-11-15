@@ -3,7 +3,7 @@ import RescueVision
 import SwiftUI
 
 enum AppSheet: String, Identifiable {
-    case dispatcher, sentinel, operatorPanel, agents
+    case dispatcher, sentinel, operatorPanel, agents, aed
     var id: String { rawValue }
 }
 
@@ -30,6 +30,7 @@ struct MainScreen: View {
                 StatusRail(
                     coordinator: coordinator, showsHUD: $showsHUD,
                     onAgents: { present(.agents) }, onDispatcher: { present(.dispatcher) }, onSentinel: { present(.sentinel) },
+                    onAED: { present(.aed) },
                     onOperator: { present(.operatorPanel) }
                 )
                 if showsHUD { LatencyHUD(coordinator: coordinator) }
@@ -39,6 +40,7 @@ struct MainScreen: View {
                         .padding(.bottom, DS.Space.s)
                 } else {
                     band
+                        .overlay(alignment: .top) { voicePressedPill }
                         // Read straight off the band, then published. A GeometryReader's preference
                         // could miss the last change when the deck settles its height a pass after a
                         // step changes, and the marks would stay inside a band that has since grown.
@@ -47,13 +49,16 @@ struct MainScreen: View {
                 }
                 // Sized first, so the band gets what's left, and never less than its least.
                 if coordinator.isAssessing {
-                    AssessPanel(coordinator: coordinator, onDispatcher: { present(.dispatcher) }, screenHeight: screenHeight)
+                    AssessPanel(coordinator: coordinator, screenHeight: screenHeight)
                         .layoutPriority(1)
                 } else {
                     CommandDeck(coordinator: coordinator, onStopRequested: { pendingStop = $0 })
                         .layoutPriority(1)
                 }
             }
+            // The screen's width and never more. A row too wide for the phone once made this stack wider,
+            // and everything in it slid off both edges together.
+            .frame(minWidth: 0, maxWidth: .infinity)
             // Above the panels, or a chest outside the band would hide behind them. The marks themselves
             // stay inside the band.
             if coordinator.showsCamera {
@@ -99,6 +104,8 @@ struct MainScreen: View {
             switch current {
             case .dispatcher:
                 DispatcherSheet(coordinator: coordinator, onClose: { present(nil) }, onOperator: { present(.operatorPanel) })
+            case .aed:
+                AEDFinderSheet(coordinator: coordinator, onClose: { present(nil) }, onOperator: { present(.operatorPanel) })
             case .sentinel: SentinelPanel(coordinator: coordinator) { present(.operatorPanel) }
             case .agents: AgentsSheet(coordinator: coordinator) { present(.operatorPanel) }
             case .operatorPanel:
@@ -117,6 +124,24 @@ struct MainScreen: View {
             StagedBackdrop().ignoresSafeArea()
         }
         #endif
+    }
+
+    /// What a voice just pressed, so a hands-free tap doesn't look like the screen moving on its own.
+    @ViewBuilder private var voicePressedPill: some View {
+        if let pressed = coordinator.voicePressed {
+            Pill {
+                Image(systemName: "waveform")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(DS.Colors.textSecondary)
+                Text(pressed.text)
+                    .dsFont(DS.Fonts.label)
+                    .foregroundStyle(DS.Colors.textPrimary)
+                    .lineLimit(1)
+            }
+            .padding(.top, DS.Space.s)
+            .transition(.opacity)
+            .accessibilityElement(children: .combine)
+        }
     }
 
     private var awake: Bool { coordinator.definition?.kind.isAwake == true }
@@ -140,12 +165,10 @@ struct MainScreen: View {
                     .allowsHitTesting(false)
             }
             if coordinator.showsGripReminder {
-                // Top-trailing, under the beat's dot when it shows, clear of the read in the top-leading corner.
-                let below = coordinator.showsBeatPulse ? DS.Pulse.docked + DS.Pulse.dockedInset : 0
+                // Trailing, level with the camera's middle, below the beat's dot and the read at the top.
                 GripReminderCard()
-                    .padding(.top, DS.Space.m + below)
                     .padding(.trailing, DS.Space.m)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
                     .allowsHitTesting(false)
                     .transition(.opacity)
             }
@@ -160,7 +183,18 @@ struct MainScreen: View {
                             .allowsHitTesting(false)
                             .transition(.opacity)
                     }
-                    if showsAssessment {
+                    if showsAssessment && coordinator.isAssessing {
+                        // On assess, the read is the point, so it goes big and the log waits for later.
+                        SituationHero(
+                            assessment: coordinator.sceneRead,
+                            assessing: coordinator.assessing,
+                            failed: coordinator.assessmentFailed,
+                            confirmedEmergency: coordinator.confirmedEmergency,
+                            confirmTitle: coordinator.assessSuggestion.flatMap { $0.confirmAction == nil ? nil : $0.buttonTitle },
+                            onConfirm: { coordinator.confirmEmergency() }
+                        )
+                        .transition(.opacity)
+                    } else if showsAssessment {
                         AssessmentChip(
                             assessment: coordinator.sceneRead,
                             log: coordinator.assessmentLog,
@@ -183,18 +217,6 @@ struct MainScreen: View {
                 // grip reminder while it shows.
                 .padding(.trailing, assessmentTrailingClearance)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
-            if coordinator.offersPracticePatient {
-                // Bottom-trailing is free in compressions. The patient lands where the band's middle meets the floor.
-                PracticePatientButton(placed: coordinator.practicePatientPlaced) {
-                    if coordinator.practicePatientPlaced {
-                        coordinator.clearPracticePatient()
-                    } else {
-                        coordinator.placePracticePatient(at: CGPoint(x: freeArea.midX, y: freeArea.midY))
-                    }
-                }
-                .padding(DS.Space.m)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
             }
             if coordinator.overlayTarget == .padZones {
                 // Vision finds the body some frames in, and nothing here would redraw when it does.
@@ -227,7 +249,6 @@ struct MainScreen: View {
     private var showsCallerAgent: Bool { coordinator.callerAgentStatus != .idle }
 
     private var assessmentTrailingClearance: CGFloat {
-        if coordinator.showsGripReminder { return GripReminderCard.size + DS.Space.m }
         if coordinator.showsBeatPulse { return DS.Pulse.docked + DS.Pulse.dockedInset }
         return 0
     }

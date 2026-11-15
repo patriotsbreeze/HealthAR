@@ -87,6 +87,26 @@ private func close(_ a: Double, _ b: Double) -> Bool { abs(a - b) < 1e-6 }
         #expect(close(frame.local(frame.world(waypoint) + [0, 1.2, 0]), waypoint))
     }
 
+    @Test func turningClockwiseSwingsForwardToTheRight() throws {
+        let frame = try #require(EntranceFrame.calibrate(camera: matrix_identity_float4x4, floorY: 0))
+        // Facing -Z with +X on the right: a quarter turn clockwise faces +X, and the right becomes +Z.
+        let turned = frame.rotated(clockwiseDegrees: 90)
+        #expect(close(turned.origin, frame.origin))
+        #expect(close(turned.forward, [1, 0, 0]))
+        #expect(close(turned.right, [0, 0, 1]))
+        #expect(close(frame.rotated(clockwiseDegrees: -90).forward, [-1, 0, 0]))
+    }
+
+    @Test func theCompassCorrectionPointsAlongTheBearingFromAnyFacing() throws {
+        // The first leg runs due east (90). The phone faces north-east (45), so the frame swings 45 clockwise.
+        let frame = try #require(EntranceFrame.calibrate(camera: matrix_identity_float4x4, floorY: 0))
+        let turned = frame.rotated(clockwiseDegrees: Compass.rotation(bearing: 90, heading: 45))
+        let s = Float(0.5).squareRoot()
+        #expect(close(turned.forward, [s, 0, -s]))
+        // Facing south-west instead, the correction is the long way round less than half a turn.
+        #expect(abs(Compass.rotation(bearing: 90, heading: 225) - -135) < 1e-9)
+    }
+
     // MARK: - Distance and turns
 
     private let right: [SIMD2<Double>] = [[0, 0], [0, 10], [5, 10]]

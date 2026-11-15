@@ -79,7 +79,7 @@ import Testing
             Issue.record("contract shape changed")
             return
         }
-        #expect(declarations.count == 6)
+        #expect(declarations.count == 7)
 
         for declaration in declarations {
             guard case let .object(item) = declaration,
@@ -109,9 +109,13 @@ import Testing
                     alternatives += values.map { (argument, $0) }
                 }
             }
-            // report_scene is for the screen, so it decodes to a scene and never to a proposal.
+            // report_scene is for the screen and press_button for the app, so neither is ever a proposal.
             func decodes(_ routed: ToolRouter.Routed) -> Bool {
-                name == "report_scene" ? routed.scene != nil && routed.proposal == nil : routed.proposal != nil
+                switch name {
+                case "report_scene": routed.scene != nil && routed.proposal == nil
+                case "press_button": routed.press != nil && routed.proposal == nil
+                default: routed.proposal != nil
+                }
             }
             #expect(decodes(router.route(call(name, .object(valid)))), "\(name) did not decode")
             for (argument, value) in alternatives {
