@@ -10,6 +10,8 @@ struct AEDFinderSheet: View {
     let coordinator: AppCoordinator
     let onClose: () -> Void
     var onOperator: (() -> Void)?
+    /// Full height first: the photo, the spots to pick from and the buttons don't fit in half.
+    @State private var detent = PresentationDetent.large
 
     var body: some View {
         VStack(spacing: 0) {
@@ -41,7 +43,7 @@ struct AEDFinderSheet: View {
         }
         .background(DS.Colors.surface)
         .presentationBackground(DS.Colors.surface)
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.medium, .large], selection: $detent)
         .presentationDragIndicator(.hidden)
         .presentationBackgroundInteraction(.enabled(upThrough: .medium))
     }

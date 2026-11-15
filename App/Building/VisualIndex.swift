@@ -13,14 +13,22 @@ actor VisualIndex {
 
     var isReady: Bool { prints != nil }
 
-    /// Safe to call often: it builds once.
-    func prepare(_ locator: LocatorData, tile: @Sendable (String) -> Data?) async {
+    /// Safe to call often: it builds once. `extra` adds full-size views of a spot, the drone pack's
+    /// look along the walk, each as three squares: a phone photo matches them far more often than the
+    /// small survey quadrants alone (20 of 66 spots first, against 8, on frames from the drone video).
+    func prepare(_ locator: LocatorData, tile: @Sendable (String) -> Data?, extra: @Sendable (String) -> Data? = { _ in nil }) async {
         if prints != nil { return }
         var built: [(Int, VNFeaturePrintObservation)] = []
         for (index, pano) in locator.panos.enumerated() {
-            guard let data = tile(pano.tile), let image = Self.image(data) else { continue }
-            for view in Self.quadrants(image) {
-                if let print = Self.featurePrint(view) { built.append((index, print)) }
+            if let data = tile(pano.tile), let image = Self.image(data) {
+                for view in Self.quadrants(image) {
+                    if let print = Self.featurePrint(view) { built.append((index, print)) }
+                }
+            }
+            if let data = extra(pano.id), let image = Self.image(data) {
+                for view in Self.squares(image) {
+                    if let print = Self.featurePrint(view) { built.append((index, print)) }
+                }
             }
         }
         if prints == nil { prints = built.isEmpty ? nil : built }
@@ -51,6 +59,20 @@ actor VisualIndex {
         guard width > 0, height > 0 else { return [] }
         return [(0, 0), (width, 0), (0, height), (width, height)].compactMap {
             image.cropping(to: CGRect(x: $0.0, y: $0.1, width: width, height: height))
+        }
+    }
+
+    /// Three squares across the long side: the start, the middle and the end.
+    static func squares(_ image: CGImage) -> [CGImage] {
+        let side = min(image.width, image.height)
+        guard side > 0 else { return [] }
+        let slack = max(image.width, image.height) - side
+        let offsets = slack == 0 ? [0] : [0, slack / 2, slack]
+        return offsets.compactMap { offset in
+            let rect = image.width >= image.height
+                ? CGRect(x: offset, y: 0, width: side, height: side)
+                : CGRect(x: 0, y: offset, width: side, height: side)
+            return image.cropping(to: rect)
         }
     }
 

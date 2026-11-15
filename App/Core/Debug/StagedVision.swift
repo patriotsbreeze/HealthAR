@@ -14,7 +14,8 @@ import UIKit
 /// - `-StagedOffscreen`: puts the AED and the pin out of the band, to see the pointers.
 /// - `-StagedLoss`: drops the marks 2 s into a step, to see the grace and "Hold the phone steady".
 /// - `-FallbackCard`: shows the card the app falls back to with no protocol.
-/// - `-StagedSheet dispatcher|sentinel|operatorPanel`, `-StagedStop`, `-StagedHUD`: opens that on top.
+/// - `-StagedSheet dispatcher|sentinel|operatorPanel|aed`, `-StagedStop`, `-StagedHUD`: opens that on top.
+/// - `-StagedPhoto <pano id>`: Where am I? runs on that spot's drone view as if it were the photo.
 enum StagedLaunch {
     private static var arguments: [String] { ProcessInfo.processInfo.arguments }
 
@@ -27,6 +28,7 @@ enum StagedLaunch {
     static var showsHUD: Bool { arguments.contains("-StagedHUD") }
 
     static var startState: String? { value(after: "-StartState") }
+    static var photoPano: String? { value(after: "-StagedPhoto") }
     static var sheet: AppSheet? { value(after: "-StagedSheet").flatMap(AppSheet.init(rawValue:)) }
 
     private static func value(after flag: String) -> String? {

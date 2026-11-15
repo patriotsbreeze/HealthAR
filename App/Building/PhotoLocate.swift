@@ -283,10 +283,15 @@ final class PhotoLocate {
         case updated
         /// Gemini didn't answer in time, or there's no key; the phone's match stands.
         case unchecked
+        /// The person tapped their spot, which beats any match.
+        case picked
     }
 
     /// The phone's ranking is cut to this many spots for Gemini to choose among.
     static let shortlist = 4
+    /// How many spots "Is this where you are?" offers. Matching is often wrong between look-alike
+    /// hallways, so the person gets the last word.
+    static let candidateCount = 6
     /// Gemini's check gets this long before the phone's match is left to stand.
     static let refineTimeout: TimeInterval = 12
 
@@ -301,6 +306,16 @@ final class PhotoLocate {
         return false
     }
     private(set) var check: Check?
+    /// Spots to offer, best first, as places in `locator.panos`. Each has a route.
+    private(set) var candidates: [Int] = []
+    /// Every routed spot is laid out, not just the best few. Kept here, not in the view: in the Find the
+    /// AED sheet a view's own state for this didn't hold between taps.
+    var showsAllSpots = false
+    /// The spot on screen now, as a place in `locator.panos`.
+    var currentIndex: Int? {
+        guard case let .done(.found(pano, _, _)) = state else { return nil }
+        return locator?.panos.firstIndex { $0.id == pano.id }
+    }
     let locator: LocatorData?
     @ObservationIgnored private let index = VisualIndex()
     @ObservationIgnored private var run = 0
@@ -317,7 +332,24 @@ final class PhotoLocate {
     /// Builds the on-device index ahead of the first photo. A few seconds, off the main thread.
     func warm() async {
         guard let locator else { return }
-        await index.prepare(locator) { Self.tile($0) }
+        await prepareIndex(locator)
+    }
+
+    private func prepareIndex(_ locator: LocatorData) async {
+        let building = locator.building
+        await index.prepare(locator, tile: { Self.tile($0) }, extra: { Self.droneView(pano: $0, building: building) })
+    }
+
+    /// The person's own answer to "Is this where you are?". Drops any Gemini check still on its way.
+    func choose(_ panoIndex: Int, aedIDs: [String]) {
+        guard let locator, locator.panos.indices.contains(panoIndex) else { return }
+        run += 1
+        let outcome = PhotoLocateOutcome.resolve(locator: locator, aedIDs: aedIDs, pano: panoIndex)
+        guard case .found = outcome else { return }
+        state = .done(outcome)
+        check = .picked
+        showsAllSpots = false
+        if !candidates.contains(panoIndex) { candidates.insert(panoIndex, at: 0) }
     }
 
     func locate(_ image: UIImage, aedIDs: [String]) async {
@@ -325,13 +357,17 @@ final class PhotoLocate {
         let thisRun = run
         state = .locating
         check = nil
+        candidates = []
+        showsAllSpots = false
         guard let locator, let photo = PhotoMatcher.downsized(image) else {
             state = .done(PhotoLocateOutcome.resolve(locator: locator, aedIDs: aedIDs, pano: nil))
             return
         }
-        await index.prepare(locator) { Self.tile($0) }
-        let ranking = await index.rank(photo: photo, keep: Self.shortlist)
+        await prepareIndex(locator)
+        let wide = await index.rank(photo: photo, keep: Self.candidateCount * 2)
         guard thisRun == run else { return }
+        candidates = Array(wide.filter { PhotoLocateOutcome.firstRouted([$0], locator: locator, aedIDs: aedIDs) != nil }.prefix(Self.candidateCount))
+        let ranking = Array(wide.prefix(Self.shortlist))
         guard let best = PhotoLocateOutcome.firstRouted(ranking, locator: locator, aedIDs: aedIDs) else {
             state = .done(ranking.isEmpty
                 ? .fallback(PhotoLocateOutcome.couldNotPlace)
@@ -365,5 +401,23 @@ final class PhotoLocate {
 
     nonisolated static func tile(_ name: String) -> Data? {
         LocatorData.tileURL(name).flatMap { try? Data(contentsOf: $0) }
+    }
+
+    /// The drone pack's view from a spot, looking along the walk to the AED. Any AED's will do.
+    nonisolated static func droneViewURL(pano: String, building: String, drone: DroneData? = DroneData.bundled) -> URL? {
+        guard let drone, drone.building == building else { return nil }
+        for aed in drone.targets.keys.sorted() {
+            if let frame = drone.targets[aed]?.frames[pano], let url = DroneData.imageURL(frame.img) { return url }
+        }
+        return nil
+    }
+
+    nonisolated static func droneView(pano: String, building: String) -> Data? {
+        droneViewURL(pano: pano, building: building).flatMap { try? Data(contentsOf: $0) }
+    }
+
+    /// What a spot looks like on the "Is this where you are?" cards: the drone view, else the survey tile.
+    nonisolated static func previewURL(_ pano: LocatorData.Pano, building: String) -> URL? {
+        droneViewURL(pano: pano.id, building: building) ?? LocatorData.tileURL(pano.tile)
     }
 }

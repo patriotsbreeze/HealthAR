@@ -53,9 +53,26 @@ private let pack = """
     @Test func aLoopAGapOrAMissingClipIsNoFlight() {
         #expect(video?.flight(to: "staged_1", from: "x", hasFile: always) == nil)
         #expect(video?.flight(to: "staged_1", from: "g", hasFile: always) == nil)
-        #expect(video?.flight(to: "staged_1", from: "n", hasFile: always) == nil)
         // A file missing from the bundle counts too.
         #expect(video?.flight(to: "staged_1", from: "a", hasFile: { !$0.hasSuffix("b.mp4") }) == nil)
+    }
+
+    @Test func aHopWithNoClipIsACutToTheNextSpot() throws {
+        // "n" was never recorded going the right way, so the flight cuts straight to "c".
+        let flight = try #require(video?.flight(to: "staged_1", from: "n", hasFile: always))
+        #expect(flight.map(\.pano) == ["c"])
+        #expect(flight.last?.isFinal == true)
+    }
+
+    @Test func tooManyCutsIsNoFlight() throws {
+        let json = """
+        {"schema": "drone_video.v1", "building": "mp:FIXTURE", "targets": {"staged_1": {"text": "", "clips": {
+          "p": {"next": "q"}, "q": {"next": "r"}, "r": {"next": "c"},
+          "c": {"next": null, "final_clip": "dronevid/staged_1/final_c.mp4", "duration_s": 2}}}}}
+        """
+        let video = try #require(DroneVideo.decode(Data(json.utf8)))
+        #expect(video.flight(to: "staged_1", from: "q", hasFile: always)?.count == 1)
+        #expect(video.flight(to: "staged_1", from: "p", hasFile: always) == nil)
     }
 
     @Test func anUnknownStartOrAEDIsNoFlight() {

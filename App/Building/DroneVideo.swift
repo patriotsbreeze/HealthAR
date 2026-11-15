@@ -81,14 +81,18 @@ struct DroneVideo: Sendable, Equatable {
 
     nonisolated static let bundled = DroneVideo.load()
 
+    /// At most this many clipless hops in one flight. More and it's a slideshow of jumps, not a flight.
+    static let maxCuts = 2
+
     /// Each hop's clip from `start`, then the AED's final clip. Only a whole flight counts: a loop, a
     /// missing entry or a missing file means no flight, so the button stays hidden rather than stopping
-    /// short of the AED.
+    /// short of the AED. A hop with no clip at all is skipped as a cut.
     func flight(to aed: String, from start: String, hasFile: (String) -> Bool = { DroneVideo.url($0) != nil }) -> [Segment]? {
         guard let clips = targets[aed]?.clips else { return nil }
         var segments: [Segment] = []
         var seen: Set<String> = []
         var here = start
+        var cuts = 0
         // The takeoff covers no ground, so the countdown starts once the first hop does.
         if let intro = clips[start]?.introClip, hasFile(intro) {
             segments.append(Segment(pano: start, file: intro, durationS: clips[start]?.introDurationS ?? 0, lengthM: 0,
@@ -96,7 +100,16 @@ struct DroneVideo: Sendable, Equatable {
         }
         while let entry = clips[here], seen.insert(here).inserted {
             if let next = entry.next {
-                guard let file = entry.clip, hasFile(file) else { return nil }
+                // A hop with no clip is a cut: its recording went somewhere else, so the flight jumps to
+                // the next spot, a few metres on, rather than show the wrong hallway. A clip that's named
+                // but missing from the bundle still sinks the whole flight.
+                guard let file = entry.clip else {
+                    cuts += 1
+                    if cuts > Self.maxCuts { return nil }
+                    here = next
+                    continue
+                }
+                guard hasFile(file) else { return nil }
                 segments.append(Segment(pano: here, file: file, durationS: entry.durationS, lengthM: entry.lengthM,
                                         room: entry.room, floor: entry.floor, isFinal: false))
                 here = next
