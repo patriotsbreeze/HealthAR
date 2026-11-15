@@ -1,11 +1,10 @@
 import SwiftUI
 
 /// "Find AED": the building's AED tools on their own, one tap from the main screen, without opening
-/// the mock dispatcher. Same section the dispatcher shows: confirm the building, take a photo to place
-/// yourself, then the drone flight or the AR guide from there.
+/// the mock dispatcher. Rabinowitz Hall is taken as where you are, so it goes straight to the ways
+/// there: the AR guide, the drone flight, and a photo to start from where you stand.
 struct AEDFinderSheet: View {
     static let title = "Find the AED"
-    static let subtitle = "Take a photo where you are, then fly the drone or follow the arrows to the AED."
 
     let coordinator: AppCoordinator
     let onClose: () -> Void
@@ -18,16 +17,10 @@ struct AEDFinderSheet: View {
             SheetTopBar(coordinator: coordinator, onOperator: onOperator)
             ScrollView {
                 VStack(alignment: .leading, spacing: DS.Space.l) {
-                    VStack(alignment: .leading, spacing: DS.Space.xs) {
-                        Text(Self.title)
-                            .dsFont(DS.Fonts.title)
-                            .accessibilityAddTraits(.isHeader)
-                        Text(Self.subtitle)
-                            .dsFont(DS.Fonts.label)
-                            .foregroundStyle(DS.Colors.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    BuildingBriefSection(coordinator: coordinator)
+                    Text(Self.title)
+                        .dsFont(DS.Fonts.title)
+                        .accessibilityAddTraits(.isHeader)
+                    BuildingBriefSection(coordinator: coordinator, aedMode: true)
                 }
                 .foregroundStyle(DS.Colors.textPrimary)
                 .padding(DS.Space.l)

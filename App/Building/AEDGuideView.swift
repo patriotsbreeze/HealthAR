@@ -74,6 +74,14 @@ enum AEDGuideWording {
         return "Stand in \(place), face into the building, hold the phone upright, then tap I'm here."
     }
 
+    /// The AED button's mode: the same ask, in fewer words.
+    static func shortCalibrate(fromPhoto: Bool) -> String {
+        fromPhoto ? "Stand where you took the photo, then tap I'm here." : "Stand in the entrance facing in, then tap I'm here."
+    }
+
+    static let shortNoAR = "AR isn't available on this phone."
+    static let shortNoCamera = "Camera access is off for this app."
+
     static func remaining(_ progress: AEDPath.Progress?) -> String {
         guard let progress else { return finding }
         return "About \(Int(progress.remaining.rounded())) m to go"
@@ -105,7 +113,8 @@ enum AEDGuideWording {
 
     static var fixedStrings: [String] {
         [here, recalibrate, done, finding, upright, settling, noAR, noCamera, turnUntilUp, facing, anyway, noCompass,
-         startView, turnLeft, turnRight, lineUp, markHere, markHint, markTooShort]
+         startView, turnLeft, turnRight, lineUp, markHere, markHint, markTooShort, shortNoAR, shortNoCamera,
+         shortCalibrate(fromPhoto: true), shortCalibrate(fromPhoto: false)]
     }
 }
 
@@ -383,12 +392,15 @@ final class AEDGuide {
 struct AEDGuideView: View {
     let target: AEDGuideTarget
     let coordinator: AppCoordinator
+    /// Opened from the AED button: no turn-the-line buttons, and fewer words.
+    let aedMode: Bool
     @State private var guide: AEDGuide
     @Environment(\.dismiss) private var dismiss
 
-    init(target: AEDGuideTarget, coordinator: AppCoordinator) {
+    init(target: AEDGuideTarget, coordinator: AppCoordinator, aedMode: Bool = false) {
         self.target = target
         self.coordinator = coordinator
+        self.aedMode = aedMode
         _guide = State(initialValue: AEDGuide(target: target))
     }
 
@@ -434,7 +446,7 @@ struct AEDGuideView: View {
             } else {
                 switch guide.stage {
                 case .calibrate: calibrate
-                case .guiding: GuideHUD(guide: guide, done: { dismiss() })
+                case .guiding: GuideHUD(guide: guide, aedMode: aedMode, done: { dismiss() })
                 }
             }
         }
@@ -445,13 +457,13 @@ struct AEDGuideView: View {
     /// Why there's nothing to draw on. Never a prompt: a camera prompt is onboarding's alone.
     private var blocked: String? {
         if guide.preview { return nil }
-        if !arAvailable { return AEDGuideWording.noAR }
-        if !Permissions.cameraGranted { return AEDGuideWording.noCamera }
+        if !arAvailable { return aedMode ? AEDGuideWording.shortNoAR : AEDGuideWording.noAR }
+        if !Permissions.cameraGranted { return aedMode ? AEDGuideWording.shortNoCamera : AEDGuideWording.noCamera }
         return nil
     }
 
     @ViewBuilder private var calibrate: some View {
-        Text(AEDGuideWording.calibrate(target.route, fromPhoto: target.fromPhoto))
+        Text(aedMode ? AEDGuideWording.shortCalibrate(fromPhoto: target.fromPhoto) : AEDGuideWording.calibrate(target.route, fromPhoto: target.fromPhoto))
             .dsFont(DS.Fonts.detail)
             .fixedSize(horizontal: false, vertical: true)
         if let url = target.startView, let image = UIImage(contentsOfFile: url.path) {
@@ -463,9 +475,11 @@ struct AEDGuideView: View {
                     .frame(height: 120)
                     .clipShape(RoundedRectangle(cornerRadius: DS.Radius.row / 2, style: .continuous))
                     .accessibilityHidden(true)
-                Text(AEDGuideWording.startView)
-                    .dsFont(DS.Fonts.caption)
-                    .foregroundStyle(DS.Colors.textSecondary)
+                if !aedMode {
+                    Text(AEDGuideWording.startView)
+                        .dsFont(DS.Fonts.caption)
+                        .foregroundStyle(DS.Colors.textSecondary)
+                }
             }
         }
         if let problem = guide.problem {
@@ -500,6 +514,8 @@ struct AEDGuideView: View {
 /// Metres to go, the next turn, the stairs when the route changes floor, and near or far advice.
 private struct GuideHUD: View {
     let guide: AEDGuide
+    /// No near-or-far advice, no mark button, and no turn-the-line buttons.
+    var aedMode = false
     let done: () -> Void
 
     var body: some View {
@@ -527,7 +543,7 @@ private struct GuideHUD: View {
                     Label(AEDGuideWording.stairs(target.aed), systemImage: "figure.stairs")
                         .dsFont(DS.Fonts.prompt)
                 }
-                if let reach = target.aed.reach {
+                if !aedMode, let reach = target.aed.reach {
                     Text(BuildingWording.advice(reach))
                         .dsFont(DS.Fonts.body)
                         .foregroundStyle(DS.Colors.textSecondary)
@@ -539,24 +555,27 @@ private struct GuideHUD: View {
                         .foregroundStyle(DS.Colors.caution)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                if guide.canMark {
+                // The AED button's mode already knows its AED, so marking one is the dispatcher side's job.
+                if guide.canMark, !aedMode {
                     Button(AEDGuideWording.markHere) { guide.markHere() }
                         .buttonStyle(DeckCapsuleButtonStyle())
                         .accessibilityHint(AEDGuideWording.markHint)
                 }
-                Text(AEDGuideWording.lineUp)
-                    .dsFont(DS.Fonts.caption)
-                    .foregroundStyle(DS.Colors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: DS.Space.betweenButtons) {
-                    Button(AEDGuideWording.turnLeft, systemImage: "arrow.counterclockwise") {
-                        guide.nudge(clockwiseDegrees: -AEDGuideWording.nudgeDegrees)
+                if !aedMode {
+                    Text(AEDGuideWording.lineUp)
+                        .dsFont(DS.Fonts.caption)
+                        .foregroundStyle(DS.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: DS.Space.betweenButtons) {
+                        Button(AEDGuideWording.turnLeft, systemImage: "arrow.counterclockwise") {
+                            guide.nudge(clockwiseDegrees: -AEDGuideWording.nudgeDegrees)
+                        }
+                        .buttonStyle(DeckCapsuleButtonStyle())
+                        Button(AEDGuideWording.turnRight, systemImage: "arrow.clockwise") {
+                            guide.nudge(clockwiseDegrees: AEDGuideWording.nudgeDegrees)
+                        }
+                        .buttonStyle(DeckCapsuleButtonStyle())
                     }
-                    .buttonStyle(DeckCapsuleButtonStyle())
-                    Button(AEDGuideWording.turnRight, systemImage: "arrow.clockwise") {
-                        guide.nudge(clockwiseDegrees: AEDGuideWording.nudgeDegrees)
-                    }
-                    .buttonStyle(DeckCapsuleButtonStyle())
                 }
                 HStack(spacing: DS.Space.betweenButtons) {
                     Button(AEDGuideWording.recalibrate, action: guide.recalibrate)

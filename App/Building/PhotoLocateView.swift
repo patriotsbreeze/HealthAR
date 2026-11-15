@@ -17,12 +17,17 @@ struct PhotoLocateRows: View {
     static let fewerSpots = "Fewer spots"
     static let guideFromHere = "Guide me from here (AR)"
     static let guideFromEntrance = "Guide me from the entrance (AR)"
+    // The AED button's mode, where fewer words do.
+    static let shortLocating = "Matching your photo…"
+    static let shortIsThisYou = "Not right? Tap your spot."
 
     let coordinator: AppCoordinator
     let building: BuildingBrief
     let confirmed: Bool
     let locate: PhotoLocate
     @Binding var guiding: AEDGuideTarget?
+    /// Opened from the AED button: shorter lines, and the fallback says only that it's using the entrance.
+    var aedMode = false
     @State private var takingPhoto = false
 
     /// Every AED the file carries, scanned or staged; the shortest walk from the spot wins.
@@ -37,8 +42,10 @@ struct PhotoLocateRows: View {
 
     var body: some View {
         if locate.available(for: building), let aed {
-            Button(Self.title) { takingPhoto = true }
-                .buttonStyle(CommandButtonStyle(kind: .secondary, height: DS.Height.awake))
+            Button { takingPhoto = true } label: {
+                if aedMode { Label(Self.title, systemImage: "camera.fill") } else { Text(Self.title) }
+            }
+                .buttonStyle(CommandButtonStyle(kind: .secondary, height: aedMode ? DS.Height.arrest : DS.Height.awake))
                 .disabled(!confirmed || !Self.cameraReady || locate.state == .locating)
                 .accessibilityHint(Self.hint)
                 // The on-device index takes a few seconds to build, so it starts before the photo does.
@@ -81,7 +88,7 @@ struct PhotoLocateRows: View {
         case .locating:
             HStack(spacing: DS.Space.s) {
                 ProgressView()
-                Text(Self.locating).dsFont(DS.Fonts.label)
+                Text(aedMode ? Self.shortLocating : Self.locating).dsFont(DS.Fonts.label)
             }
             .foregroundStyle(DS.Colors.textSecondary)
         case let .done(.found(pano, aedID, route)):
@@ -111,7 +118,7 @@ struct PhotoLocateRows: View {
             SpotChooser(
                 building: building,
                 locate: locate,
-                caption: Self.isThisYou,
+                caption: aedMode ? Self.shortIsThisYou : Self.isThisYou,
                 allTitle: locate.showsAllSpots ? Self.fewerSpots : Self.allSpots,
                 choose: { locate.choose($0, aedIDs: aedIDs) },
                 browse: { withAnimation(DS.Motion.alert) { locate.showsAllSpots.toggle() } }
@@ -123,7 +130,8 @@ struct PhotoLocateRows: View {
                 }
             }
             // The person's own flight first: it is what the photo was for.
-            DroneFromHereButton(building: building, aedID: aedID, pano: pano.id, locator: locate.locator)
+            DroneFromHereButton(building: building, aedID: aedID, pano: pano.id, locator: locate.locator,
+                                title: aedMode ? DroneFromHereButton.shortTitle : DroneFromHereButton.title)
                 .id(pano.id)
             Button(Self.guideFromHere) {
                 let target = building.aeds.first { $0.id == aedID } ?? aed
@@ -132,10 +140,11 @@ struct PhotoLocateRows: View {
             .buttonStyle(CommandButtonStyle(kind: .primary, height: DS.Height.awake))
             .disabled(!confirmed)
         case let .done(.fallback(message)):
-            Label(message, systemImage: "exclamationmark.triangle.fill")
+            Label(aedMode ? PhotoLocateOutcome.shortFallback : message, systemImage: "exclamationmark.triangle.fill")
                 .dsFont(DS.Fonts.label)
                 .foregroundStyle(DS.Colors.caution)
-            if let entrance = AEDGuideTarget(building: building) {
+            // The AED button's mode already shows the entrance guide and flight above.
+            if !aedMode, let entrance = AEDGuideTarget(building: building) {
                 Button(Self.guideFromEntrance) { guiding = entrance }
                     .buttonStyle(CommandButtonStyle(kind: .primary, height: DS.Height.awake))
                     .disabled(!confirmed)
