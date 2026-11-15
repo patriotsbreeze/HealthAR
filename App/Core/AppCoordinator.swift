@@ -153,12 +153,17 @@ final class AppCoordinator {
     var assessSuggestion: SituationAssessment.Suggestion? {
         guard state.stateID == ScenarioModule.assessState else { return nil }
         if let voiceSuggestion { return voiceSuggestion }
-        guard let read = sceneRead, read.confidence != .low else { return nil }
-        return read.suggests
+        guard let read = sceneRead, read.confidence != .low, let suggests = read.suggests else { return nil }
+        // The demo's two modes have no awake button to ring.
+        return suggests == .awake ? nil : suggests
     }
     /// Everything the voice AI saw, did, heard and said, newest first, for the drop-down under the read.
     private(set) var assessmentLog: [AssessmentLogEntry] = []
     private(set) var assessing = false
+    /// The emergency the rescuer said is real, by a tap on it or by saying "confirm". It stays even
+    /// if later reads stop flagging it, since a person has now said so.
+    private(set) var confirmedEmergency: String?
+    var emergencyConfirmed: Bool { confirmedEmergency != nil }
     /// The last try failed and there's no read yet to keep, so the chip says so rather than vanish.
     private(set) var assessmentFailed = false
     /// Who made the scene lines on screen.
@@ -218,6 +223,8 @@ final class AppCoordinator {
     @ObservationIgnored private var lastLiveSceneAt = -TimeInterval.infinity
     @ObservationIgnored private var nextLogID = 0
     @ObservationIgnored private var lastEmergency: String?
+    /// Whether the last read, before the check below, flagged an emergency.
+    @ObservationIgnored private var lastReadFlaggedEmergency = false
     /// The simulated 911 agent's call, played into the log once a rescue. Cancelled on reset.
     @ObservationIgnored private var callerAgentTask: Task<Void, Never>?
     @ObservationIgnored private var callerAgentRan = false
@@ -1257,6 +1264,7 @@ final class AppCoordinator {
             assessmentStats.quick = Array((assessmentStats.quick + [clock() - startedAt]).suffix(20))
             // A live report that landed while this was out is newer, and keeps the screen.
             guard startedAt >= sceneStartedAt else { return }
+            let result = confirmed(result)
             sceneRead = merged(result, startedAt: startedAt, source: .quickLook)
             noteEmergency(result.emergency)
             appendLog(.look, result.sees ?? result.headline, detail: result.prediction)
@@ -1272,7 +1280,7 @@ final class AppCoordinator {
 
     /// The voice model said what the camera shows. It lands at once, over any older read.
     private func noteScene(_ report: SceneReport) {
-        guard let screened = SituationAssessor.screen(report, mode: liveMode) else {
+        guard let checked = SituationAssessor.screen(report, mode: liveMode) else {
             SituationAssessor.log("live scene dropped by the validators: \(report.headline) | \(report.prediction)")
             return
         }
@@ -1281,7 +1289,8 @@ final class AppCoordinator {
             assessmentStats.liveGaps = Array((assessmentStats.liveGaps + [now - lastLiveSceneAt]).suffix(20))
         }
         lastLiveSceneAt = now
-        SituationAssessor.log("live scene: \(screened.sees ?? "-") | \(screened.headline) | \(screened.prediction) (\(screened.confidence.rawValue)) note=\(report.note)")
+        let screened = confirmed(checked)
+        SituationAssessor.log("live scene: \(screened.sees ?? "-") emergency=\(checked.emergency ?? "-")\(checked.emergency != nil && screened.emergency == nil ? " (held)" : "") | \(screened.headline) | \(screened.prediction) (\(screened.confidence.rawValue)) note=\(report.note)")
         sceneRead = merged(screened, startedAt: now, source: .live)
         noteEmergency(screened.emergency)
         let note = SituationAssessor.screenNote(report.note, mode: liveMode)
@@ -1354,6 +1363,17 @@ final class AppCoordinator {
     }
 
     /// The newest scene lines over whatever is on screen.
+    /// Red only once two reads in a row flag an emergency. One read alone is often a false alarm on a
+    /// calm scene, and the next is a second or so behind it.
+    private func confirmed(_ result: SituationAssessment) -> SituationAssessment {
+        let flagged = result.emergency != nil
+        defer { lastReadFlaggedEmergency = flagged }
+        guard flagged, !lastReadFlaggedEmergency else { return result }
+        var held = result
+        held.emergency = nil
+        return held
+    }
+
     private func merged(_ result: SituationAssessment, startedAt: TimeInterval, source: AssessmentSource) -> SituationAssessment {
         assessmentFailed = false
         sceneStartedAt = startedAt
@@ -1377,19 +1397,43 @@ final class AppCoordinator {
         switch finding {
         case .unresponsive: voiceSuggestion = .notResponding
         case .notBreathing, .abnormalBreathing: voiceSuggestion = .notBreathing
+        case .choking: voiceSuggestion = .choking
         default: break
         }
     }
 
     /// "Confirm" from the rescuer presses the ringed button, as a tap would. Their own words, from the
     /// live transcript of the mic: the AI's speech is a separate transcript and can't confirm anything.
+    /// With no button to press, it confirms the emergency on screen instead.
     private func confirmIfSaid() {
-        guard let suggestion = assessSuggestion, let action = suggestion.confirmAction,
-              heardPending.range(of: #"\bconfirm(ed)?\b"#, options: [.regularExpression, .caseInsensitive]) != nil
-        else { return }
-        flushHeard()
-        appendLog(.heard, "Confirmed by voice: \(suggestion.rawValue.replacingOccurrences(of: "_", with: " "))")
-        perform(action)
+        guard heardPending.range(of: #"\bconfirm(ed)?\b"#, options: [.regularExpression, .caseInsensitive]) != nil else { return }
+        if let suggestion = assessSuggestion, let action = suggestion.confirmAction {
+            flushHeard()
+            appendLog(.heard, "Confirmed by voice: \(suggestion.rawValue.replacingOccurrences(of: "_", with: " "))")
+            perform(action)
+        } else if canConfirmEmergency {
+            flushHeard()
+            confirmEmergency(byVoice: true)
+        }
+    }
+
+    /// An emergency is on screen on assess and nobody has said it's real yet.
+    var canConfirmEmergency: Bool {
+        state.stateID == ScenarioModule.assessState && sceneRead?.emergency != nil && !emergencyConfirmed
+    }
+
+    /// The rescuer says the emergency is real. Where the AI rings a button, that's the tap it stands for,
+    /// so the rescue goes into that mode, as a tap on the button would. Otherwise help gets going by the
+    /// simulated 911 agent while they pick the step themselves.
+    func confirmEmergency(byVoice: Bool = false) {
+        guard canConfirmEmergency, let emergency = sceneRead?.emergency else { return }
+        confirmedEmergency = emergency
+        appendLog(.alert, "Emergency confirmed\(byVoice ? " by voice" : ""): \(emergency)")
+        if let action = assessSuggestion?.confirmAction {
+            perform(action)
+        } else if callerAgentStatus == .idle {
+            spawnCallerAgent()
+        }
     }
 
     private func flushHeard() {
@@ -1407,6 +1451,8 @@ final class AppCoordinator {
         quickInFlight = false
         heardPending = ""
         lastEmergency = nil
+        lastReadFlaggedEmergency = false
+        confirmedEmergency = nil
         callerAgentTask?.cancel()
         callerAgentTask = nil
         callerAgentStatus = .idle
@@ -1526,6 +1572,18 @@ extension SituationAssessment.Suggestion {
         case .notBreathing: .patientNotBreathing
         case .awake: .patientAwake
         case .callForHelp: nil
+        case .choking: .triageChoking
+        }
+    }
+
+    /// The fixed button's words, the same on the panel, the "AI suggests" line, and the read's confirm.
+    var buttonTitle: String {
+        switch self {
+        case .startCpr, .notBreathing: "Not breathing"
+        case .notResponding: "Collapsed"
+        case .awake: "Awake and talking"
+        case .callForHelp: "Spawn 911 agent"
+        case .choking: "Choking"
         }
     }
 }

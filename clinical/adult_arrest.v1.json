@@ -163,7 +163,7 @@
       "id": "place_hands",
       "kind": "setup",
       "urgency": 3,
-      "entry_phrases": ["hands_center"],
+      "entry_phrases": ["hands_center", "grip_lock"],
       "metronome": "off",
       "frame_uplink": false,
       "overlay": "chest_center",

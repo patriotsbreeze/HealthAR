@@ -140,12 +140,10 @@ struct MainScreen: View {
                     .allowsHitTesting(false)
             }
             if coordinator.showsGripReminder {
-                // Top-trailing, under the beat's dot when it shows, clear of the read in the top-leading corner.
-                let below = coordinator.showsBeatPulse ? DS.Pulse.docked + DS.Pulse.dockedInset : 0
+                // Trailing, level with the camera's middle, below the beat's dot and the read at the top.
                 GripReminderCard()
-                    .padding(.top, DS.Space.m + below)
                     .padding(.trailing, DS.Space.m)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
                     .allowsHitTesting(false)
                     .transition(.opacity)
             }
@@ -160,7 +158,18 @@ struct MainScreen: View {
                             .allowsHitTesting(false)
                             .transition(.opacity)
                     }
-                    if showsAssessment {
+                    if showsAssessment && coordinator.isAssessing {
+                        // On assess, the read is the point, so it goes big and the log waits for later.
+                        SituationHero(
+                            assessment: coordinator.sceneRead,
+                            assessing: coordinator.assessing,
+                            failed: coordinator.assessmentFailed,
+                            confirmedEmergency: coordinator.confirmedEmergency,
+                            confirmTitle: coordinator.assessSuggestion.flatMap { $0.confirmAction == nil ? nil : $0.buttonTitle },
+                            onConfirm: { coordinator.confirmEmergency() }
+                        )
+                        .transition(.opacity)
+                    } else if showsAssessment {
                         AssessmentChip(
                             assessment: coordinator.sceneRead,
                             log: coordinator.assessmentLog,
@@ -215,7 +224,6 @@ struct MainScreen: View {
     private var showsCallerAgent: Bool { coordinator.callerAgentStatus != .idle }
 
     private var assessmentTrailingClearance: CGFloat {
-        if coordinator.showsGripReminder { return GripReminderCard.size + DS.Space.m }
         if coordinator.showsBeatPulse { return DS.Pulse.docked + DS.Pulse.dockedInset }
         return 0
     }

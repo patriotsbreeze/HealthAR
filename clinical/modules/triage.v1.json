@@ -31,10 +31,11 @@
       "allowed_say": ["assign_helper"],
       "transitions": [
         { "on": "human.patient_awake", "to": "triage" },
+        { "on": "human.triage_choking", "to": "choking_talk" },
         { "on": "model.other_concern", "to": "general_talk", "min_confidence": "medium" },
         { "on": "model.choking", "to": "choking_talk", "min_confidence": "medium" }
       ],
-      "citation": "Project design. The AI looks and listens before anything is assumed, and the step waits for the rescuer: Start CPR, Not responding, Awake and talking, or what they say. Needs clinician approval"
+      "citation": "Project design. The AI looks and listens before anything is assumed, and the step waits for the rescuer: Unconscious, Choking, or what they say. Needs clinician approval"
     },
     {
       "id": "triage",

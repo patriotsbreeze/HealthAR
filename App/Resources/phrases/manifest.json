@@ -288,6 +288,15 @@
       "text": "Call 911. Follow the dispatcher. Stay with them.",
       "voice": "Kore"
     },
+    "grip_lock": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 5.445,
+      "sha256": "3192b12c4c3b717fff5499f6ef14d856501cd3992aa2e028fa06765d2fb532c4",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Adopt this grip. Dominant hand over the other, fingers laced, and hold tight.",
+      "voice": "Kore"
+    },
     "handoff_ready": {
       "engine": "gemini",
       "model": "gemini-3.8-flash-tts",

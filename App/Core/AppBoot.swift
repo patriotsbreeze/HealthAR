@@ -32,13 +32,23 @@ enum ProtocolLoader {
         return loaded
     }
 
+    /// The demo has two modes: a collapse goes down the arrest path, and choking to its own step. Only
+    /// the module that holds assess and choking loads, so heart attack and broken bone can't be reached.
+    static let demoModules = ["triage.v1"]
+    /// Assess's ways out that lead to neither mode: the awake triage and the general talk.
+    static let demoClosedTargets: Set<String> = ["triage", "general_talk"]
+
     /// Core, then each module in manifest order, then the pack. Only a bad core stops the app.
     static func loadMerged(from bundle: Bundle) -> ProtocolBundle? {
         guard let core = load(from: bundle) else { return nil }
-        let modules = ScenarioModule.manifest.map { id in
+        let modules = demoModules.map { id in
             ModuleSource(id: id, data: data(named: id, subdirectory: "clinical/modules", in: bundle))
         }
-        return core.merging(modules: modules, pack: data(named: KnowledgePack.id, subdirectory: "clinical", in: bundle))
+        var merged = core.merging(modules: modules, pack: data(named: KnowledgePack.id, subdirectory: "clinical", in: bundle))
+        if let index = merged.definition.states.firstIndex(where: { $0.id == ScenarioModule.assessState }) {
+            merged.definition.states[index].transitions.removeAll { demoClosedTargets.contains($0.to) }
+        }
+        return merged
     }
 
     private static func data(named name: String, subdirectory: String, in bundle: Bundle) -> Data? {
