@@ -21,14 +21,6 @@ extension ARSceneBuilder {
             return [ARZoneInput(kind: .chest, shape: .quad(corners), axis: chest.axis, isLocked: chest.isLocked)]
         }
 
-        // The choking marks, as a ring where the hand or fist goes, named in the step's own words.
-        for (kind, chip) in [(BodyZone.Kind.upperBack, upperBackChip), (.upperAbdomen, upperAbdomenChip)] {
-            guard let zone = overlay.zones.first(where: { $0.kind == kind }), case let .polygon(corners) = zone.shape, !corners.isEmpty else { continue }
-            let xs = corners.map(\.x)
-            let radius = max((xs.max()! - xs.min()!) / 2, 0.04)
-            return [ARZoneInput(kind: .press, shape: .circle(center: zone.center, radius: radius), axis: 0, isLocked: zone.isLocked, chip: chip)]
-        }
-
         let bodies = Set(cues.compactMap(\.body))
         if bodies.contains(.injuredLimb),
            let limb = overlay.zones.first(where: { if case .limb = $0.kind { true } else { false } }),
@@ -41,10 +33,6 @@ extension ARSceneBuilder {
         // Today's pin, which the builder draws as the ring when nothing above is here.
         return []
     }
-
-    /// Word for word from `choke_blows` and `choke_thrusts_line`, so the chip adds nothing the step doesn't say.
-    static let upperBackChip = "Between the shoulder blades"
-    static let upperAbdomenChip = "Just above the navel"
 
     /// The step's materials vision has seen, in the cues' order, each with its cue's callout word for
     /// word. A material no cue gives a callout for has nothing to say, so it isn't drawn.

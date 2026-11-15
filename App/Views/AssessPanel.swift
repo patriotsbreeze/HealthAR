@@ -166,7 +166,7 @@ private struct CappedHeight: Layout {
     }
 }
 
-extension View {
+private extension View {
     /// A yellow ring round the one button the AI points to. It never moves or resizes the button.
     func suggested(_ on: Bool, _ shape: some InsettableShape) -> some View {
         overlay {

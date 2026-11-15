@@ -933,7 +933,6 @@ public final class VisionSession: Sendable {
                 case .none: request = .joints
                 case .lying: request = .lying
                 case .nearPin: request = .nearPin(anchor: state.pinAnchor(in: record, at: now))
-                case .upright: request = .upright
                 case .rescuer:
                     // The rescuer's pose is read upright only, which can miss someone lying across the
                     // view. So every few frames look for the patient lying down instead, with the

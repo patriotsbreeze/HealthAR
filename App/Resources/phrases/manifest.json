@@ -180,67 +180,13 @@
       "text": "Stay with them until EMS arrives. If they collapse, tap Not responding now.",
       "voice": "Kore"
     },
-    "choke_after": {
+    "choking_steps": {
       "engine": "gemini",
       "model": "gemini-3.8-flash-tts",
-      "seconds": 4.22,
-      "sha256": "966d94ed330ec7828b3529c611170369b9e363c7ee3bb26ae9f329e4ee335df4",
+      "seconds": 6.295,
+      "sha256": "8eef2201f354c5aa698804ebbbd3bbe6f26263f0adef26c5387f57a3fe875e05",
       "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
-      "text": "Good. Stay with them. They still need to be checked by EMS.",
-      "voice": "Kore"
-    },
-    "choke_ask": {
-      "engine": "gemini",
-      "model": "gemini-3.8-flash-tts",
-      "seconds": 2.59,
-      "sha256": "8980fd1486dfa32560433b43e7693a90274d1c1273af1f0e756c7ea5ac71b2c2",
-      "style": "Calm, firm, direct question. Brisk, steady pace.",
-      "text": "Possible choking. Can they cough or speak?",
-      "voice": "Kore"
-    },
-    "choke_blows": {
-      "engine": "gemini",
-      "model": "gemini-3.8-flash-tts",
-      "seconds": 4.395,
-      "sha256": "293361c98aac979905f3971c107c028d3c23fc5199dd5013564643419de37f00",
-      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
-      "text": "Lean them forward. Five firm blows between the shoulder blades.",
-      "voice": "Kore"
-    },
-    "choke_calling": {
-      "engine": "gemini",
-      "model": "gemini-3.8-flash-tts",
-      "seconds": 1.51,
-      "sha256": "454ee269c02546412a3b4ac3dfbf77868d12e5c591e0009ded5b8e959663dec3",
-      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
-      "text": "Calling 911 for you.",
-      "voice": "Kore"
-    },
-    "choke_keep_coughing": {
-      "engine": "gemini",
-      "model": "gemini-3.8-flash-tts",
-      "seconds": 4.0,
-      "sha256": "d0703f012d6a2fe869fdf84e9c182eca4f03d7c8c608c813607575059909a247",
-      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
-      "text": "Let them keep coughing. Stay close. Tap if they can't cough.",
-      "voice": "Kore"
-    },
-    "choke_repeat": {
-      "engine": "gemini",
-      "model": "gemini-3.8-flash-tts",
-      "seconds": 5.325,
-      "sha256": "09d724f37bc4c5971e447df0e48f6aeb5618c4b8e2c373e8568504211a205442",
-      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
-      "text": "Repeat until it's out. If they collapse, tap Not responding.",
-      "voice": "Kore"
-    },
-    "choke_thrusts_line": {
-      "engine": "gemini",
-      "model": "gemini-3.8-flash-tts",
-      "seconds": 4.785,
-      "sha256": "90bbe709e83f0d988555d43794b1c5c0d40fc9d9e5e389739381b3b44b90c8c6",
-      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
-      "text": "Fist just above the navel. Five quick thrusts, in and up.",
+      "text": "Can't cough or speak? Call 911. Give back slaps, then abdominal thrusts.",
       "voice": "Kore"
     },
     "confirm_by_tap": {

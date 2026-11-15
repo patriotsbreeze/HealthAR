@@ -16,7 +16,7 @@ public struct ScenarioModule: Sendable, Equatable, Codable {
     }
 
     /// Load order. A module can only point at core and the modules before it.
-    public static let manifest = ["triage.v1", "possible_heart_attack.v1", "possible_broken_bone.v1", "possible_choking.v1"]
+    public static let manifest = ["triage.v1", "possible_heart_attack.v1", "possible_broken_bone.v1"]
 
     public static let triageState = "triage"
     /// The first step when there's an AI to do the assessing: the camera and the bystander's words

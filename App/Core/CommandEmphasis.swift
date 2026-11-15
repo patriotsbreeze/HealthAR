@@ -23,8 +23,6 @@ enum CommandEmphasis {
             terms.item = ["pads"]
         case .injurySite: terms.body = ["limb", "injury"]
         case .aedDevice: terms.item = ["AED"]
-        case .upperBack: terms.body = ["between the shoulder blades", "shoulder blades"]
-        case .upperAbdomen: terms.body = ["just above the navel", "navel"]
         case nil: break
         }
         for body in bodies {

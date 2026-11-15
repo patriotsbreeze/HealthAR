@@ -466,23 +466,6 @@ private func inside(_ rect: CGRect, _ band: CGRect) -> Bool {
         #expect(build(limbOverlay, zones: zones).zone?.chip?.text == "Possible break")
     }
 
-    /// Each choking step draws one ring where the hand or fist goes, named in that step's own words.
-    @Test(arguments: [(BodyZone.Kind.upperBack, "choke_blows"), (.upperAbdomen, "choke_thrusts_line")])
-    func aChokingZoneDrawsARingWithTheStepsWords(kind: BodyZone.Kind, phrase: String) throws {
-        let corners = [CGPoint(x: 0.4, y: 0.3), CGPoint(x: 0.6, y: 0.3), CGPoint(x: 0.6, y: 0.4), CGPoint(x: 0.4, y: 0.4)]
-        let overlay = VisionOverlay(zones: [BodyZone(kind: kind, shape: .polygon(corners), axis: .pi / 2, isLocked: false)])
-        let zone = try #require(ARSceneBuilder.zoneInputs(from: overlay, cues: [], pinLabel: "unused").first)
-        #expect(zone.kind == .press)
-        guard case let .circle(center, radius) = zone.shape else { Issue.record("not a ring: \(zone.shape)"); return }
-        #expect(abs(center.x - 0.5) < 1e-9 && abs(center.y - 0.35) < 1e-9)
-        #expect(abs(radius - 0.1) < 1e-9)
-        #expect(!zone.isLocked)
-        let chip = try #require(zone.chip)
-        let line = try #require(try mergedBundle().text(forPhrase: phrase))
-        #expect(line.lowercased().contains(chip.lowercased()), "\(chip) is not in \(line)")
-        #expect(build(overlay, zones: [zone]).zone?.id == "zone.press")
-    }
-
     @Test func noBodyCueKeepsTheRingAtThePin() {
         #expect(ARSceneBuilder.zoneInputs(from: limbOverlay, cues: [], pinLabel: "Possible break").map(\.kind) == [.press])
         var noRing = limbOverlay

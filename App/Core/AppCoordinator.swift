@@ -147,10 +147,6 @@ final class AppCoordinator {
     /// On assess, the voice AI's sense of a collapse, held as a suggestion: core moves nothing on it
     /// there, and a person taps the ringed button or says "confirm".
     private(set) var voiceSuggestion: SituationAssessment.Suggestion?
-    /// On a flow step, the AI's sense that a less urgent answer is true, such as "they can cough" or
-    /// "it came out". The engine refuses those as moves, so the app rings the step's own button and
-    /// a person taps it or says "confirm".
-    private(set) var flowSuggestion: HumanAction?
 
     /// The one button the AI points to on assess, from the voice AI's report first, else the scene read
     /// at medium or high confidence. It only ever rings a button; nothing moves until a person acts.
@@ -760,7 +756,6 @@ final class AppCoordinator {
         }
         if enters {
             voiceSuggestion = nil
-            flowSuggestion = nil
             // The moment the CPR path begins, so the call shows with the step, not a tick later.
             startCallerAgentIfDue()
             // Vision ends its guide on every overlay change, so this follows it.
@@ -1350,9 +1345,7 @@ final class AppCoordinator {
     static let callerAgentStepSeconds: TimeInterval = 2.5
     /// The CPR path's steps. Entering any of them starts the call once, in the background, so the
     /// rescuer is never stopped to dial: "Calling 911 for you" is said on the way, not asked for.
-    static let callerAgentStates: Set<String> = ["position_patient", "place_hands", "compressions", chokingCallState]
-    /// Where the choking flow says "Calling 911 for you": the patient can't cough or speak.
-    static let chokingCallState = "choke_back_blows"
+    static let callerAgentStates: Set<String> = ["position_patient", "place_hands", "compressions"]
     /// How long "911 notified" stays up after the call ends.
     static let callerAgentDoneSeconds: TimeInterval = 15
 
@@ -1366,10 +1359,8 @@ final class AppCoordinator {
     /// A scripted call between an AI agent and a mock dispatcher, built from the caller script, so the
     /// log shows what an agent would say. Nothing is dialed, it's labeled a simulation, and it moves
     /// no step: the rescuer still taps Called.
-    static func callerAgentLines(_ script: CallerScript, choking: Bool = false) -> [String] {
-        let done = choking
-            ? "The caller is giving back blows and abdominal thrusts, coached by the app."
-            : script.actions.isEmpty ? "The caller is getting ready to start CPR, coached by the app." : script.actions.joined(separator: ", ") + "."
+    static func callerAgentLines(_ script: CallerScript) -> [String] {
+        let done = script.actions.isEmpty ? "The caller is getting ready to start CPR, coached by the app." : script.actions.joined(separator: ", ") + "."
         return [
             "911 agent: calling the mock dispatcher. Simulation, no real call is placed.",
             "Dispatcher: 911, what's the address of your emergency?",
@@ -1394,7 +1385,7 @@ final class AppCoordinator {
         guard callerAgentStatus != .calling else { return }
         callerAgentRan = true
         callerAgentStatus = .calling
-        let lines = Self.callerAgentLines(callerScript, choking: state.stateID == Self.chokingCallState)
+        let lines = Self.callerAgentLines(callerScript)
         let round = assessRound
         callerAgentTask = Task { [weak self] in
             for line in lines {
@@ -1444,12 +1435,8 @@ final class AppCoordinator {
 
     /// A collapse report on assess, which core held, becomes the ringed button.
     private func holdAsSuggestion(_ proposal: ModelProposal) {
-        guard case let .reportFinding(finding, _, confidence) = proposal.action, confidence != .low else { return }
-        if let action = Self.suggestedAction(for: finding, on: definition), controls.contains(where: { $0.action == action }) {
-            flowSuggestion = action
-            return
-        }
-        guard state.stateID == ScenarioModule.assessState else { return }
+        guard state.stateID == ScenarioModule.assessState,
+              case let .reportFinding(finding, _, confidence) = proposal.action, confidence != .low else { return }
         switch finding {
         case .unresponsive: voiceSuggestion = .notResponding
         case .notBreathing, .abnormalBreathing: voiceSuggestion = .notBreathing
@@ -1458,29 +1445,11 @@ final class AppCoordinator {
         }
     }
 
-    /// The step's button a lowering report points to, if the step has one. Only these: anything else
-    /// the AI reports either moves the step by its own edge or only goes on the record.
-    static func suggestedAction(for finding: Finding, on definition: StateDefinition?) -> HumanAction? {
-        guard let definition, definition.kind == .flow else { return nil }
-        switch finding {
-        case .canCough where definition.question == .canCoughOrSpeak: return .yes
-        case .objectOut: return .objectOut
-        default: return nil
-        }
-    }
-
     /// "Confirm" from the rescuer presses the ringed button, as a tap would. Their own words, from the
     /// live transcript of the mic: the AI's speech is a separate transcript and can't confirm anything.
     /// With no button to press, it confirms the emergency on screen instead.
     private func confirmIfSaid() {
         guard heardPending.range(of: #"\bconfirm(ed)?\b"#, options: [.regularExpression, .caseInsensitive]) != nil else { return }
-        if let action = flowSuggestion {
-            flushHeard()
-            appendLog(.heard, "Confirmed by voice: \(RescueControls.title(for: action))")
-            flowSuggestion = nil
-            perform(action)
-            return
-        }
         if let suggestion = assessSuggestion, let action = suggestion.confirmAction {
             flushHeard()
             appendLog(.heard, "Confirmed by voice: \(suggestion.rawValue.replacingOccurrences(of: "_", with: " "))")
@@ -1587,7 +1556,6 @@ final class AppCoordinator {
         spokenCommandOverlapped = false
         sceneRead = nil
         voiceSuggestion = nil
-        flowSuggestion = nil
         assessmentLog = []
         assessmentFailed = false
         assessing = false

@@ -32,9 +32,9 @@ enum ProtocolLoader {
         return loaded
     }
 
-    /// The demo has two modes: a collapse goes down the arrest path, and choking to its own flow. Only
-    /// the module that holds assess and the choking flow load, so heart attack and broken bone can't be reached.
-    static let demoModules = ["triage.v1", "possible_choking.v1"]
+    /// The demo has two modes: a collapse goes down the arrest path, and choking to its own step. Only
+    /// the module that holds assess and choking loads, so heart attack and broken bone can't be reached.
+    static let demoModules = ["triage.v1"]
     /// Assess's ways out that lead to neither mode: the awake triage and the general talk.
     static let demoClosedTargets: Set<String> = ["triage", "general_talk"]
 

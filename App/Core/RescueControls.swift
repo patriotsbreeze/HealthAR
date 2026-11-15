@@ -81,7 +81,7 @@ enum RescueControls {
 
     /// Fixed, because each button's edge comes from its own module, and load order isn't reading order.
     static func triageGroup(_ controls: [RescueControl]) -> [RescueControl] {
-        [HumanAction.triageChest, .triageLimb, .triageChoking, .triageOther].compactMap { action in
+        [HumanAction.triageChest, .triageLimb, .triageOther, .triageChoking].compactMap { action in
             controls.first { $0.action == action }
         }
     }
@@ -163,8 +163,6 @@ enum RescueControls {
         case .dispatcherOn: "Open dispatcher"
         case .dispatcherOff: "Close dispatcher"
         case .secondPerson: "Someone is with me"
-        case .cantCough: "Can't cough or speak now"
-        case .objectOut: "It came out"
         }
     }
 }

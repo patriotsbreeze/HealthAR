@@ -148,7 +148,7 @@ import Testing
         expectOffline(fixture)
     }
 
-    @Test(arguments: ["triage", "general_talk", "choke_check", "choke_back_blows", "chest_call", "chest_aspirin_check", "chest_aspirin", "chest_wait", "chest_scan"])
+    @Test(arguments: ["triage", "general_talk", "choking_talk", "chest_call", "chest_aspirin_check", "chest_aspirin", "chest_wait", "chest_scan"])
     func aTappedCollapseFromAnyAwakeStateWaitsOnTheBreathingQuestion(id: String) throws {
         let fixture = try begun()
         let coordinator = fixture.coordinator
@@ -352,7 +352,7 @@ import Testing
     @Test func awakeVoiceOpensWhereTheModulesSayAndNowhereElse() throws {
         let bundle = try mergedBundle()
         let open = Set(bundle.definition.speechGate.openStates)
-        #expect(open.isSuperset(of: ["triage", "general_talk", "choke_cough", "choke_out", "chest_wait", "limb_wait", "limb_danger"]))
+        #expect(open.isSuperset(of: ["triage", "general_talk", "choking_talk", "chest_wait", "limb_wait", "limb_danger"]))
         let fixture = try Fixture(bundle: bundle)
         fixture.coordinator.beginRescue()
         // Assess only ever opens a rescue, so nothing walks to it. `AssessTests` checks its voice.

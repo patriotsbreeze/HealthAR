@@ -27,10 +27,6 @@ public struct BodyZone: Sendable, Equatable {
         case limb(LimbSegment)
         /// Where to press on a tapped injury, sized to a palm at the pin's distance.
         case pressRing
-        /// Between the shoulder blades of a standing patient, for back blows.
-        case upperBack
-        /// Just above the navel of a standing patient, for abdominal thrusts.
-        case upperAbdomen
     }
 
     public enum Shape: Sendable, Equatable {
@@ -398,15 +394,6 @@ public struct VisionOverlay: Sendable, Equatable {
                 overlay = VisionOverlay(aedArrow: mapping.arrow(to: carriedAED, camera: camera.pose))
             } else {
                 overlay = .empty
-            }
-        case .upperBack, .upperAbdomen:
-            overlay = .empty
-            if zoneFresh, let regions {
-                let isBack = target == .upperBack
-                if let rect = isBack ? regions.upperBack : regions.upperAbdomen {
-                    overlay.zones = [mapping.zone(rect, kind: isBack ? .upperBack : .upperAbdomen, isLocked: regions.uprightLocked)]
-                }
-                if let outline = regions.outline { overlay.outline = mapping.outline(outline) }
             }
         case .padZones:
             overlay = .empty

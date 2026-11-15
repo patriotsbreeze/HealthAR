@@ -10,7 +10,7 @@
     { "id": 4, "state": "triage", "utterance": "Oh god, she fell off the bike and her arm is bent all wrong.", "expected_findings": ["limb_injury"], "expected_final_states": ["limb_start"] },
     { "id": 5, "state": "triage", "utterance": "There's blood everywhere, it's pouring out of his leg and it won't stop!", "expected_findings": ["heavy_bleeding"], "expected_final_states": ["limb_danger"] },
     { "id": 6, "state": "triage", "utterance": "He fell off the ladder and now he says his neck really hurts.", "expected_findings": ["neck_back_injury"], "expected_final_states": ["limb_danger"] },
-    { "id": 7, "state": "triage", "utterance": "She's choking on something! She can't cough, she can't say anything!", "expected_findings": ["choking"], "expected_final_states": ["choke_check"] },
+    { "id": 7, "state": "triage", "utterance": "She's choking on something! She can't cough, she can't say anything!", "expected_findings": ["choking"], "expected_final_states": ["choking_talk"] },
     { "id": 8, "state": "triage", "utterance": "His face is drooping on one side and his words are all slurred.", "expected_findings": ["other_concern"], "expected_final_states": ["general_talk"], "note": "Stroke-like, with no flow of its own." },
     { "id": 9, "state": "chest_wait", "utterance": "He just collapsed! He's not responding, he won't wake up!", "expected_findings": ["unresponsive", "not_breathing", "abnormal_breathing"], "expected_final_states": ["intake_breathing"] },
     { "id": 10, "state": "triage", "utterance": "My chest really hurts. It feels like someone's sitting on me.", "expected_findings": ["chest_pain"], "expected_final_states": ["chest_call"] },

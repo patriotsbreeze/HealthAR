@@ -8,8 +8,6 @@ enum GuideWords {
         switch guide {
         case .sitRest: "chest_sit"
         case .supportLimb: "limb_support"
-        case .backBlows: "choke_blows"
-        case .abdominalThrusts: "choke_thrusts_line"
         }
     }
 
@@ -39,8 +37,6 @@ struct GuideCard: View {
                 switch guide {
                 case .sitRest: SitRestPicture()
                 case .supportLimb: SupportLimbPicture()
-                case .backBlows: UprightTorsoPicture(along: UprightTorsoPicture.upperBack, mark: CGSize(width: 0.36, height: 0.16))
-                case .abdominalThrusts: UprightTorsoPicture(along: UprightTorsoPicture.upperAbdomen, mark: CGSize(width: 0.22, height: 0.12))
                 }
             }
         }
@@ -105,35 +101,6 @@ private struct SupportLimbPicture: View {
                 .union(ARGeometry.segmentCapsule(from: CGPoint(x: 0.62 * w, y: 0.42 * h), to: CGPoint(x: 0.86 * w, y: 0.20 * h), width: 0.14 * h))
             context.fill(limb, with: .color(DS.Colors.target.opacity(DS.AR.fill)))
             context.stroke(limb, with: .color(DS.Colors.target), style: StrokeStyle(lineWidth: 2.5, lineJoin: .round))
-        }
-    }
-}
-
-/// A standing torso with the spot to act on in the target color, where the AR puts its mark, so the
-/// card and the camera agree. The same fractions down from the shoulders as `BodyRegionMap`.
-private struct UprightTorsoPicture: View {
-    static let upperBack = 0.25
-    static let upperAbdomen = 0.70
-
-    /// From the shoulders (0) to the hips (1).
-    let along: Double
-    /// As fractions of the torso's width and length.
-    let mark: CGSize
-
-    var body: some View {
-        Canvas { context, size in
-            let w = size.width, h = size.height
-            let head = CGRect(x: 0.5 * w - 0.09 * h, y: 0.02 * h, width: 0.18 * h, height: 0.18 * h)
-            let torso = CGRect(x: 0.5 * w - 0.2 * h, y: 0.24 * h, width: 0.4 * h, height: 0.72 * h)
-            context.stroke(Path(ellipseIn: head), with: .color(DS.Colors.textSecondary), lineWidth: 1.5)
-            context.stroke(Path(roundedRect: torso, cornerRadius: 0.1 * h, style: .continuous), with: .color(DS.Colors.textSecondary), lineWidth: 1.5)
-            let center = CGPoint(x: torso.midX, y: torso.minY + along * torso.height)
-            let spot = Path(ellipseIn: CGRect(
-                x: center.x - mark.width * torso.width / 2, y: center.y - mark.height * torso.height / 2,
-                width: mark.width * torso.width, height: mark.height * torso.height
-            ))
-            context.fill(spot, with: .color(DS.Colors.target.opacity(DS.AR.fill)))
-            context.stroke(spot, with: .color(DS.Colors.target), lineWidth: 2.5)
         }
     }
 }

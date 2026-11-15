@@ -40,7 +40,7 @@ import Testing
     @Test(arguments: [
         (Finding.chestPain, "chest_call"), (.otherHeartSigns, "chest_call"),
         (.limbInjury, "limb_start"), (.heavyBleeding, "limb_danger"), (.limbDiscolored, "limb_danger"), (.neckBackInjury, "limb_danger"),
-        (.choking, "choke_check"), (.otherConcern, "general_talk"),
+        (.choking, "choking_talk"), (.otherConcern, "general_talk"),
     ])
     func aSureReportRoutes(finding: Finding, to target: String) throws {
         var session = Session(engine: try engine())

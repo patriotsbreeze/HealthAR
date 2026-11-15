@@ -116,8 +116,6 @@ enum PoseRequest: Sendable, Equatable {
     case lying
     /// `anchor` is the pin in this frame's capture image, or nil once it is gone or out of sight.
     case nearPin(anchor: SIMD2<Double>?)
-    /// The nearest person in any pose, for the choking marks.
-    case upright
     /// Goes through `rescuer(_:record:)`, never `process`.
     case rescuer
 }
@@ -252,8 +250,6 @@ final class PoseWorker: Sendable {
                 findLying(people, record: record, in: &state)
             case let .nearPin(anchor):
                 findNearPin(people, pin: anchor, record: record, in: &state)
-            case .upright:
-                findUpright(people, record: record, in: &state)
             case .rescuer:
                 break
             }
@@ -334,26 +330,6 @@ final class PoseWorker: Sendable {
             state.latest = nil
             state.latestPose = nil
         }
-    }
-
-    /// The nearest person by shoulder span on screen, which is the patient when the phone is pointed
-    /// at them. Ages out like the lying marks, so a lost person takes the mark with them.
-    private func findUpright(_ people: [DetectedPerson], record: FrameRecord, in state: inout State) {
-        let aspect = record.pose.imageAspect
-        guard let person = people.max(by: { $0.shoulderSpan < $1.shoulderSpan }) else {
-            state.scan.record(foundTarget: false)
-            state.lastNoTargetReason = .torsoUnusable
-            return
-        }
-        let smoothed = state.smoother.smooth(person, at: record.timestamp, imageAspect: aspect)
-        guard let regions = BodyRegionMap.upright(smoothed, imageAspect: aspect, alone: people.count == 1) else {
-            state.scan.record(foundTarget: false)
-            state.lastNoTargetReason = .torsoUnusable
-            return
-        }
-        state.scan.record(foundTarget: true)
-        state.lastNoTargetReason = nil
-        state.latestPose = TimedPose(regions: regions, joints: smoothed.visibleJoints, frameID: record.id, capturedAt: record.timestamp)
     }
 
     private func findNearPin(_ people: [DetectedPerson], pin: SIMD2<Double>?, record: FrameRecord, in state: inout State) {

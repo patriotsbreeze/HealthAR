@@ -3,10 +3,9 @@ import Testing
 @testable import RescueCore
 
 private let everyAwakeState = [
-    "triage", "general_talk",
+    "triage", "general_talk", "choking_talk",
     "chest_call", "chest_aspirin_check", "chest_aspirin", "chest_wait", "chest_scan",
     "limb_start", "limb_flags", "limb_splint", "limb_wait", "limb_danger",
-    "choke_check", "choke_cough", "choke_back_blows", "choke_thrusts", "choke_out",
 ]
 
 /// What has to stay true of the merged graph. Numbers match the invariants in SAFETY.md. The arrest
@@ -34,14 +33,9 @@ private let everyAwakeState = [
         session.human(.yes)
         if id == "triage" { return }
         if id == "general_talk" { return session.human(.triageOther) }
-        if id.hasPrefix("choke_") {
-            session.human(.triageChoking)
-            if id == "choke_check" { return }
-            if id == "choke_cough" { return session.human(.yes) }
-            session.human(.no)
-            if id == "choke_back_blows" { return }
-            if id == "choke_out" { return session.human(.objectOut) }
-            return session.human(.done)
+        if id == "choking_talk" {
+            session.human(.triageOther)
+            return session.human(.triageChoking)
         }
         if id.hasPrefix("limb_") {
             session.human(.triageLimb)
@@ -68,7 +62,7 @@ private let everyAwakeState = [
     @Test func theModulesThisSuiteCoversLoaded() throws {
         let bundle = try loadMergedBundle()
         #expect(bundle.moduleFailures.isEmpty, "\(bundle.moduleFailures)")
-        #expect(bundle.flows.map(\.id) == ["possible_heart_attack", "possible_broken_bone", "possible_choking"])
+        #expect(bundle.flows.map(\.id) == ["possible_heart_attack", "possible_broken_bone"])
         let awake = bundle.definition.states.filter(\.kind.isAwake).map(\.id)
         // Assess is only ever where a rescue opens, so no walk from core reaches it. `AssessTests` covers it.
         #expect(Set(awake) == Set(everyAwakeState + [ScenarioModule.assessState]), "a new state needs a walk below")
@@ -402,20 +396,14 @@ private let everyAwakeState = [
     }
 
     /// A flow that leaned on another would go down with it, whichever file was the bad one.
-    @Test(arguments: [
-        ("possible_heart_attack", ["possible_broken_bone", "possible_choking"]),
-        ("possible_broken_bone", ["possible_heart_attack", "possible_choking"]),
-        ("possible_choking", ["possible_heart_attack", "possible_broken_bone"]),
-    ])
-    func eachFlowLoadsWhole(without dropped: String, kept: [String]) throws {
+    @Test(arguments: [("possible_heart_attack", "possible_broken_bone"), ("possible_broken_bone", "possible_heart_attack")])
+    func eachFlowLoadsWhole(without dropped: String, kept: String) throws {
         let whole = try loadMergedBundle()
         let sources = try shippedSources().map { $0.id == "\(dropped).v1" ? ModuleSource(id: $0.id, data: nil) : $0 }
         let merged = try loadBundle().merging(modules: sources, pack: try pack())
         #expect(merged.moduleFailures == [ModuleFailure(id: "\(dropped).v1", reason: "missing")])
-        #expect(merged.flows.map(\.id) == kept)
-        for flow in kept {
-            #expect(merged.definition.states.filter { $0.flow == flow } == whole.definition.states.filter { $0.flow == flow })
-        }
+        #expect(merged.flows.map(\.id) == [kept])
+        #expect(merged.definition.states.filter { $0.flow == kept } == whole.definition.states.filter { $0.flow == kept })
         #expect(!merged.definition.states.contains { $0.flow == dropped })
     }
 
@@ -495,7 +483,7 @@ private let everyAwakeState = [
             let flags = TranscriptValidator.check(phrase.text, profile: .awake)
             #expect(flags.map(\.category) == (phrase.id == "aspirin_give" ? [.dose] : []), "\(phrase.id): \(flags)")
             let hasNumber = phrase.text.range(of: #"\d"#, options: .regularExpression) != nil
-            #expect(hasNumber == ["aspirin_give", "general_intro", "limb_seek_care", "triage_recheck", "choke_calling"].contains(phrase.id), "\(phrase.id)")
+            #expect(hasNumber == ["aspirin_give", "general_intro", "choking_steps", "limb_seek_care", "triage_recheck"].contains(phrase.id), "\(phrase.id)")
         }
     }
 
@@ -697,6 +685,7 @@ private let everyAwakeState = [
         ("triage_ask", "Tell me what's happening, or tap below.", "Project"),
         ("triage_recheck", "Call 911 if unsure. If they stop responding, tap Not responding now.", "Project proposal, needs clinician approval. The static card's call prompt and re-check, for a Yes that was a mis-tap"),
         ("general_intro", "Call 911. Follow the dispatcher. Stay with them.", "Project"),
+        ("choking_steps", "Can't cough or speak? Call 911. Give back slaps, then abdominal thrusts.", "ILCOR 2025, weak"),
         ("chest_possible", "Possible heart attack.", "AHA 2024, 1 C-LD"),
         ("chest_sit", "Sit them comfortably. Cushion behind their back.", "AHA/Red Cross First Aid 2024, positioning, COR 1 C-EO. St John Ambulance, heart attack, cushions behind them. The cushion is a proposal"),
         ("aspirin_check", "Any aspirin allergy, injury, doctor's warning, or not fully alert?", "AHA 2024, 2b B-NR"),
@@ -705,13 +694,6 @@ private let everyAwakeState = [
         ("aspirin_stop", "Do not give aspirin. Wait for EMS.", "AHA 2024, 2b B-NR"),
         ("chest_wait_line", "Stay with them until EMS arrives. If they collapse, tap Not responding now.", "AHA 2024, 1 C-LD, plus project"),
         ("aed_look", "Sweep the phone around. Look for an AED, in case they collapse.", "Project"),
-        ("choke_ask", "Possible choking. Can they cough or speak?", "AHA 2025 Part 7, choking, severe signs"),
-        ("choke_keep_coughing", "Let them keep coughing. Stay close. Tap if they can't cough.", "AHA 2025 Part 7, choking, mild: encourage coughing"),
-        ("choke_calling", "Calling 911 for you.", "AHA 2025 Part 7, activate EMS. Project design: the 911 agent places the call in the background, simulated in this build"),
-        ("choke_blows", "Lean them forward. Five firm blows between the shoulder blades.", "AHA 2025 Part 7, choking, 5 back blows with the heel of the hand"),
-        ("choke_thrusts_line", "Fist just above the navel. Five quick thrusts, in and up.", "AHA 2025 Part 7, choking, 5 abdominal thrusts"),
-        ("choke_repeat", "Repeat until it's out. If they collapse, tap Not responding.", "AHA 2025 Part 7, choking, repeat until expelled or unresponsive"),
-        ("choke_after", "Good. Stay with them. They still need to be checked by EMS.", "AHA 2025 Part 7, choking: anyone given abdominal thrusts needs evaluation"),
         ("aed_found", "If there's an AED, have someone bring it. Follow the arrow if it shows.", "Project"),
         ("limb_possible", "Possible broken bone. Keep it as found.", "AHA 2024, 2b C-EO"),
         ("limb_danger_ask", "Heavy bleeding? Neck or back pain? Limb blue or pale?", "AHA 2024, 1 C-EO"),

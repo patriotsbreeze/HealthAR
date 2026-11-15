@@ -55,9 +55,3 @@ private func demand(
     #expect(PoseDemand.nearPin.framesPerSecond(load: VisionLoad(uplinkIntervalScale: 1, poseFramesPerSecond: 5, arEnabled: true), now: 0) == 5)
     #expect(PoseDemand.none.framesPerSecond(load: ThermalGovernor.load(for: .nominal), now: 0) == 0)
 }
-
-@Test func theChokingStepsWantTheNearestPersonForTheWholeStep() {
-    #expect(demand(.upperBack) == .upright(since: 10))
-    #expect(demand(.upperAbdomen) == .upright(since: 10))
-    #expect(demand(.upperAbdomen, now: 500) == .upright(since: 10))
-}
