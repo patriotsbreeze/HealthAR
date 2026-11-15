@@ -270,6 +270,33 @@
       "text": "Correction. Do not stop until EMS takes over or they move.",
       "voice": "Kore"
     },
+    "form_follow_beat": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 1.05,
+      "sha256": "757e952e0e75f4aad569b8b024820c92c66c8bb561f36e36c7d051be86b68dff",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Push with the beat.",
+      "voice": "Kore"
+    },
+    "form_hands_center": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 2.01,
+      "sha256": "c869311aaba0843071d38223963423c65496f29e61adddfd9226d0b4ecae769b",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Hands on the center of the chest.",
+      "voice": "Kore"
+    },
+    "form_lock_elbows": {
+      "engine": "gemini",
+      "model": "gemini-3.8-flash-tts",
+      "seconds": 1.815,
+      "sha256": "1af9bb2859d99b834a42af95b6396d458f3a1f8c06e73a5b7c629912c25cad82",
+      "style": "Calm, firm and decisive, with quiet authority. Brisk, steady pace.",
+      "text": "Lock your elbows.",
+      "voice": "Kore"
+    },
     "gasping_not_normal": {
       "engine": "gemini",
       "model": "gemini-3.8-flash-tts",

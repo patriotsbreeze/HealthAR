@@ -37,6 +37,9 @@
     { "id": "correct_death", "text": "Correction. Keep going. Only EMS can decide that.", "citation": "Project safety rule. No death statements from the model" },
     { "id": "correct_reassure", "text": "Correction. If you are not sure, treat it as not breathing.", "citation": "AHA 2025 Part 7, abnormal breathing" },
     { "id": "rate_faster", "text": "A bit faster.", "citation": "AHA 2025 Part 7, compression rate. Experimental rate feedback" },
-    { "id": "rate_slower", "text": "A bit slower.", "citation": "AHA 2025 Part 7, compression rate. Experimental rate feedback" }
+    { "id": "rate_slower", "text": "A bit slower.", "citation": "AHA 2025 Part 7, compression rate. Experimental rate feedback" },
+    { "id": "form_lock_elbows", "text": "Lock your elbows.", "citation": "AHA 2025 Part 7, compression technique. Experimental form feedback" },
+    { "id": "form_hands_center", "text": "Hands on the center of the chest.", "citation": "AHA 2025 Part 7, hand position. Experimental form feedback" },
+    { "id": "form_follow_beat", "text": "Push with the beat.", "citation": "AHA 2025 Part 7, compression rate. Experimental form feedback" }
   ]
 }

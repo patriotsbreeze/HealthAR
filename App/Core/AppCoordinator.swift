@@ -373,6 +373,8 @@ final class AppCoordinator {
                 awakeLocked: awakeLocked,
                 noCPRToResume: !state.cprStarted && enteredAwake
             )
+            // Pushing is the job: no room scan from compressions, by tap or by voice.
+            .filter { control in !(FormCoach.pushingStates.contains(state.stateID) && control.action == .scan) }
         } ?? []
     }
 
@@ -427,6 +429,9 @@ final class AppCoordinator {
     private(set) var ghostShowsBeat = false
     /// The grip reminder's window after the beat starts.
     private(set) var gripReminderUntil: TimeInterval?
+    /// The form score, rate and correction while pushing, read each tick. Empty on every other step.
+    private(set) var formReading = FormCoach.Reading()
+    @ObservationIgnored private var formCoach = FormCoach()
     nonisolated static let gripReminderSeconds: TimeInterval = 8
 
     /// The looping grip in the corner: on place_hands, and for the first seconds after the beat
@@ -707,6 +712,7 @@ final class AppCoordinator {
         if let voicePressed, now >= voicePressed.expiresAt { self.voicePressed = nil }
         phrasesSounding = phrasesSounding.filter { now - $0.value < Self.phraseSoundingCap }
         pressIfSaid(at: now)
+        coachForm(at: now)
         retryLocate(at: now)
         watchAIVoice(at: now)
         assessIfDue(at: now)
@@ -1470,6 +1476,24 @@ final class AppCoordinator {
             perform(action)
         } else if callerAgentStatus == .idle {
             spawnCallerAgent()
+        }
+    }
+
+    /// Scores the push and says one correction at a time, in a gap in the app's and the AI's speech.
+    private func coachForm(at now: TimeInterval) {
+        guard let id = definition?.id, FormCoach.pushingStates.contains(id), !aedTalking else {
+            if formReading != FormCoach.Reading() {
+                formReading = FormCoach.Reading()
+                formCoach.reset()
+            }
+            return
+        }
+        let (reading, say) = formCoach.update(vision.compressionFeedback(), at: now, canSpeak: !ownAudioSounding(at: now))
+        if reading != formReading { formReading = reading }
+        if let say {
+            let phrase = FormCoach.phraseID(for: say)
+            phrasesSounding[phrase] = now
+            audio.play(phraseID: phrase)
         }
     }
 
