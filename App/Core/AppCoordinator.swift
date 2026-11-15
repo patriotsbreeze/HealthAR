@@ -325,6 +325,7 @@ final class AppCoordinator {
         stopLive()
         if showsCamera { vision.stop() }
         audio.setMetronome(on: false)
+        vision.clearPatientLock()
         vision.setGhostBeat(on: false)
         gripReminderUntil = nil
         metronomeOn = false
@@ -617,8 +618,35 @@ final class AppCoordinator {
 
     /// Goes no further than vision, and nothing waits on it. The band grows when a step's rows go, so a tap
     /// aimed at those can land here, and it waits like they do.
+    /// Anywhere the camera is up but the step wants an injury pin, a tap picks the patient: the body and
+    /// the ghost lock onto the person lying down where it lands.
+    var acceptsPatientTap: Bool { cameraLive && overlayTarget != .injurySite }
+
+    var acceptsCameraTap: Bool { acceptsInjuryTap || acceptsPatientTap }
+
+    private var lastPatientLock = PatientLockStatus.none
+
+    private func notePatientLock(at now: TimeInterval) {
+        let lock = vision.patientLock
+        guard lock != lastPatientLock else { return }
+        lastPatientLock = lock
+        switch lock {
+        case .locked:
+            voicePressed = Prompt(text: "Locked on this person", expiresAt: now + Self.voicePressedSeconds)
+        case .notLying:
+            pinMessage = Prompt(text: "Tap the person lying down", expiresAt: now + Self.pinMessageSeconds)
+        case .none, .locking:
+            break
+        }
+    }
+
     func tapCamera(at point: CGPoint) {
-        guard acceptsInjuryTap, !stepIsSettling else { return }
+        if !acceptsInjuryTap {
+            guard acceptsPatientTap else { return }
+            vision.lockPatient(atViewPoint: point)
+            return
+        }
+        guard !stepIsSettling else { return }
         let vision = vision
         Task { [weak self] in
             let result = await vision.placeInjuryPin(atViewPoint: point)
@@ -704,6 +732,7 @@ final class AppCoordinator {
         if case let .done(at) = callerAgentStatus, now - at >= Self.callerAgentDoneSeconds { callerAgentStatus = .idle }
         let ghost = showsPulse && cameraLive && metronomeOn && vision.showsGhost
         if ghost != ghostShowsBeat { ghostShowsBeat = ghost }
+        notePatientLock(at: now)
         let talking = liveConnected && audio.modelAudioPending
         if talking != aiTalking {
             if !talking { ownAudioEndedAt = now }

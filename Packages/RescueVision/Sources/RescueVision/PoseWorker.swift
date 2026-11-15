@@ -154,6 +154,15 @@ final class PoseWorker: Sendable {
         var patientSeenAt: TimeInterval?
         /// The frame whose pick for the patient lying down was upright by depth: sitting, standing or kneeling.
         var uprightFrameID: UInt64?
+        /// The patient's torso centre, in capture image space, followed frame to frame, so only they get
+        /// the body however many others lie in view. Set by a tap, or by the first one found lying down.
+        var lock: SIMD2<Double>?
+        var lockSeenAt: TimeInterval?
+        /// A tap waiting for the next frame to say who it landed on.
+        var pendingLock: SIMD2<Double>?
+        var lockStatus = PatientLockStatus.none
+        /// Bumped whenever the lock moves to someone new, so the ghost can kneel by them instead.
+        var lockGeneration: UInt64 = 0
         /// Hands are looked for only while the hand placement guide is up, since it costs a second request.
         var wantsHands = false
         var hands: TimedHands?
@@ -203,6 +212,30 @@ final class PoseWorker: Sendable {
     var snapshot: (latest: TimedTorsoTarget?, pose: TimedPose?) { state.withLock { ($0.latest, $0.latestPose) } }
     var lastNoTargetReason: NoTargetReason? { state.withLock { $0.lastNoTargetReason } }
     var currentRotation: CaptureRotation { state.withLock { $0.scan.current } }
+    var lockStatus: PatientLockStatus { state.withLock { $0.lockStatus } }
+    var lockGeneration: UInt64 { state.withLock { $0.lockGeneration } }
+
+    /// A locked patient out of sight this long is let go, and the one person lying down is the patient again.
+    static let lockLostSeconds: TimeInterval = 2
+
+    /// The next frame finds who's lying down nearest this point, and locks onto them if anyone is.
+    func requestLock(at image: SIMD2<Double>) {
+        state.withLock { state in
+            state.pendingLock = image
+            state.lockStatus = .locking
+        }
+    }
+
+    /// For a new rescue: the next person found lying down is the patient.
+    func clearLock() {
+        state.withLock { state in
+            state.lock = nil
+            state.lockSeenAt = nil
+            state.pendingLock = nil
+            state.lockStatus = .none
+            state.lockGeneration += 1
+        }
+    }
     var holdsLimb: Bool { state.withLock { $0.held != nil } }
 
     /// For a new step. The rotation scan is kept, since the phone is still held the same way.
@@ -228,7 +261,7 @@ final class PoseWorker: Sendable {
     @concurrent func rescuer(_ frame: CapturedFrame, record: FrameRecord) async -> CompressionSample? {
         let generation = state.withLock { $0.generation }
         let detection = await detect(frame, .right)
-        publishJoints(detection, record: record, generation: generation, depth: frame.bodyDepth)
+        _ = publishJoints(detection, record: record, generation: generation, depth: frame.bodyDepth)
         await findHands(frame, rotation: .right, record: record, generation: generation)
         let people = detection.people
         let gravity = record.tracking == .notAvailable ? nil : record.pose.gravityInImage
@@ -238,7 +271,7 @@ final class PoseWorker: Sendable {
     @concurrent func process(_ frame: CapturedFrame, record: FrameRecord, request: PoseRequest = .lying) async {
         let (rotation, generation) = state.withLock { ($0.scan.current, $0.generation) }
         let detection = await detect(frame, rotation)
-        publishJoints(detection, record: record, generation: generation, depth: frame.bodyDepth)
+        let sel = publishJoints(detection, record: record, generation: generation, depth: frame.bodyDepth)
         await findHands(frame, rotation: rotation, record: record, generation: generation)
         let people = detection.people
         state.withLock { state in
@@ -247,7 +280,7 @@ final class PoseWorker: Sendable {
             case .joints:
                 state.scan.record(foundTarget: !detection.joints.isEmpty || detection.skeletons.contains { !$0.joints.isEmpty })
             case .lying:
-                findLying(people, record: record, in: &state)
+                findLying(sel, record: record, in: &state)
             case let .nearPin(anchor):
                 findNearPin(people, pin: anchor, record: record, in: &state)
             case .rescuer:
@@ -265,9 +298,39 @@ final class PoseWorker: Sendable {
         }
     }
 
-    private func publishJoints(_ detection: PoseDetection, record: FrameRecord, generation: UInt64, depth: BodyDepth?) {
+    /// The patient for this frame, picked once so the body, the ring and the ghost all follow the same
+    /// person: the one locked onto if there is one, else the one person lying down.
+    private func pick(_ people: [DetectedPerson], record: FrameRecord) -> (selection: PatientSelection, lock: SIMD2<Double>?, pending: Bool) {
+        let gravity = record.tracking == .notAvailable ? nil : record.pose.gravityInImage
+        let aspect = record.pose.imageAspect
+        let (pending, lock, seenAt) = state.withLock { ($0.pendingLock, $0.lock, $0.lockSeenAt) }
+        if let pending {
+            let tapped = selector.select(people: people, gravity: gravity, imageAspect: aspect, lock: pending)
+            if case .patient = tapped { return (tapped, pending, true) }
+            // Nobody lying down where the tap landed: the patient there already keeps the body.
+            let kept = lock.map { selector.select(people: people, gravity: gravity, imageAspect: aspect, lock: $0) }
+            if let kept, case .patient = kept { return (kept, nil, true) }
+            return (selector.select(people: people, gravity: gravity, imageAspect: aspect), nil, true)
+        }
+        if let lock {
+            let locked = selector.select(people: people, gravity: gravity, imageAspect: aspect, lock: lock)
+            let lost = seenAt.map { record.timestamp - $0 > Self.lockLostSeconds } ?? true
+            if case .patient = locked { return (locked, lock, false) }
+            if !lost { return (locked, lock, false) }
+        }
+        return (selector.select(people: people, gravity: gravity, imageAspect: aspect), nil, false)
+    }
+
+    private static func torsoCentre(_ person: DetectedPerson) -> SIMD2<Double> {
+        let torso = person.torso
+        return (torso.leftShoulder + torso.rightShoulder + torso.leftHip + torso.rightHip) / 4
+    }
+
+    @discardableResult
+    private func publishJoints(_ detection: PoseDetection, record: FrameRecord, generation: UInt64, depth: BodyDepth?) -> PatientSelection {
         var fitted: PatientBodyPlacement?
-        let sel = selector.select(people: detection.people, gravity: record.pose.gravityInImage, imageAspect: record.pose.imageAspect)
+        let picked = pick(detection.people, record: record)
+        let sel = picked.selection
         // Only someone lying down gets the 3D body. Anyone sitting or standing gets none.
         // The image alone can take someone seated for someone lying down, looking down at them. Depth
         // can't: a torso it finds upright is never the patient, whatever its angle on screen.
@@ -282,25 +345,52 @@ final class PoseWorker: Sendable {
         if case let .patient(person) = sel, !upright {
             chest = TimedChestEstimate.estimate(person: person, depth: depth, record: record)
         }
+        var patient: DetectedPerson?
+        if case let .patient(person) = sel, !upright { patient = person }
         state.withLock { state in
             guard state.generation == generation else { return }
             state.uprightFrameID = upright ? record.id : nil
-            if case .patient = sel, !upright { state.patientSeenAt = record.timestamp }
-            state.jointPose = TimedPose(regions: BodyRegions(), joints: detection.joints, skeletons: detection.skeletons, frameID: record.id, capturedAt: record.timestamp)
+            if picked.pending {
+                // A tap lands on someone lying down or on nothing; it never moves the lock elsewhere.
+                state.pendingLock = nil
+                if let patient, picked.lock != nil {
+                    state.lock = Self.torsoCentre(patient)
+                    state.lockSeenAt = record.timestamp
+                    state.lockStatus = .locked
+                    state.lockGeneration += 1
+                } else {
+                    state.lockStatus = .notLying
+                    if let patient {
+                        state.lock = Self.torsoCentre(patient)
+                        state.lockSeenAt = record.timestamp
+                    }
+                }
+            } else if let patient {
+                // Follow the patient as they and the phone move. The first one found is locked onto too,
+                // so someone else lying down later doesn't take the body from them.
+                if picked.lock == nil, state.lock != nil { state.lockGeneration += 1 }
+                if picked.lock == nil, state.lockStatus == .locked { state.lockStatus = .none }
+                state.lock = Self.torsoCentre(patient)
+                state.lockSeenAt = record.timestamp
+            }
+            if let patient { state.patientSeenAt = record.timestamp }
+            // Only the patient's skeleton draws: one person, lying down, and nobody else in view.
+            let skeletons = patient.map { [DetectedSkeleton(person: $0)] } ?? []
+            state.jointPose = TimedPose(regions: BodyRegions(), joints: patient?.visibleJoints ?? [], skeletons: skeletons, frameID: record.id, capturedAt: record.timestamp)
             // Never hold a chest marker on an ambiguous patient. One lost for a moment, as hands
             // cover the chest, keeps the last estimate, which still ages out where it's read.
             if chest != nil || upright || sel == .none(.multipleCandidates) { state.chestEstimate = chest }
             // One frame failing the depth fit keeps the last good one, which still ages out on its own.
             if let fitted { state.patientBody = TimedPatientBody(placement: fitted, capturedAt: record.timestamp) }
         }
+        return sel
     }
 
-    private func findLying(_ people: [DetectedPerson], record: FrameRecord, in state: inout State) {
+    private func findLying(_ selection: PatientSelection, record: FrameRecord, in state: inout State) {
         let pose = record.pose
-        let gravity = record.tracking == .notAvailable ? nil : pose.gravityInImage
         var reason: NoTargetReason?
         var found = false
-        switch selector.select(people: people, gravity: gravity, imageAspect: pose.imageAspect) {
+        switch selection {
         case .patient where state.uprightFrameID == record.id:
             reason = .noHorizontalTorso
         case let .patient(person):
@@ -324,7 +414,7 @@ final class PoseWorker: Sendable {
         }
         state.scan.record(foundTarget: found)
         state.lastNoTargetReason = reason
-        if reason == .multipleCandidates || state.uprightFrameID == record.id {
+        if reason == .multipleCandidates || reason == .notNearLock || state.uprightFrameID == record.id {
             // The ring could be on the wrong person, so don't let it linger until stale.
             // Other misses just age out, which rides out a one-frame detection dropout.
             state.latest = nil

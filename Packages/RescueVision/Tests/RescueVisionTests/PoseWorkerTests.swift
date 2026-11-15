@@ -41,7 +41,15 @@ private func worker(_ people: [DetectedPerson]) -> PoseWorker {
     #expect(pose.lastNoTargetReason == .gravityUnknown)
 }
 
-@Test func aSecondCandidateClearsTheTargetAtOnce() async {
+@Test func twoPeopleLyingDownAtTheStartGiveNoTarget() async {
+    let pose = worker([lying, person(center: [0.5, 0.2], axisDegrees: 180, aspect: 4.0 / 3)])
+    await pose.process(frame, record: record())
+    #expect(pose.latest == nil)
+    #expect(pose.lastNoTargetReason == .multipleCandidates)
+}
+
+/// The first one found lying down keeps the body, so someone else lying down later can't take it.
+@Test func aSecondPersonLyingDownLaterDoesntTakeThePatient() async throws {
     let people = Mutex([lying])
     let pose = PoseWorker { _, _ in people.withLock { $0 } }
     await pose.process(frame, record: record())
@@ -49,8 +57,60 @@ private func worker(_ people: [DetectedPerson]) -> PoseWorker {
 
     people.withLock { $0 = [lying, person(center: [0.5, 0.2], axisDegrees: 180, aspect: 4.0 / 3)] }
     await pose.process(frame, record: record(id: 2, at: 10.03))
-    #expect(pose.latest == nil)
-    #expect(pose.lastNoTargetReason == .multipleCandidates)
+    let latest = try #require(pose.latest)
+    #expect(latest.frameID == 2)
+    #expect(abs(latest.target.center.y - 0.6) < 0.05, "still on the first patient")
+}
+
+// MARK: - Tapping a person to lock onto them
+
+private let otherLying = person(center: [0.5, 0.25], axisDegrees: 180, aspect: 4.0 / 3)
+
+@Test func tappingOneOfTwoPeopleLyingDownLocksOntoThem() async throws {
+    let pose = worker([lying, otherLying])
+    pose.requestLock(at: [0.5, 0.25])
+    #expect(pose.lockStatus == .locking)
+    await pose.process(frame, record: record())
+    #expect(pose.lockStatus == .locked)
+    let latest = try #require(pose.latest)
+    #expect(abs(latest.target.center.y - 0.25) < 0.05, "on the one tapped")
+    #expect(pose.jointPose?.skeletons.count == 1, "only their body draws")
+
+    await pose.process(frame, record: record(id: 2, at: 10.03))
+    #expect(abs((try #require(pose.latest)).target.center.y - 0.25) < 0.05, "and it stays on them")
+}
+
+@Test func tappingSomeoneUprightLocksNothing() async throws {
+    let pose = worker([lying, upright])
+    await pose.process(frame, record: record())
+    pose.requestLock(at: [0.2, 0.4])
+    await pose.process(frame, record: record(id: 2, at: 10.03))
+    #expect(pose.lockStatus == .notLying)
+    #expect(abs((try #require(pose.latest)).target.center.y - 0.6) < 0.05, "the patient lying down keeps the body")
+}
+
+@Test func aLockedPatientOutOfSightIsLetGoForTheOneLyingDown() async throws {
+    let people = Mutex([lying, otherLying])
+    let pose = PoseWorker { _, _ in people.withLock { $0 } }
+    pose.requestLock(at: [0.5, 0.25])
+    await pose.process(frame, record: record())
+    #expect(pose.lockStatus == .locked)
+
+    people.withLock { $0 = [lying] }
+    await pose.process(frame, record: record(id: 2, at: 10.5))
+    #expect(pose.lastNoTargetReason == .notNearLock, "held a moment for the one tapped")
+    await pose.process(frame, record: record(id: 3, at: 10 + PoseWorker.lockLostSeconds + 0.1))
+    #expect(abs((try #require(pose.latest)).target.center.y - 0.6) < 0.05)
+    #expect(pose.lockStatus == .none)
+}
+
+@Test func onlyThePatientsSkeletonDraws() async {
+    let pose = worker([lying, upright])
+    await pose.process(frame, record: record())
+    #expect(pose.jointPose?.skeletons.count == 1)
+    let alone = worker([upright])
+    await alone.process(frame, record: record())
+    #expect(alone.jointPose?.skeletons.isEmpty == true, "nobody lying down, so no body at all")
 }
 
 @Test func aOneFrameDropoutLeavesTheTargetToAgeOut() async {

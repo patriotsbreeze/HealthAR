@@ -216,6 +216,18 @@ extension DetectedPerson {
     }
 }
 
+/// Where tapping a person to lock the body onto them stands.
+public enum PatientLockStatus: Sendable, Equatable {
+    /// No tap: the one person lying down is the patient.
+    case none
+    /// Tapped, waiting for the next frame to find who's there.
+    case locking
+    /// The tapped person is lying down, and the body and the ghost follow them alone.
+    case locked
+    /// Nobody lying down where the tap landed, so nothing was locked.
+    case notLying
+}
+
 /// Why the latest frame gave no ring.
 public enum NoTargetReason: String, Sendable, Equatable {
     case gravityUnknown = "gravity_unknown"
@@ -226,6 +238,8 @@ public enum NoTargetReason: String, Sendable, Equatable {
     case torsoUnusable = "torso_unusable"
     /// On a limb step: nobody's limb is near the pin, or the only one there is an arm reaching in.
     case notNearPin = "not_near_pin"
+    /// Someone is lying down, but not where the patient was locked.
+    case notNearLock = "not_near_lock"
 }
 
 enum PatientSelection: Sendable, Equatable {
@@ -251,15 +265,31 @@ struct PatientSelector: Sendable {
     /// Fewer joints than this is a detection too thin to trust near a pin.
     var minJointsNearPin = 4
 
+    /// How far from the locked point, in image heights, the locked patient's torso may be found next
+    /// frame: room for them and the phone to move, not enough to jump to someone across the room.
+    var lockReach = 0.2
+
     /// - Parameter gravity: Unit world-down projected on the image plane, in capture image axes.
     ///   Its length is 1 for a level camera and 0 looking straight down.
-    func select(people: [DetectedPerson], gravity: SIMD2<Double>?, imageAspect: Double) -> PatientSelection {
+    /// - Parameter lock: Where the patient was locked, in capture image space. The lying person whose
+    ///   torso is nearest it, within `lockReach`, is the patient, even beside another lying body.
+    func select(people: [DetectedPerson], gravity: SIMD2<Double>?, imageAspect: Double, lock: SIMD2<Double>? = nil) -> PatientSelection {
         guard let gravity else { return .none(.gravityUnknown) }
         guard !people.isEmpty else { return .none(.noPeople) }
 
         // Low-confidence people still count here. A shaky second lying body is a reason to doubt
         // the first, while a shaky upright one is not.
         let candidates = people.filter { isHorizontal($0.torso, gravity: gravity, imageAspect: imageAspect) }
+        if let lock {
+            let iso: (SIMD2<Double>) -> SIMD2<Double> = { [$0.x * imageAspect, $0.y] }
+            let point = iso(lock)
+            let distance = { (person: DetectedPerson) in Self.distance(from: point, toQuad: person.torso, iso: iso) }
+            guard let nearest = candidates.min(by: { distance($0) < distance($1) }), distance(nearest) <= lockReach else {
+                return .none(candidates.isEmpty ? .noHorizontalTorso : .notNearLock)
+            }
+            guard nearest.lowestConfidence >= minConfidence else { return .none(.lowConfidence) }
+            return .patient(nearest)
+        }
         guard candidates.count <= 1 else { return .none(.multipleCandidates) }
         guard let candidate = candidates.first else {
             return .none(people.contains { $0.lowestConfidence < minConfidence } ? .lowConfidence : .noHorizontalTorso)

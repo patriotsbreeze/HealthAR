@@ -514,7 +514,8 @@ private func locate(_ session: VisionSession, _ materials: Set<Material>, pose: 
 }
 
 
-@Test func activeCameraShowsPartialBodyJointsWithoutSelectingAPatientOrUploading() async {
+/// Only the one patient lying down gets a body, so joints with no lying person behind them draw nothing.
+@Test func activeCameraDrawsNoJointsWithoutAPatientLyingDownOrUploading() async {
     let clock = TestClock()
     let points: [SIMD2<Double>] = [[0.4, 0.4], [0.5, 0.5]]
     let session = VisionSession(
@@ -531,13 +532,9 @@ private func locate(_ session: VisionSession, _ materials: Set<Material>, pose: 
     let result = await step(session)
     #expect(result.wantedPixels)
     #expect(!result.sentUplink)
-    #expect(session.overlay().joints == points.map { portraitMapping.viewPoint(fromImage: $0) })
+    #expect(session.overlay().joints.isEmpty)
     #expect(session.latestTarget == nil)
     #expect(session.overlay().zones.isEmpty)
-
-    clock.advance(VisionOverlay.maxJointAge + 0.01)
-    session.ingest(pixels: makePixels(), pose: cameraPose(), tracking: .normal, imageToView: portraitTransform)
-    #expect(session.overlay().joints.isEmpty)
 }
 
 
@@ -594,7 +591,7 @@ private func locate(_ session: VisionSession, _ materials: Set<Material>, pose: 
     #expect(arm.segments[1].to == arm.joints[.leftWrist])
 }
 
-@Test func namedSkeletonsReachTheOverlayWithoutATorsoAndExpireTogether() async {
+@Test func aSkeletonThatIsntThePatientLyingDownDrawsNothing() async {
     let clock = TestClock()
     let skeleton = DetectedSkeleton(joints: [
         .rightElbow: .init(position: [0.4, 0.4], confidence: 0.9),
@@ -609,13 +606,7 @@ private func locate(_ session: VisionSession, _ materials: Set<Material>, pose: 
     session.viewportSize = portraitMapping.viewSize
     session.start()
     await step(session)
-    #expect(session.overlay().bodies.count == 1)
-    #expect(session.overlay().bodies.first?.joints[.rightElbow] == portraitMapping.viewPoint(fromImage: [0.4, 0.4]))
-    #expect(session.overlay().bodies.first?.segments.count == 1)
-    #expect(session.overlay().joints.count == 2)
-    #expect(session.latestTarget == nil)
-    clock.advance(VisionOverlay.maxJointAge + 0.01)
-    session.ingest(pixels: makePixels(), pose: cameraPose(), tracking: .normal, imageToView: portraitTransform)
     #expect(session.overlay().bodies.isEmpty)
     #expect(session.overlay().joints.isEmpty)
+    #expect(session.latestTarget == nil)
 }

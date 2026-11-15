@@ -232,6 +232,10 @@ protocol VisionPort: AnyObject, Sendable {
     func compressionFeedback() -> CompressionFeedback?
     /// The ghost is on screen pushing on the beat.
     var showsGhost: Bool { get }
+    /// Locks the body and the ghost onto the person lying down nearest this point on screen.
+    @discardableResult func lockPatient(atViewPoint point: CGPoint) -> Bool
+    var patientLock: PatientLockStatus { get }
+    func clearPatientLock()
     /// The next camera frame as a JPEG, for the scene read. Nil with no camera or none in time.
     func snapshot(timeout: TimeInterval) async -> Data?
     var supportsFrontCamera: Bool { get }
@@ -245,6 +249,9 @@ extension VisionPort {
     func clearPracticePatient() {}
     func compressionFeedback() -> CompressionFeedback? { nil }
     var showsGhost: Bool { false }
+    @discardableResult func lockPatient(atViewPoint point: CGPoint) -> Bool { false }
+    var patientLock: PatientLockStatus { .none }
+    func clearPatientLock() {}
     func snapshot(timeout: TimeInterval) async -> Data? { nil }
     var supportsFrontCamera: Bool { false }
     func setFrontCamera(_ front: Bool) {}

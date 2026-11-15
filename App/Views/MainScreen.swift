@@ -148,7 +148,7 @@ struct MainScreen: View {
 
     private var band: some View {
         ZStack(alignment: .bottomLeading) {
-            if coordinator.acceptsInjuryTap {
+            if coordinator.acceptsCameraTap {
                 // Between the panels by construction, so a tap here can't be aimed at a button. The camera
                 // view fills the window, so global points are its points.
                 Color.clear

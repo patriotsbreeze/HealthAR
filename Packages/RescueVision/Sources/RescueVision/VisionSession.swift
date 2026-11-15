@@ -91,6 +91,8 @@ public final class VisionSession: Sendable {
         var ghostPractice = false
         var practiceRequestID: UInt64 = 0
         var lastGhostLockAt = -TimeInterval.infinity
+        /// The pose worker's lock generation the ghost was placed under. A new one means a new patient.
+        var ghostLockGeneration: UInt64 = 0
         /// Rescuer frames since the last look for the patient lying down, while the ghost is up.
         var rescuerFramesSinceLying = 0
         /// When the metronome last turned on, which starts its beat grid afresh.
@@ -524,6 +526,31 @@ public final class VisionSession: Sendable {
             guard let hit else { return .notPlaced }
             state.injuryPin = PlacedPin(world: hit, placedAt: placedAt)
             return .placed
+        }
+    }
+
+    /// Locks the body, the ring and the ghost onto the person lying down nearest this point on screen,
+    /// on the next frame. Someone sitting or standing there locks nothing. False with no camera view.
+    @discardableResult
+    public func lockPatient(atViewPoint point: CGPoint) -> Bool {
+        guard let image = state.withLock({ $0.mapping?.imagePoint(fromScreen: point) }) else { return false }
+        pose.requestLock(at: image)
+        return true
+    }
+
+    public var patientLock: PatientLockStatus { pose.lockStatus }
+
+    /// For a new rescue, so a patient from the last one isn't held.
+    public func clearPatientLock() { pose.clearLock() }
+
+    /// A lock onto someone new takes the ghost off whoever it knelt by, so it kneels by them next.
+    private func followLock() {
+        let generation = pose.lockGeneration
+        state.withLock { state in
+            guard generation != state.ghostLockGeneration else { return }
+            state.ghostLockGeneration = generation
+            guard !state.ghostPractice else { return }
+            state.ghostAnchor = nil
         }
     }
 
@@ -983,8 +1010,10 @@ public final class VisionSession: Sendable {
         if job.pose == .rescuer {
             let sample = await pose.rescuer(frame, record: job.record)
             coach(sample, record: job.record)
+            followLock()
         } else if let request = job.pose {
             await pose.process(frame, record: job.record, request: request)
+            followLock()
             if request == .lying { lockGhost(after: job.record) }
         }
         return sent
