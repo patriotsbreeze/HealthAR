@@ -271,12 +271,9 @@ final class PoseWorker: Sendable {
         } else {
             chest = nil
         }
+        // Only someone lying down gets the 3D body. Anyone sitting or standing gets none.
         if record.tracking == .normal, let depth, case let .patient(person) = sel {
             fitted = PatientModelFit.fit(person: person, depth: depth, camera: record.pose)
-        } else if record.tracking == .normal, let depth,
-                  let person = detection.people.max(by: { $0.shoulderSpan < $1.shoulderSpan }) {
-            // No lying patient: the nearest person, by shoulder span on screen, gets the outline in any pose.
-            fitted = PatientModelFit.fit(person: person, depth: depth, camera: record.pose, requireLying: false)
         }
         state.withLock { state in
             guard state.generation == generation else { return }

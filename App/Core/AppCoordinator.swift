@@ -231,6 +231,27 @@ final class AppCoordinator {
     private(set) var callerAgentStatus = CallerAgentStatus.idle
     /// What the rescuer said since the log last took it, so it goes in as one line and not word by word.
     @ObservationIgnored private var heardPending = ""
+    /// The rescuer's words since they last paused, for the hands-free buttons.
+    @ObservationIgnored private var spokenCommand = ""
+    @ObservationIgnored private var spokenCommandAt: TimeInterval = -.infinity
+    /// Some of those words came in while the app or the AI was talking, so they may be its own.
+    @ObservationIgnored private var spokenCommandOverlapped = false
+    /// When the rescuer last spoke with the app and the AI quiet, so the words were surely theirs.
+    @ObservationIgnored private var rescuerSpokeAt: TimeInterval = -.infinity
+    /// The AI may press a button for the rescuer only this soon after they spoke.
+    nonisolated static let aiPressWindow: TimeInterval = 6
+    /// The app's own lines still playing, by when each started, and when the app last fell quiet.
+    @ObservationIgnored private var phrasesSounding: [String: TimeInterval] = [:]
+    @ObservationIgnored private var ownAudioEndedAt: TimeInterval = -.infinity
+    /// The button a voice just pressed, shown for a moment so the rescuer knows it was heard.
+    private(set) var voicePressed: Prompt?
+    nonisolated static let voicePressedSeconds: TimeInterval = 2.5
+    /// A pause this long ends a command.
+    nonisolated static let voiceCommandPause: TimeInterval = 0.6
+    /// Words this soon after the app or the AI stops may be its tail coming back through the mic.
+    nonisolated static let ownAudioTail: TimeInterval = 1.0
+    /// A line that never reported finishing, cut or dropped, stops counting as playing after this.
+    nonisolated static let phraseSoundingCap: TimeInterval = 15
     /// When the read behind the scene lines on screen started, so an older reply can't overwrite them.
     @ObservationIgnored private var sceneStartedAt = -TimeInterval.infinity
 
@@ -679,7 +700,13 @@ final class AppCoordinator {
         let ghost = showsPulse && cameraLive && metronomeOn && vision.showsGhost
         if ghost != ghostShowsBeat { ghostShowsBeat = ghost }
         let talking = liveConnected && audio.modelAudioPending
-        if talking != aiTalking { aiTalking = talking }
+        if talking != aiTalking {
+            if !talking { ownAudioEndedAt = now }
+            aiTalking = talking
+        }
+        if let voicePressed, now >= voicePressed.expiresAt { self.voicePressed = nil }
+        phrasesSounding = phrasesSounding.filter { now - $0.value < Self.phraseSoundingCap }
+        pressIfSaid(at: now)
         retryLocate(at: now)
         watchAIVoice(at: now)
         assessIfDue(at: now)
@@ -695,6 +722,9 @@ final class AppCoordinator {
         }
         let enters = result.effects.contains { if case .overlay = $0 { true } else { false } }
         if result.state.stateID != state.stateID {
+            // Words about the last step mustn't press a button on this one.
+            spokenCommand = ""
+            spokenCommandOverlapped = false
             kickPhraseDone = false
             quietSince = nil
             if aiQuiet { aiQuiet = false }
@@ -737,6 +767,7 @@ final class AppCoordinator {
         switch effect {
         case let .playPhrase(id):
             notePhrase(id, prompted: &prompted)
+            phrasesSounding[id] = clock()
             audio.play(phraseID: id)
         case let .metronome(on):
             audio.setMetronome(on: on)
@@ -768,6 +799,8 @@ final class AppCoordinator {
         case var .sendStateBrief(brief):
             // A card's entry in the table can't know this session has nothing to say.
             if awakeVoiceUnheard { brief.modelSpeechOpen = false }
+            // The state is already this brief's, so these are the buttons its step shows.
+            brief.buttons = controls.filter(VoiceCommands.pressable).map { "\($0.action.rawValue) \"\($0.title)\"" }
             latestBrief = brief
             gate.send(.brief(brief))
         }
@@ -926,6 +959,7 @@ final class AppCoordinator {
     private func handle(_ item: Inbox) {
         switch item {
         case let .phraseFinished(id):
+            if phrasesSounding.removeValue(forKey: id) != nil { ownAudioEndedAt = clock() }
             // A voice just worked, so one failure earlier needn't warn for the rest of the run.
             if audioHealth == .voiceFailed { audioHealth = .ok }
             // The seeded line isn't something the protocol said, so the model isn't told it was.
@@ -1136,6 +1170,8 @@ final class AppCoordinator {
             gate.setBargeIn(false)
             audio.modelTurnEnded()
             finishModelTurn()
+        case let .press(press):
+            pressIfAsked(press)
         case let .scene(report):
             noteScene(report)
         case let .proposal(proposal):
@@ -1158,6 +1194,7 @@ final class AppCoordinator {
             heardTranscript = trimmed(heardTranscript + text)
             heardPending += text
             confirmIfSaid()
+            noteSpokenCommand(text)
         case let .outputTranscript(text):
             saidTranscript = trimmed(saidTranscript + text)
             // The AI answering closes what the rescuer said, so the log keeps the order they spoke in.
@@ -1436,6 +1473,54 @@ final class AppCoordinator {
         }
     }
 
+    /// The app or the AI is talking, or only just stopped.
+    private func ownAudioSounding(at now: TimeInterval) -> Bool {
+        aiTalking || !phrasesSounding.isEmpty || now - ownAudioEndedAt < Self.ownAudioTail
+    }
+
+    private func noteSpokenCommand(_ text: String) {
+        let now = clock()
+        if ownAudioSounding(at: now) { spokenCommandOverlapped = true } else { rescuerSpokeAt = now }
+        spokenCommand += text
+        spokenCommandAt = now
+    }
+
+    /// Once the rescuer pauses, their words press the button they name, as a tap would. Words that
+    /// overlapped the app's or the AI's own speech press nothing, since they may be that speech.
+    private func pressIfSaid(at now: TimeInterval) {
+        guard !spokenCommand.isEmpty, now - spokenCommandAt >= Self.voiceCommandPause else { return }
+        let said = spokenCommand
+        let overlapped = spokenCommandOverlapped
+        spokenCommand = ""
+        spokenCommandOverlapped = false
+        guard !overlapped, let action = VoiceCommands.action(for: said, among: controls),
+              let control = controls.first(where: { $0.action == action })
+        else { return }
+        appendLog(.heard, "Pressed by voice: \(control.title)")
+        voicePressed = Prompt(text: "Heard: \(control.title)", expiresAt: now + Self.voicePressedSeconds)
+        perform(action)
+    }
+
+    /// The voice AI's read of what the rescuer just said, as one of the buttons on screen: "I called,
+    /// they're on the way" is Called. Pressed as a tap would be, but only on the step it was asked
+    /// about, only a button that is showing and not one that stops CPR or leaves the path, and only
+    /// right after the rescuer spoke with the app quiet, so it can't be the app's own line or the
+    /// AI acting on what it only saw.
+    private func pressIfAsked(_ press: ButtonPress) {
+        let now = clock()
+        guard press.stateVersion == state.version, now - rescuerSpokeAt <= Self.aiPressWindow,
+              let control = controls.first(where: { $0.action == press.action }), VoiceCommands.pressable(control)
+        else {
+            appendLog(.tool, "Didn't press \(press.action.rawValue): not on screen now, or nobody spoke")
+            return
+        }
+        spokenCommand = ""
+        spokenCommandOverlapped = false
+        appendLog(.heard, "Pressed by voice: \(control.title)")
+        voicePressed = Prompt(text: "Heard: \(control.title)", expiresAt: now + Self.voicePressedSeconds)
+        perform(press.action)
+    }
+
     private func flushHeard() {
         appendLog(.heard, heardPending)
         heardPending = ""
@@ -1443,6 +1528,8 @@ final class AppCoordinator {
 
     private func clearAssessment() {
         assessRound += 1
+        spokenCommand = ""
+        spokenCommandOverlapped = false
         sceneRead = nil
         voiceSuggestion = nil
         assessmentLog = []
@@ -1579,7 +1666,8 @@ extension SituationAssessment.Suggestion {
     /// The fixed button's words, the same on the panel, the "AI suggests" line, and the read's confirm.
     var buttonTitle: String {
         switch self {
-        case .startCpr, .notBreathing: "Not breathing"
+        case .startCpr: "Start CPR"
+        case .notBreathing: "Not breathing"
         case .notResponding: "Collapsed"
         case .awake: "Awake and talking"
         case .callForHelp: "Spawn 911 agent"

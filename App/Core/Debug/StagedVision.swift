@@ -12,7 +12,7 @@ import UIKit
 /// - `-StartState <id>`: walks there with real taps where it can, so the log and the counters are
 ///   what they'd be. Skips onboarding.
 /// - `-StagedOffscreen`: puts the AED and the pin out of the band, to see the pointers.
-/// - `-StagedLoss`: drops the marks 2 s into a step, to see the grace and "Hold the phone steady".
+/// - `-StagedLoss`: drops the marks 2 s into a step, to see the grace and the marks go.
 /// - `-FallbackCard`: shows the card the app falls back to with no protocol.
 /// - `-StagedSheet dispatcher|sentinel|operatorPanel|aed`, `-StagedStop`, `-StagedHUD`: opens that on top.
 /// - `-StagedPhoto <pano id>`: Where am I? runs on that spot's drone view as if it were the photo.

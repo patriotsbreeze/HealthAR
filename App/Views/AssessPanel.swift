@@ -2,9 +2,9 @@ import RescueCore
 import RescueLive
 import SwiftUI
 
-/// The opening screen when there's an AI. Each pill is an emergency a bystander might see, in their
-/// words, and each leads into one of the demo's two modes: a collapse down the CPR path, or choking.
-/// The read above says what the AI thinks; here a person picks.
+/// The opening screen when there's an AI. Start CPR and the 911 agent are first and never wait on
+/// anything. Under them, three pills say what a bystander sees, each into one of the demo's two modes:
+/// a collapse down the CPR path, or choking. The read above says what the AI thinks; here a person picks.
 struct AssessPanel: View {
     let coordinator: AppCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -17,16 +17,11 @@ struct AssessPanel: View {
         var id: String { title }
     }
 
-    /// Two by two, a mode to a row. Collapsed asks about breathing next, as on every step.
-    static let pills: [[Pill]] = [
-        [
-            Pill(title: "Collapsed", action: .patientUnresponsive, ringedBy: [.notResponding]),
-            Pill(title: "Not breathing", action: .patientNotBreathing, ringedBy: [.notBreathing, .startCpr]),
-        ],
-        [
-            Pill(title: "Choking", action: .triageChoking, ringedBy: [.choking]),
-            Pill(title: "Can't breathe or speak", action: .triageChoking),
-        ],
+    /// Always these three, in this order. Collapsed asks about breathing next, as on every step.
+    static let pills = [
+        Pill(title: "Collapsed", action: .patientUnresponsive, ringedBy: [.notResponding]),
+        Pill(title: "Not breathing", action: .patientNotBreathing, ringedBy: [.notBreathing]),
+        Pill(title: "Choking", action: .triageChoking, ringedBy: [.choking]),
     ]
 
     /// The panel never takes more than this share of the screen, so the camera keeps the rest.
@@ -49,8 +44,11 @@ struct AssessPanel: View {
                     Spacer(minLength: 0)
                     status
                 }
-                ForEach(Self.pills.indices, id: \.self) { pillRow(Self.pills[$0]) }
-                dispatcher
+                HStack(spacing: 6) {
+                    startCPR
+                    dispatcher
+                }
+                pillRow(Self.pills)
             }
             .padding(.horizontal, DS.Space.m)
             .padding(.vertical, DS.Space.s + 2)
@@ -97,7 +95,7 @@ struct AssessPanel: View {
                         .multilineTextAlignment(.center)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(DS.Colors.textPrimary)
                     .padding(.horizontal, 6)
                     .frame(maxWidth: .infinity, minHeight: DS.Height.camera)
@@ -109,6 +107,20 @@ struct AssessPanel: View {
                 .accessibilityHint(suggested ? "The AI suggests this" : "")
             }
         }
+    }
+
+    private var startCPR: some View {
+        Button { coordinator.perform(.startCpr) } label: {
+            Label("Start CPR", systemImage: "heart.fill")
+                .dsFont(DS.Fonts.buttonCompact)
+                .foregroundStyle(DS.Colors.textPrimary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, minHeight: DS.Height.camera)
+                .background(DS.Colors.criticalFill, in: Capsule(style: .continuous))
+                .suggested(suggestion == .startCpr, Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint(suggestion == .startCpr ? "The AI suggests this" : "")
     }
 
     private var dispatcher: some View {

@@ -21,6 +21,8 @@ public enum LiveEvent: Sendable, Equatable {
     case proposal(ModelProposal)
     /// The voice model's read of the camera view. For the screen only; the engine never sees it.
     case scene(SceneReport)
+    /// The rescuer's words chose a button on screen. The app decides whether to press it.
+    case press(ButtonPress)
     case modelAudio(Data)
     case interrupted
     case turnComplete
@@ -351,6 +353,7 @@ public actor LiveSession {
             let routed = router.route(call)
             if let proposal = routed.proposal { eventSink.yield(.proposal(proposal)) }
             if let scene = routed.scene { eventSink.yield(.scene(scene)) }
+            if let press = routed.press { eventSink.yield(.press(press)) }
             if let response = routed.response { responses.append(response) }
         }
         if !responses.isEmpty {

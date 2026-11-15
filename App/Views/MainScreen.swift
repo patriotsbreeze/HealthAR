@@ -40,6 +40,7 @@ struct MainScreen: View {
                         .padding(.bottom, DS.Space.s)
                 } else {
                     band
+                        .overlay(alignment: .top) { voicePressedPill }
                         // Read straight off the band, then published. A GeometryReader's preference
                         // could miss the last change when the deck settles its height a pass after a
                         // step changes, and the marks would stay inside a band that has since grown.
@@ -120,6 +121,24 @@ struct MainScreen: View {
             StagedBackdrop().ignoresSafeArea()
         }
         #endif
+    }
+
+    /// What a voice just pressed, so a hands-free tap doesn't look like the screen moving on its own.
+    @ViewBuilder private var voicePressedPill: some View {
+        if let pressed = coordinator.voicePressed {
+            Pill {
+                Image(systemName: "waveform")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(DS.Colors.textSecondary)
+                Text(pressed.text)
+                    .dsFont(DS.Fonts.label)
+                    .foregroundStyle(DS.Colors.textPrimary)
+                    .lineLimit(1)
+            }
+            .padding(.top, DS.Space.s)
+            .transition(.opacity)
+            .accessibilityElement(children: .combine)
+        }
     }
 
     private var awake: Bool { coordinator.definition?.kind.isAwake == true }

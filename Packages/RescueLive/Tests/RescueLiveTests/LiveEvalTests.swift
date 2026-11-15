@@ -484,6 +484,10 @@ private actor LiveRun {
             // For the screen only, so there's nothing to judge, but it is the model doing something.
             moment("scene", report.headline)
             lastModelActivity = now
+        case let .press(press):
+            // The app decides whether to press it, so there's nothing to judge here either.
+            moment("press", press.action.rawValue)
+            lastModelActivity = now
         case let .modelAudio(data):
             if firstAudioAt == nil, referenceAt.map({ now >= $0 - 1 }) ?? true { firstAudioAt = now }
             if !turnOpen {

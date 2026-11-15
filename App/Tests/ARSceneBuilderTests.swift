@@ -161,11 +161,11 @@ private func inside(_ rect: CGRect, _ band: CGRect) -> Bool {
         #expect(failed.hint?.tone == .caution)
     }
 
-    @Test func lostTrackingHidesTheMarksAndSaysToHoldSteady() {
+    @Test func lostTrackingHidesTheMarksAndSaysNothing() {
         let pin = VisionOverlay.InjuryPin(position: CGPoint(x: 0.4, y: 0.3), isOnScreen: true, angle: 0)
         let scene = build(VisionOverlay(injuryPin: pin), context: ARContext(target: .injurySite, trackingLost: true))
         #expect(!scene.hasMarks)
-        #expect(scene.hint?.text == "Hold the phone steady")
+        #expect(scene.hint == nil)
         let grace = build(VisionOverlay(injuryPin: pin), context: ARContext(target: .injurySite, estimating: true))
         #expect(grace.zone?.lock == .estimating, "dashed while it's only what was last seen")
     }
@@ -384,7 +384,7 @@ private func inside(_ rect: CGRect, _ band: CGRect) -> Bool {
         #expect(memory.frame(overlay: .empty, zones: [], items: [], stateID: "place_hands", context: context, now: 10.3).context.estimating)
         let lost = memory.frame(overlay: .empty, zones: [], items: [], stateID: "place_hands", context: context, now: 11)
         #expect(lost.context.trackingLost)
-        #expect(build(lost.overlay, context: lost.context).hint?.text == ARSceneBuilder.holdSteady)
+        #expect(build(lost.overlay, context: lost.context).hint == nil)
     }
 
     /// AR shed for heat, or failed, takes the marks away with the camera. Holding the phone steady

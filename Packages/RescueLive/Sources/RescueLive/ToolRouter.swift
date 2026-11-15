@@ -25,6 +25,18 @@ public struct SceneReport: Sendable, Equatable {
     }
 }
 
+/// The voice model's read that the rescuer's own words chose a button on screen. Like a scene report
+/// it never becomes a proposal: the app decides whether to press it, as if the rescuer had tapped.
+public struct ButtonPress: Sendable, Equatable {
+    public var action: HumanAction
+    public var stateVersion: Int
+
+    public init(action: HumanAction, stateVersion: Int) {
+        self.action = action
+        self.stateVersion = stateVersion
+    }
+}
+
 /// Decodes a model function call into a `ModelProposal`, or refuses it. The arguments are
 /// untrusted, so nothing is coerced: names and enum values must match exactly, and every argument
 /// must be one the contract declares. The engine then decides whether a proposal does anything.
@@ -35,6 +47,8 @@ public struct ToolRouter: Sendable {
         public var response: ToolResponse?
         /// A `report_scene` call. Never alongside a proposal.
         public var scene: SceneReport? = nil
+        /// A `press_button` call. Never alongside a proposal.
+        public var press: ButtonPress? = nil
     }
 
     private enum Tool: String {
@@ -84,6 +98,13 @@ public struct ToolRouter: Sendable {
                 return Routed(proposal: nil, response: ToolResponse(id: id, name: name, status: .rejected, reason: .invalidArguments))
             }
             return Routed(proposal: nil, response: ToolResponse(id: id, name: name, status: .received, reason: nil), scene: scene)
+        }
+
+        if call.name == "press_button" {
+            guard let press = Self.press(call.args) else {
+                return Routed(proposal: nil, response: ToolResponse(id: id, name: name, status: .rejected, reason: .invalidArguments))
+            }
+            return Routed(proposal: nil, response: ToolResponse(id: id, name: name, status: .received, reason: nil), press: press)
         }
 
         switch Self.decode(name: call.name, args: call.args, allowedFindings: allowedFindings) {
@@ -176,6 +197,15 @@ public struct ToolRouter: Sendable {
         // Empty is the usual answer, so it's allowed here, unlike the other fields.
         return SceneReport(sees: sees, headline: headline, prediction: prediction, confidence: confidence, note: note,
                            emergency: emergency.trimmingCharacters(in: .whitespacesAndNewlines), stateVersion: version)
+    }
+
+    /// Exactly a known button and a version, nothing else.
+    private static func press(_ args: JSONValue?) -> ButtonPress? {
+        guard case let .object(fields)? = args, Set(fields.keys) == ["button", "state_version"],
+              let action: HumanAction = enumValue(fields["button"]),
+              let version = fields["state_version"].flatMap(stateVersion)
+        else { return nil }
+        return ButtonPress(action: action, stateVersion: version)
     }
 
     private static func enumValue<T: RawRepresentable>(_ field: JSONValue?) -> T? where T.RawValue == String {

@@ -248,7 +248,6 @@ struct ARContext: Equatable {
 // MARK: - Building a frame
 
 enum ARSceneBuilder {
-    static let holdSteady = "Hold the phone steady"
     static let tapHint = "Tap the injury on screen"
     static let chestPointer = "Chest"
     static let injuryPointer = "Injury"
@@ -488,7 +487,8 @@ enum ARSceneBuilder {
 
     private static func hintText(overlay: VisionOverlay, context: ARContext) -> (text: String, tone: ARChip.Tone)? {
         if let message = context.pinMessage { return (message, .caution) }
-        if context.trackingLost { return (holdSteady, .caution) }
+        // The marks are gone while tracking is lost, so nothing is said about them either.
+        if context.trackingLost { return nil }
         if let cue = context.coachingCue { return (coachingText(cue), .caution) }
         if overlay.showsInjuryHint, context.invitesInjuryTap { return (tapHint, .neutral) }
         return nil

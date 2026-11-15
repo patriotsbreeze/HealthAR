@@ -355,8 +355,8 @@ private let callLines: Set<String> = ["call_911", "calling_911"]
         session.advance(10)
         #expect(session.state.stateID == "watch_reask")
         for _ in 0..<6 { session.advance(10) }
-        #expect(session.state.stateID == "watch_reask", "no reply keeps asking, and never moves on")
-        #expect(session.allPhrases.filter { $0 == "ask_still_breathing" }.count >= 6)
+        #expect(session.state.stateID == "watch_reask", "no reply keeps waiting, and never moves on")
+        #expect(!session.allPhrases.contains("ask_still_breathing"), "the re-ask is on screen only, never said")
         session.human(.no)
         #expect(session.state.stateID == "position_patient")
     }
@@ -418,6 +418,11 @@ private let callLines: Set<String> = ["call_911", "calling_911"]
                 continue
             }
             #expect(state.timeout == nil, "\(state.id) waits for the rescuer")
+            // The breathing re-ask is shown, never said, by the user's choice. See SAFETY.md item 5.
+            if state.id == "watch_reask" {
+                #expect(state.entryPhrases.isEmpty && state.repeating.isEmpty, "\(state.id) stays silent")
+                continue
+            }
             let repeats = state.repeating.filter { state.entryPhrases.contains($0.phrase) }
             #expect(repeats.map(\.everySeconds) == [10], "\(state.id) repeats its question every 10 s")
         }
