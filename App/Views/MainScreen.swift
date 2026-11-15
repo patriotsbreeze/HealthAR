@@ -56,6 +56,9 @@ struct MainScreen: View {
                         .layoutPriority(1)
                 }
             }
+            // The screen's width and never more. A row too wide for the phone once made this stack wider,
+            // and everything in it slid off both edges together.
+            .frame(minWidth: 0, maxWidth: .infinity)
             // Above the panels, or a chest outside the band would hide behind them. The marks themselves
             // stay inside the band.
             if coordinator.showsCamera {

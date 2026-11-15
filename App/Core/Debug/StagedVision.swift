@@ -73,6 +73,9 @@ final class StagedVision: VisionPort, @unchecked Sendable {
     var isARSupported: Bool { true }
     var status: VisionStatus { .running }
     var aedStatus: AEDStatus { .located }
+    /// Every phone this ships to has a selfie camera, so the rail carries the flip button here as it
+    /// does there. Without it the Simulator's rail is a button short and hides a rail too wide for a phone.
+    var supportsFrontCamera: Bool { true }
     var keypointAge: TimeInterval? { 0.05 }
     var lastNoTargetReason: NoTargetReason? { nil }
     func start() {}

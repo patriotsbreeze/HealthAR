@@ -85,15 +85,16 @@ struct StatusRail: View {
     var body: some View {
         let alerts = coordinator.statusAlerts
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: DS.Space.s) {
-                ElapsedPill(coordinator: coordinator)
-                    .modifier(OperatorGesture(action: onOperator))
-                AgentsStrip(coordinator: coordinator, action: onAgents)
-                if coordinator.operatorUsed { OperatorBadge() }
-                Spacer(minLength: 0)
-                if let onAED, BuildingBriefStore.shared.showsSection { AEDButton(action: onAED) }
-                if coordinator.offersCameraFlip { FlipCameraButton(coordinator: coordinator) }
-                OverflowMenu(coordinator: coordinator, showsHUD: $showsHUD, onDispatcher: onDispatcher, onSentinel: onSentinel)
+            // Each piece here has a fixed width, so the row can't squeeze itself. On a phone with the AED
+            // and flip buttons it ran past both edges, and the stack under it took that width and pushed
+            // the whole screen off the sides. So it steps down until one fits: the agents' label, then
+            // the AED's word, then the busy word and the flip button, which moves into the menu.
+            ViewThatFits(in: .horizontal) {
+                row(.full, aedTitled: true, flipInMenu: false)
+                row(.word, aedTitled: true, flipInMenu: false)
+                row(.word, aedTitled: false, flipInMenu: false)
+                row(.icons, aedTitled: false, flipInMenu: false)
+                row(.icons, aedTitled: false, flipInMenu: true)
             }
             .frame(minHeight: DS.Height.rail)
             // One to a line, because a warning cut off to fit a row is no warning.
@@ -101,9 +102,27 @@ struct StatusRail: View {
         }
         .padding(.horizontal, DS.Space.gutter)
         .padding(.bottom, alerts.isEmpty ? 0 : DS.Space.s)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // minWidth 0 makes this the width offered and never more, so even a row that still doesn't fit
+        // (the largest text sizes) runs off its own end and can't widen the screen.
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
         .animation(DS.Motion.alert, value: alerts)
         .sensoryFeedback(DS.Haptics.alert, trigger: alerts.filter { $0.weight == .act }.count) { old, new in new > old }
+    }
+
+    private func row(_ agents: AgentsStrip.Style, aedTitled: Bool, flipInMenu: Bool) -> some View {
+        HStack(spacing: DS.Space.s) {
+            ElapsedPill(coordinator: coordinator)
+                .modifier(OperatorGesture(action: onOperator))
+            AgentsStrip(coordinator: coordinator, style: agents, action: onAgents)
+            if coordinator.operatorUsed { OperatorBadge() }
+            Spacer(minLength: 0)
+            if let onAED, BuildingBriefStore.shared.showsSection { AEDButton(titled: aedTitled, action: onAED) }
+            if coordinator.offersCameraFlip, !flipInMenu { FlipCameraButton(coordinator: coordinator) }
+            OverflowMenu(
+                coordinator: coordinator, showsHUD: $showsHUD, offersFlip: flipInMenu && coordinator.offersCameraFlip,
+                onDispatcher: onDispatcher, onSentinel: onSentinel
+            )
+        }
     }
 }
 
@@ -128,7 +147,11 @@ private struct ElapsedPill: View {
 /// capsule never moves. A tap still opens the agents sheet for the detail.
 private struct AgentsStrip: View {
     let coordinator: AppCoordinator
+    var style = Style.full
     let action: () -> Void
+
+    /// How much the capsule says beside its icons, stepping down as the rail runs out of room.
+    enum Style { case full, word, icons }
 
     enum Activity: Equatable { case off, running, busy }
 
@@ -155,24 +178,32 @@ private struct AgentsStrip: View {
                     HStack(spacing: 2) {
                         Image(systemName: "sparkles")
                             .font(.system(size: 8, weight: .bold))
-                        Text("AGENTS")
-                            .font(.system(size: 9, weight: .bold))
-                            .tracking(0.5)
+                        if style == .full {
+                            Text("AGENTS")
+                                .font(.system(size: 9, weight: .bold))
+                                .tracking(0.5)
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
                     }
                     .foregroundStyle(DS.Assessment.tint)
-                    .padding(.trailing, 6)
+                    .padding(.trailing, style == .icons ? 2 : 6)
                     ForEach(slots) { icon($0) }
-                    Text(busy?.status.lowercased() ?? "")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(DS.Assessment.tint)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .frame(width: Self.busyWidth, alignment: .leading)
-                        .padding(.leading, 3)
-                        .contentTransition(.opacity)
-                        .animation(DS.Motion.alert, value: busy?.status)
+                    if style != .icons {
+                        Text(busy?.status.lowercased() ?? "")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(DS.Assessment.tint)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .frame(width: Self.busyWidth, alignment: .leading)
+                            .padding(.leading, 3)
+                            .contentTransition(.opacity)
+                            .animation(DS.Motion.alert, value: busy?.status)
+                    }
                 }
                 .padding(.leading, 10)
+                // Without the word slot, the last icon needs its own room before the capsule's end.
+                .padding(.trailing, style == .icons ? 8 : 0)
                 .frame(height: 30)
                 .glassSurface(Capsule(style: .continuous))
             }
@@ -222,16 +253,19 @@ private struct AgentsStrip: View {
 
 /// Opens Find the AED: the photo locate, drone flight and AR guide, without the mock dispatcher.
 private struct AEDButton: View {
+    /// With the word, or the heart alone in a round button when the rail is tight.
+    var titled = true
     let action: () -> Void
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
         Button(action: action) {
             Label("AED", systemImage: "bolt.heart.fill")
-                .labelStyle(.titleAndIcon)
+                .labelStyle(titled ? AnyLabelStyle(.titleAndIcon) : AnyLabelStyle(.iconOnly))
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(DS.Colors.ok)
-                .padding(.horizontal, DS.Space.m)
+                .padding(.horizontal, titled ? DS.Space.m : 0)
+                .frame(minWidth: DS.Height.control)
                 .frame(height: DS.Height.control)
                 .modifier(CapsuleSurface(reduceTransparency: reduceTransparency))
                 .contentShape(Capsule())
@@ -281,12 +315,21 @@ private struct FlipCameraButton: View {
 private struct OverflowMenu: View {
     let coordinator: AppCoordinator
     @Binding var showsHUD: Bool
+    /// The flip button's place when the rail has no room for it.
+    var offersFlip = false
     let onDispatcher: () -> Void
     let onSentinel: () -> Void
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
         Menu {
+            if offersFlip {
+                Button(
+                    coordinator.usesFrontCamera ? "Use back camera" : "Use front camera",
+                    systemImage: "arrow.triangle.2.circlepath.camera",
+                    action: coordinator.flipCamera
+                )
+            }
             Section {
                 // Places no call. A teammate's phone plays the dispatcher.
                 Button("CALL MOCK DISPATCHER", systemImage: "phone", action: onDispatcher)
@@ -396,4 +439,15 @@ func elapsedText(_ seconds: TimeInterval) -> String {
 func clockText(_ seconds: TimeInterval) -> String {
     let total = max(0, Int(seconds))
     return String(format: "T+%d:%02d", total / 60, total % 60)
+}
+
+/// Lets one label switch between two built-in styles.
+private struct AnyLabelStyle: LabelStyle {
+    private let make: (Configuration) -> AnyView
+
+    init(_ style: some LabelStyle) {
+        make = { AnyView(style.makeBody(configuration: $0)) }
+    }
+
+    func makeBody(configuration: Configuration) -> some View { make(configuration) }
 }
