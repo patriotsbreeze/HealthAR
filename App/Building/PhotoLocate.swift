@@ -94,6 +94,8 @@ enum PhotoLocateOutcome: Equatable {
     static let couldNotPlace = "Couldn't tell where the photo was taken. Guiding from the entrance instead."
     static let noRoute = "Found where you are, but there's no route from there. Guiding from the entrance instead."
     static let unavailable = "Photo locate isn't set up for this building. Guiding from the entrance instead."
+    /// Any of the three, in the AED button's mode.
+    static let shortFallback = "Couldn't place the photo. Using the entrance."
 
     /// Pure, so the fallbacks can be tested without a network: a spot's place in `panos`, checked
     /// against the data, and the route from it to the AED.

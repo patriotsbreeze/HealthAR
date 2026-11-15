@@ -6,83 +6,160 @@ import SwiftUI
 struct BuildingBriefSection: View {
     let coordinator: AppCoordinator
     var store = BuildingBriefStore.shared
+    /// Opened from the AED button: Rabinowitz Hall is taken as where the person is, and only the
+    /// buttons that get them to the AED show.
+    var aedMode = false
     @State private var guiding: AEDGuideTarget?
     @State private var locate = PhotoLocate()
 
     var body: some View {
         if store.showsSection {
-            let run = coordinator.state.startedAt
-            let building = store.selected
-            let confirmed = store.isConfirmed(run: run)
-
-            VStack(alignment: .leading, spacing: DS.Space.s) {
-                SectionHeader(title: BuildingWording.sectionTitle)
-                if let building {
-                    if store.isPickedByHand {
-                        Text(BuildingWording.nameAndAddress(building)).dsFont(DS.Fonts.prompt)
-                        Text(BuildingWording.chosenByHand)
-                            .dsFont(DS.Fonts.label)
-                            .foregroundStyle(DS.Colors.caution)
-                    } else {
-                        Text(BuildingWording.match(building)).dsFont(DS.Fonts.prompt)
-                    }
-                    if confirmed {
-                        Label(BuildingWording.confirmedLabel, systemImage: "checkmark.circle.fill")
-                            .dsFont(DS.Fonts.label)
-                            .foregroundStyle(DS.Colors.ok)
-                    } else {
-                        Button(BuildingWording.confirmTitle) { store.confirm(run: run) }
-                            .buttonStyle(CommandButtonStyle(kind: .secondary, height: DS.Height.awake))
-                    }
-                    // Three taps from here to arrows: this confirm, this guide, and I'm here at the door.
-                    if let target = AEDGuideTarget(building: building) {
-                        Button(BuildingWording.guideTitle) { guiding = target }
-                            .buttonStyle(CommandButtonStyle(kind: .primary, height: DS.Height.awake))
-                            .disabled(!confirmed)
-                            .accessibilityHint(BuildingWording.guideHint)
-                        // Once a photo has placed the person, their own flight replaces the entrance sample.
-                        if !locate.hasFound {
-                            DronePreviewButton(building: building, aedID: target.aed.id, lengthM: target.route.lengthM)
-                        }
-                    }
-                    PhotoLocateRows(coordinator: coordinator, building: building, confirmed: confirmed, locate: locate, guiding: $guiding)
-                } else {
-                    Text(BuildingWording.noMatch)
-                        .dsFont(DS.Fonts.body)
-                        .foregroundStyle(DS.Colors.textSecondary)
-                }
-                BuildingPicker(store: store)
-                if let building {
-                    ForEach(BuildingWording.aeds(building), id: \.self) { line in
-                        Text(line).dsFont(DS.Fonts.body)
-                    }
-                    if let entrance = BuildingWording.entrance(building) {
-                        Text(entrance).dsFont(DS.Fonts.body)
-                    }
-                    Button(BuildingWording.readAloudTitle) {
-                        if let text = BuildingWording.spoken(building, confirmed: store.isConfirmed(run: coordinator.state.startedAt)) {
-                            // The app's own voice, with the on-device read-aloud as the fallback.
-                            BuildingVoice.shared.speak(text) { coordinator.readAloud(text) }
-                        }
-                    }
-                    .buttonStyle(CommandButtonStyle(kind: .secondary, height: DS.Height.awake))
-                    .disabled(!confirmed)
-                    .accessibilityHint(BuildingWording.readAloudHint)
-                }
+            Group {
+                if aedMode { assumed } else { matched }
             }
             .foregroundStyle(DS.Colors.textPrimary)
             .fixedSize(horizontal: false, vertical: true)
-            .task { BuildingLocator.shared.refresh() }
-            // Rendered once the building is confirmed, so Read building aloud plays at once.
-            .task(id: confirmed) {
-                if let building, let text = BuildingWording.spoken(building, confirmed: confirmed) {
-                    BuildingVoice.shared.prefetch(text)
-                }
-            }
             .fullScreenCover(item: $guiding) { target in
-                AEDGuideView(target: target, coordinator: coordinator)
+                AEDGuideView(target: target, coordinator: coordinator, aedMode: aedMode)
             }
         }
+    }
+
+    /// No location match, no confirm, no read-aloud: the building, its AED, and the ways there.
+    @ViewBuilder private var assumed: some View {
+        if let building = store.aedModeBuilding {
+            VStack(alignment: .leading, spacing: DS.Space.m) {
+                AEDHeroCard(
+                    building: building,
+                    aed: BuildingWording.guideTarget(building) ?? building.aeds.first { BuildingWording.aed($0) != nil }
+                )
+                VStack(spacing: DS.Space.s) {
+                    if let target = AEDGuideTarget(building: building) {
+                        Button(BuildingWording.guideTitle, systemImage: "arkit") { guiding = target }
+                            .buttonStyle(CommandButtonStyle(kind: .primary, height: DS.Height.arrestPrimary))
+                        if !locate.hasFound {
+                            DronePreviewButton(building: building, aedID: target.aed.id, lengthM: target.route.lengthM, title: DronePreviewButton.shortTitle)
+                        }
+                    }
+                    PhotoLocateRows(coordinator: coordinator, building: building, confirmed: true, locate: locate, guiding: $guiding, aedMode: true)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var matched: some View {
+        let run = coordinator.state.startedAt
+        let building = store.selected
+        let confirmed = store.isConfirmed(run: run)
+
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            SectionHeader(title: BuildingWording.sectionTitle)
+            if let building {
+                if store.isPickedByHand {
+                    Text(BuildingWording.nameAndAddress(building)).dsFont(DS.Fonts.prompt)
+                    Text(BuildingWording.chosenByHand)
+                        .dsFont(DS.Fonts.label)
+                        .foregroundStyle(DS.Colors.caution)
+                } else {
+                    Text(BuildingWording.match(building)).dsFont(DS.Fonts.prompt)
+                }
+                if confirmed {
+                    Label(BuildingWording.confirmedLabel, systemImage: "checkmark.circle.fill")
+                        .dsFont(DS.Fonts.label)
+                        .foregroundStyle(DS.Colors.ok)
+                } else {
+                    Button(BuildingWording.confirmTitle) { store.confirm(run: run) }
+                        .buttonStyle(CommandButtonStyle(kind: .secondary, height: DS.Height.awake))
+                }
+                // Three taps from here to arrows: this confirm, this guide, and I'm here at the door.
+                if let target = AEDGuideTarget(building: building) {
+                    Button(BuildingWording.guideTitle) { guiding = target }
+                        .buttonStyle(CommandButtonStyle(kind: .primary, height: DS.Height.awake))
+                        .disabled(!confirmed)
+                        .accessibilityHint(BuildingWording.guideHint)
+                    // Once a photo has placed the person, their own flight replaces the entrance sample.
+                    if !locate.hasFound {
+                        DronePreviewButton(building: building, aedID: target.aed.id, lengthM: target.route.lengthM)
+                    }
+                }
+                PhotoLocateRows(coordinator: coordinator, building: building, confirmed: confirmed, locate: locate, guiding: $guiding)
+            } else {
+                Text(BuildingWording.noMatch)
+                    .dsFont(DS.Fonts.body)
+                    .foregroundStyle(DS.Colors.textSecondary)
+            }
+            BuildingPicker(store: store)
+            if let building {
+                ForEach(BuildingWording.aeds(building), id: \.self) { line in
+                    Text(line).dsFont(DS.Fonts.body)
+                }
+                if let entrance = BuildingWording.entrance(building) {
+                    Text(entrance).dsFont(DS.Fonts.body)
+                }
+                Button(BuildingWording.readAloudTitle) {
+                    if let text = BuildingWording.spoken(building, confirmed: store.isConfirmed(run: coordinator.state.startedAt)) {
+                        // The app's own voice, with the on-device read-aloud as the fallback.
+                        BuildingVoice.shared.speak(text) { coordinator.readAloud(text) }
+                    }
+                }
+                .buttonStyle(CommandButtonStyle(kind: .secondary, height: DS.Height.awake))
+                .disabled(!confirmed)
+                .accessibilityHint(BuildingWording.readAloudHint)
+            }
+        }
+        .task { BuildingLocator.shared.refresh() }
+        // Rendered once the building is confirmed, so Read building aloud plays at once.
+        .task(id: confirmed) {
+            if let building, let text = BuildingWording.spoken(building, confirmed: confirmed) {
+                BuildingVoice.shared.prefetch(text)
+            }
+        }
+    }
+}
+
+/// The AED button's header: a green AED mark, where it is, and how far, on one raised card.
+private struct AEDHeroCard: View {
+    let building: BuildingBrief
+    let aed: BuildingBrief.AED?
+
+    var body: some View {
+        HStack(alignment: .center, spacing: DS.Space.m) {
+            Image(systemName: "bolt.heart.fill")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(DS.Colors.ok)
+                .frame(width: 48, height: 48)
+                .background(Circle().fill(DS.Colors.ok.opacity(0.16)))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(aed.map { BuildingWording.clean($0.place) } ?? "AED")
+                    .dsFont(DS.Fonts.detail)
+                    .foregroundStyle(DS.Colors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(subtitle)
+                    .dsFont(DS.Fonts.caption)
+                    .foregroundStyle(DS.Colors.textSecondary)
+            }
+            Spacer(minLength: DS.Space.s)
+            if let metres = aed?.typicalWalkM {
+                Text("\(metres) m")
+                    .dsFont(DS.Fonts.meta)
+                    .foregroundStyle(DS.Colors.ok)
+                    .padding(.horizontal, DS.Space.s)
+                    .padding(.vertical, DS.Space.xs)
+                    .background(Capsule().fill(DS.Colors.ok.opacity(0.14)))
+            }
+        }
+        .padding(DS.Space.m)
+        .background(RoundedRectangle(cornerRadius: DS.Radius.row, style: .continuous).fill(DS.Colors.surfaceRaised))
+        .overlay(RoundedRectangle(cornerRadius: DS.Radius.row, style: .continuous).strokeBorder(DS.Colors.hairline, lineWidth: 1))
+        .accessibilityElement(children: .combine)
+    }
+
+    /// "Rabinowitz Hall · Floor 1"
+    private var subtitle: String {
+        let floor = aed.map { BuildingWording.clean($0.floor) } ?? ""
+        let name = BuildingWording.shortName(building)
+        return floor.isEmpty ? name : "\(name) · \(floor)"
     }
 }
 

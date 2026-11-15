@@ -72,6 +72,18 @@ final class BuildingBriefStore {
         return marks.withMarks(found)
     }
 
+    /// The AED button's mode takes the person to be in this building, so it asks no match or confirm.
+    static let aedModeName = "Rabinowitz Hall"
+
+    /// Rabinowitz Hall with this phone's marks, else whatever would be selected, else the first building.
+    /// Reads only: the dispatcher's own pick and confirmation stay as they were.
+    var aedModeBuilding: BuildingBrief? {
+        guard let found = buildings.first(where: { $0.name.localizedCaseInsensitiveContains(Self.aedModeName) }) else {
+            return selected ?? buildings.first.map { marks?.withMarks($0) ?? $0 }
+        }
+        return marks?.withMarks(found) ?? found
+    }
+
     /// Nil goes back to matching by approximate location. A new choice needs its own confirmation.
     func pick(_ id: String?) {
         guard id != pickedID else { return }

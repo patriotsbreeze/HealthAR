@@ -6,6 +6,8 @@ import UIKit
 /// else nothing.
 struct DronePreviewButton: View {
     static let title = "Sample flight from the entrance"
+    /// The AED button's mode, where fewer words do.
+    static let shortTitle = "Drone from the entrance"
     static let hint = "Plays a fly-through of the building from here to the AED."
 
     let building: BuildingBrief
@@ -13,6 +15,7 @@ struct DronePreviewButton: View {
     /// The photo-located spot, else the entrance spot the drone file names.
     var start: String?
     let lengthM: Double?
+    var title = Self.title
     var drone: DroneData? = DroneData.bundled
     var video: DroneVideo? = DroneVideo.bundled
     @State private var flying = false
@@ -40,8 +43,8 @@ struct DronePreviewButton: View {
     }
 
     private var button: some View {
-        Button(Self.title, systemImage: "airplane") { flying = true }
-            .buttonStyle(CommandButtonStyle(kind: .secondary, height: DS.Height.awake))
+        Button(title, systemImage: "airplane") { flying = true }
+            .buttonStyle(CommandButtonStyle(kind: .secondary, height: title == Self.shortTitle ? DS.Height.arrest : DS.Height.awake))
             .accessibilityHint(Self.hint)
     }
 }
@@ -171,12 +174,15 @@ private struct DroneFrame: View {
 /// closest recorded spot to it. The entrance sample stays as Drone preview.
 struct DroneFromHereButton: View {
     static let title = "Drone from where I'm standing"
+    /// The AED button's mode, where fewer words do.
+    static let shortTitle = "Drone from here"
     static let hint = "Flies from the spot your photo matched to the AED."
 
     let building: BuildingBrief
     let aedID: String
     let pano: String
     let locator: LocatorData?
+    var title = Self.title
     var video: DroneVideo? = DroneVideo.bundled
     @State private var flying = false
 
@@ -191,7 +197,7 @@ struct DroneFromHereButton: View {
 
     var body: some View {
         if let plan {
-            Button(Self.title, systemImage: "airplane.departure") {
+            Button(title, systemImage: "airplane.departure") {
                 DroneVideo.log.info("drone from here: located \(pano, privacy: .public) start \(plan.flight.first?.pano ?? "-", privacy: .public) hops \(plan.flight.count) nearest \(plan.nearest)")
                 flying = true
             }

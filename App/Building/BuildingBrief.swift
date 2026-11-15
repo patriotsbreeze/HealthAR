@@ -312,6 +312,20 @@ enum BuildingWording {
 
     static let none = "No AED was seen in this building's scan. Ask people nearby."
 
+    /// "Rabinowitz Hall", without the campus in front of it.
+    static func shortName(_ building: BuildingBrief) -> String {
+        let name = clean(building.name)
+        return name.components(separatedBy: " - ").last.map(clean) ?? name
+    }
+
+    /// "AED by the water fountains, Floor 1 · 30 m", the label added when the place doesn't start with it.
+    static func aedShort(_ aed: BuildingBrief.AED) -> String {
+        let walk = aed.typicalWalkM.map { " · \($0) m" } ?? ""
+        let place = aedPlace(aed)
+        let named = !aed.markedByHand && place.lowercased().hasPrefix("aed") ? place : "\(label(aed)): \(place)"
+        return named + walk
+    }
+
     /// "Looks like Tower One, 1 Main St. From a building survey, …"
     static func match(_ building: BuildingBrief) -> String {
         "Looks like \(nameAndAddress(building)). From a building survey, matched by approximate location. Check it's where you are."
