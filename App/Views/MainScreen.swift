@@ -3,7 +3,7 @@ import RescueVision
 import SwiftUI
 
 enum AppSheet: String, Identifiable {
-    case dispatcher, sentinel, operatorPanel, agents
+    case dispatcher, sentinel, operatorPanel, agents, aed
     var id: String { rawValue }
 }
 
@@ -30,6 +30,7 @@ struct MainScreen: View {
                 StatusRail(
                     coordinator: coordinator, showsHUD: $showsHUD,
                     onAgents: { present(.agents) }, onDispatcher: { present(.dispatcher) }, onSentinel: { present(.sentinel) },
+                    onAED: { present(.aed) },
                     onOperator: { present(.operatorPanel) }
                 )
                 if showsHUD { LatencyHUD(coordinator: coordinator) }
@@ -99,6 +100,8 @@ struct MainScreen: View {
             switch current {
             case .dispatcher:
                 DispatcherSheet(coordinator: coordinator, onClose: { present(nil) }, onOperator: { present(.operatorPanel) })
+            case .aed:
+                AEDFinderSheet(coordinator: coordinator, onClose: { present(nil) }, onOperator: { present(.operatorPanel) })
             case .sentinel: SentinelPanel(coordinator: coordinator) { present(.operatorPanel) }
             case .agents: AgentsSheet(coordinator: coordinator) { present(.operatorPanel) }
             case .operatorPanel:

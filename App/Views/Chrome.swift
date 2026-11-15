@@ -77,6 +77,8 @@ struct StatusRail: View {
     let onAgents: () -> Void
     let onDispatcher: () -> Void
     let onSentinel: () -> Void
+    /// Opens Find the AED. Nil hides the button.
+    var onAED: (() -> Void)?
     /// The stage hand's hidden hold, on the clock now that the strip is gone.
     var onOperator: (() -> Void)?
 
@@ -89,6 +91,7 @@ struct StatusRail: View {
                 AgentsStrip(coordinator: coordinator, action: onAgents)
                 if coordinator.operatorUsed { OperatorBadge() }
                 Spacer(minLength: 0)
+                if let onAED, BuildingBriefStore.shared.showsSection { AEDButton(action: onAED) }
                 if coordinator.offersCameraFlip { FlipCameraButton(coordinator: coordinator) }
                 OverflowMenu(coordinator: coordinator, showsHUD: $showsHUD, onDispatcher: onDispatcher, onSentinel: onSentinel)
             }
@@ -214,6 +217,40 @@ private struct AgentsStrip: View {
             Slot(symbol: "bolt.heart.fill", name: "AED finder", status: aed.0, activity: aed.1),
             Slot(symbol: "phone.fill", name: "911 agent", status: c.callerAgentStatus == .calling ? "Calling" : "Ready", activity: c.callerAgentStatus == .calling ? .busy : .off),
         ]
+    }
+}
+
+/// Opens Find the AED: the photo locate, drone flight and AR guide, without the mock dispatcher.
+private struct AEDButton: View {
+    let action: () -> Void
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    var body: some View {
+        Button(action: action) {
+            Label("AED", systemImage: "bolt.heart.fill")
+                .labelStyle(.titleAndIcon)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(DS.Colors.ok)
+                .padding(.horizontal, DS.Space.m)
+                .frame(height: DS.Height.control)
+                .modifier(CapsuleSurface(reduceTransparency: reduceTransparency))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Find the AED")
+        .accessibilityHint("Locates you from a photo and shows the way to the nearest AED.")
+    }
+}
+
+private struct CapsuleSurface: ViewModifier {
+    let reduceTransparency: Bool
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if reduceTransparency {
+            content.background(DS.Colors.surfaceRaised, in: Capsule())
+        } else {
+            content.glassEffect(.regular.interactive(), in: Capsule())
+        }
     }
 }
 
