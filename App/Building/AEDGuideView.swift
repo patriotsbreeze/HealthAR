@@ -514,7 +514,7 @@ struct AEDGuideView: View {
 /// Metres to go, the next turn, the stairs when the route changes floor, and near or far advice.
 private struct GuideHUD: View {
     let guide: AEDGuide
-    /// No near-or-far advice, no mark button, and no turn-the-line buttons.
+    /// No near-or-far advice and no mark button; the turn-the-line buttons stay.
     var aedMode = false
     let done: () -> Void
 
@@ -566,16 +566,16 @@ private struct GuideHUD: View {
                         .dsFont(DS.Fonts.caption)
                         .foregroundStyle(DS.Colors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    HStack(spacing: DS.Space.betweenButtons) {
-                        Button(AEDGuideWording.turnLeft, systemImage: "arrow.counterclockwise") {
-                            guide.nudge(clockwiseDegrees: -AEDGuideWording.nudgeDegrees)
-                        }
-                        .buttonStyle(DeckCapsuleButtonStyle())
-                        Button(AEDGuideWording.turnRight, systemImage: "arrow.clockwise") {
-                            guide.nudge(clockwiseDegrees: AEDGuideWording.nudgeDegrees)
-                        }
-                        .buttonStyle(DeckCapsuleButtonStyle())
+                }
+                HStack(spacing: DS.Space.betweenButtons) {
+                    Button(AEDGuideWording.turnLeft, systemImage: "arrow.counterclockwise") {
+                        guide.nudge(clockwiseDegrees: -AEDGuideWording.nudgeDegrees)
                     }
+                    .buttonStyle(DeckCapsuleButtonStyle())
+                    Button(AEDGuideWording.turnRight, systemImage: "arrow.clockwise") {
+                        guide.nudge(clockwiseDegrees: AEDGuideWording.nudgeDegrees)
+                    }
+                    .buttonStyle(DeckCapsuleButtonStyle())
                 }
                 HStack(spacing: DS.Space.betweenButtons) {
                     Button(AEDGuideWording.recalibrate, action: guide.recalibrate)
