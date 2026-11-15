@@ -36,6 +36,7 @@ public struct SituationAssessment: Sendable, Equatable {
         case notBreathing = "not_breathing"
         case awake = "awake_and_talking"
         case callForHelp = "call_for_help"
+        case choking
     }
 
     public init(sees: String? = nil, emergency: String? = nil, headline: String, prediction: String, confidence: Confidence, watchFor: String?, reasoning: [String], suggests: Suggestion? = nil) {
@@ -163,7 +164,7 @@ public struct SituationAssessor: Sendable {
         let result = outcome ?? AssessmentOutcome(assessment: nil, problem: "timed out")
         let ms = Int(Date().timeIntervalSince(started) * 1000)
         if let a = result.assessment {
-            Self.log("\(model) ok \(ms)ms frame=\(frameBytes)B sees=\(a.sees ?? "-") | \(a.headline) | \(a.prediction) (\(a.confidence.rawValue))")
+            Self.log("\(model) ok \(ms)ms frame=\(frameBytes)B sees=\(a.sees ?? "-") emergency=\(a.emergency ?? "-") | \(a.headline) | \(a.prediction) (\(a.confidence.rawValue))")
         } else {
             Self.log("\(model) FAILED \(ms)ms frame=\(frameBytes)B problem=\(result.problem ?? "?")")
         }
@@ -207,7 +208,7 @@ public struct SituationAssessor: Sendable {
         // Only a reply that was shown a picture can say what's in it.
         let sees = hasPicture ? field(root["sees"], max: maxSees).flatMap { isClean($0, mode: mode) ? $0 : nil } : nil
         let reasoning = steps(in: reply.thoughts).filter { isClean($0, mode: mode) }
-        let emergency = hasPicture ? screenEmergency(root["emergency"], mode: mode) : nil
+        let emergency = hasPicture ? backed(screenEmergency(root["emergency"], mode: mode), confidence: confidence, prediction: prediction) : nil
         // A low read only shows what the AI thinks, so it never points at a button.
         var suggests: SituationAssessment.Suggestion?
         if confidence != .low, case let .string(raw)? = root["suggests"] { suggests = SituationAssessment.Suggestion(rawValue: raw) }
@@ -223,7 +224,8 @@ public struct SituationAssessor: Sendable {
         guard isClean(headline, mode: mode), isClean(prediction, mode: mode) else { return nil }
         let sees = clipped(report.sees, max: maxSees)
         return SituationAssessment(
-            sees: isClean(sees, mode: mode) ? sees : nil, emergency: screenEmergency(report.emergency, mode: mode),
+            sees: isClean(sees, mode: mode) ? sees : nil,
+            emergency: backed(screenEmergency(report.emergency, mode: mode), confidence: report.confidence, prediction: prediction),
             headline: headline, prediction: prediction,
             confidence: report.confidence, watchFor: nil, reasoning: []
         )
@@ -240,6 +242,30 @@ public struct SituationAssessor: Sendable {
         let lower = text.lowercased().trimmingCharacters(in: .punctuationCharacters)
         guard !text.isEmpty, !["none", "no", "n/a", "no emergency", "nothing"].contains(lower), isClean(text, mode: mode) else { return nil }
         return text
+    }
+
+    /// Words in a prediction that say the scene is calm, or that the AI can't tell yet.
+    static let calmPredictions = ["not enough information", "no emergency", "non-emergency", "no immediate emergency", "possible normal",
+                                  "not in distress", "no distress", "normal activity", "normal behavior", "routine",
+                                  "everyday", "working on"]
+
+    /// An emergency only stands when the rest of the read backs it: not at low confidence, and not
+    /// beside a prediction that says nothing is wrong. Models flag one out of habit on calm scenes.
+    static func backed(_ emergency: String?, confidence: SituationAssessment.Confidence, prediction: String) -> String? {
+        guard let emergency, confidence != .low, namesDanger(emergency) else { return nil }
+        let lower = prediction.lowercased()
+        return calmPredictions.contains { lower.contains($0) } ? nil : emergency
+    }
+
+    /// What an emergency line has to name. Models also fill the field with a calm description, such as
+    /// "Person seated at table, conscious and talking", so the words have to say what's wrong.
+    static let dangerWords = ["person down", "man down", "woman down", "is down", "down on", "floor", "ground", "collaps", "slump", "fallen", "fell", "lying", "not moving",
+                              "motionless", "unresponsive", "unconscious", "not breathing", "gasping", "choking", "throat",
+                              "bleeding", "blood", "distress", "seizure", "convuls", "can't breathe", "cannot breathe"]
+
+    static func namesDanger(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return dangerWords.contains { lower.contains($0) }
     }
 
     /// The voice AI's note on why the scene matters, or nil if a validator would flag it.
@@ -347,9 +373,13 @@ public struct SituationAssessor: Sendable {
     sees: at most 12 words, only what the camera image actually shows about the person: their \
     position, whether eyes are open, any movement, visible chest rise, skin color, blood, or an AED. \
     Plain observation, no conclusions. Leave it out when there is no image.
-    emergency: at most 6 words, only when the image shows a possible emergency: a person lying on \
-    the floor or ground, slumped, not moving, bleeding, choking, or clearly in distress. Say what you \
-    see, such as "Person down on the floor". Leave it out otherwise.
+    emergency: at most 6 words, only when the image clearly shows a possible emergency: a person \
+    lying on the floor or ground, collapsed or slumped over and not moving, visibly bleeding, \
+    choking, or clearly in distress. Say what you see, such as "Person down on the floor". Leave it \
+    out for ordinary behavior: someone sitting, standing, walking, talking, typing, looking at a \
+    screen or phone, resting with their head up, or with eyes open and moving normally. Leave it out \
+    when you are unsure, when the person isn't clearly visible, or when your prediction is that \
+    nothing is wrong. Most scenes have no emergency.
     headline: at most 8 words, the single most important thing in the scene right now.
     prediction: at most 12 words, starting with "Possible", what the situation most likely is, or \
     "Not enough information yet".
@@ -360,7 +390,8 @@ public struct SituationAssessor: Sendable {
     respond and isn't breathing normally. not_responding for someone down whose eyes are closed and \
     who doesn't move or answer, never for someone whose eyes are open or who moves. \
     not_breathing for no breathing, or only gasping. awake_and_talking only when the person is clearly \
-    awake and talking. call_for_help for any other emergency that needs emergency services on the way. Leave it out when \
+    awake and talking. choking for hands at the throat, or coughing or unable to speak or breathe \
+    while awake. call_for_help for any other emergency that needs emergency services on the way. Leave it out when \
     unsure. It only highlights a button; the rescuer decides.
     Never state a condition as fact, never give a medication or a dose, never say anyone is fine, \
     dead, or doesn't need emergency services, never tell anyone to check a pulse, and never give an \

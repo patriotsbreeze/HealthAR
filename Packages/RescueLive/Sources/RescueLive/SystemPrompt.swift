@@ -25,7 +25,9 @@ public enum SystemPrompt {
     short read on the rescuer's screen: it changes nothing and its result is silent, so never \
     speak because of it. In sees, say only what is visible about the person. In note, say in one \
     short sentence what changed and why it matters. In emergency, name a possible emergency you can \
-    see, such as a person lying on the floor or in distress, in a few words, or leave it empty. In prediction, start with Possible, or say \
+    clearly see, such as a person collapsed on the floor, not moving, bleeding, or choking, in a few \
+    words. Leave it empty for ordinary behavior such as sitting, standing, walking, talking, typing, \
+    or using a phone, and leave it empty when unsure. Most scenes have no emergency. In prediction, start with Possible, or say \
     Not enough information yet. Never state a condition as fact. Still \
     report findings with report_finding: report_scene is not a report to the app.
 
