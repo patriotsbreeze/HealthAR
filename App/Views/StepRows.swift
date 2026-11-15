@@ -141,48 +141,24 @@ struct ArrestRows: View {
     var body: some View {
         let controls = coordinator.controls
         let inCPR = coordinator.definition?.kind == .cpr
-        if inCPR, Self.pushingStates.contains(coordinator.state.stateID), !controls.isEmpty {
-            nextStepMenu(controls)
+        if inCPR, FormCoach.pushingStates.contains(coordinator.state.stateID) {
+            pushingRows(controls)
         } else {
             rows(controls, inCPR: inCPR)
         }
     }
 
-    /// While pushing, the deck is the form coaching, so the rest of the step folds into one button.
-    /// Leaving CPR from the menu still goes through the confirmation.
-    static let pushingStates: Set<String> = ["compressions", "compressions_aed"]
-
-    private func nextStepMenu(_ controls: [RescueControl]) -> some View {
-        let emsArrived = controls.first { $0.action == .emsArrived && $0.role == .stopsCPR }
-        return VStack(spacing: DS.Space.betweenButtons) {
-            menu(controls.filter { $0.id != emsArrived?.id })
-            // The one way out a bystander needs while pushing: the crew is here and takes over.
-            if let emsArrived {
+    /// While pushing, the deck is the form and the one way out: the crew is here and takes over.
+    /// Everything else on these steps is said, not tapped.
+    private func pushingRows(_ controls: [RescueControl]) -> some View {
+        VStack(spacing: DS.Space.betweenButtons) {
+            FormPanel(reading: coordinator.formReading)
+            if let emsArrived = controls.first(where: { $0.action == .emsArrived && $0.role == .stopsCPR }) {
                 HoldButton(title: "Stop CPR · EMS here", tone: .critical) { onStopRequested(emsArrived) }
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .rowTypeCap()
-    }
-
-    private func menu(_ controls: [RescueControl]) -> some View {
-        Menu {
-            ForEach(controls.filter { $0.role != .stopsCPR }) { control in
-                Button(control.title) { coordinator.perform(control.action) }
-            }
-            let stops = controls.filter { $0.role == .stopsCPR }
-            if !stops.isEmpty {
-                Divider()
-                ForEach(stops) { control in
-                    Button(control.title, role: .destructive) { onStopRequested(control) }
-                }
-            }
-        } label: {
-            Label("Next step", systemImage: "ellipsis.circle")
-        }
-        .menuStyle(.button)
-        .buttonStyle(CommandButtonStyle(kind: .secondary, height: DS.Height.arrest))
-        .accessibilityLabel("Next step")
     }
 
     private func rows(_ controls: [RescueControl], inCPR: Bool) -> some View {
