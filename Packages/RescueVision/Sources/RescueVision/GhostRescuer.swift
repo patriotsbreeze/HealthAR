@@ -130,11 +130,35 @@ enum GhostRescuer {
     /// The metronome's, so the ghost presses on the click.
     static let beatInterval = 60.0 / 110
 
-    /// The push from the beat: deepest on the click, back up by the half beat, as the click says.
+    /// The share of each beat spent pressing down into the click, and coming back up after it. What's
+    /// left, around the half beat, is a moment at the top with the chest fully recoiled.
+    static let pressShare = 0.28
+    static let recoilShare = 0.42
+    /// How far the upper body tips forward over the hands at the bottom of a push.
+    static let lean: Float = 5 * .pi / 180
+
+    /// The push from the beat: deepest on the click, back up by the half beat, as the click says. A
+    /// quick drive down, a slower release, and a beat at the top, rather than an even bob.
     static func push(sinceBeatStart elapsed: TimeInterval, beatInterval: TimeInterval) -> Double {
         guard elapsed >= 0, beatInterval > 0 else { return 0 }
         let phase = (elapsed / beatInterval).truncatingRemainder(dividingBy: 1)
-        return 0.5 + 0.5 * cos(2 * .pi * phase)
+        if phase < recoilShare { return 1 - smoothstep(phase / recoilShare) }
+        if phase < 1 - pressShare { return 0 }
+        return smoothstep((phase - (1 - pressShare)) / pressShare)
+    }
+
+    private static func smoothstep(_ t: Double) -> Double { t * t * (3 - 2 * t) }
+
+    /// Model space, the upper body at rest to the upper body at `push`: tipped forward from the hips
+    /// with the arms locked, so the shoulders come over the hands, and the hands driven straight down
+    /// `depth` into the chest. The hands are the model's origin, so tipping about them and then
+    /// dropping keeps them from sliding across the chest.
+    static func upperBody(push: Double) -> simd_float4x4 {
+        let pressed = Float(min(1, max(0, push)))
+        // +z is toward the rescuer, so a turn about +x the negative way brings the shoulders over the patient.
+        var pose = simd_float4x4(simd_quatf(angle: -lean * pressed, axis: [1, 0, 0]))
+        pose.columns.3 = SIMD4(0, -depth * pressed, 0, 1)
+        return pose
     }
 
     /// An adult kneeling with locked arms, shoulders straight over the hands, hinging at the hips.

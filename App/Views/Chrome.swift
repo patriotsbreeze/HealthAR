@@ -89,6 +89,7 @@ struct StatusRail: View {
                 AgentsStrip(coordinator: coordinator, action: onAgents)
                 if coordinator.operatorUsed { OperatorBadge() }
                 Spacer(minLength: 0)
+                if coordinator.offersCameraFlip { FlipCameraButton(coordinator: coordinator) }
                 OverflowMenu(coordinator: coordinator, showsHUD: $showsHUD, onDispatcher: onDispatcher, onSentinel: onSentinel)
             }
             .frame(minHeight: DS.Height.rail)
@@ -213,6 +214,26 @@ private struct AgentsStrip: View {
             Slot(symbol: "bolt.heart.fill", name: "AED finder", status: aed.0, activity: aed.1),
             Slot(symbol: "phone.fill", name: "911 agent", status: c.callerAgentStatus == .calling ? "Calling" : "Ready", activity: c.callerAgentStatus == .calling ? .busy : .off),
         ]
+    }
+}
+
+/// Swaps the back camera for the selfie one and back, beside the menu.
+private struct FlipCameraButton: View {
+    let coordinator: AppCoordinator
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    var body: some View {
+        Button(action: coordinator.flipCamera) {
+            Image(systemName: "arrow.triangle.2.circlepath.camera")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(DS.Colors.textPrimary)
+                .frame(width: DS.Height.control, height: DS.Height.control)
+                .modifier(FloatingSurface(reduceTransparency: reduceTransparency))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .sensoryFeedback(.selection, trigger: coordinator.usesFrontCamera)
+        .accessibilityLabel(coordinator.usesFrontCamera ? "Use back camera" : "Use front camera")
     }
 }
 

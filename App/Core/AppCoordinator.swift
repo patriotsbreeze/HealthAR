@@ -382,6 +382,15 @@ final class AppCoordinator {
     /// shows `place_hands`. Pose only, nothing sent, and it gates nothing.
     var showsHandsGuide: Bool { handsGuideUntil != nil }
 
+    /// The selfie camera instead of the back one. Kept across rescues, like the phone's own camera app.
+    private(set) var usesFrontCamera = false
+    var offersCameraFlip: Bool { showsCamera && vision.supportsFrontCamera }
+
+    func flipCamera() {
+        usesFrontCamera.toggle()
+        vision.setFrontCamera(usesFrontCamera)
+    }
+
     /// The metronome is on, so the ghost rescuer, if it has a place, is pushing on its beat.
     private(set) var metronomeOn = false
     /// A practice patient lies on the floor for the ghost to kneel beside.

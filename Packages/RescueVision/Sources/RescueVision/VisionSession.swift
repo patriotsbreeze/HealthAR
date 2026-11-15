@@ -33,11 +33,16 @@ protocol CameraDriver: AnyObject, Sendable {
     func surfacePoint(along ray: WorldRay) async -> SIMD3<Float>?
     /// Only a surface the ray really meets. A pin on the floor behind a limb is worse than none.
     func surfaceHit(along ray: WorldRay) async -> SIMD3<Float>?
+    var supportsFrontCamera: Bool { get }
+    /// Which camera the next `run()` starts.
+    func setFrontCamera(_ front: Bool)
 }
 
 extension CameraDriver {
     /// For a driver with no floor to fall back on.
     func surfaceHit(along ray: WorldRay) async -> SIMD3<Float>? { await surfacePoint(along: ray) }
+    var supportsFrontCamera: Bool { false }
+    func setFrontCamera(_ front: Bool) {}
 }
 
 #if !os(iOS)
@@ -93,6 +98,7 @@ public final class VisionSession: Sendable {
         var worldEpoch: UInt64 = 0
         var wantsRunning = false
         var arActive = false
+        var frontCamera = false
         var patientModelReady = false
         var patientRigReady = false
         var failed = false
@@ -321,6 +327,25 @@ public final class VisionSession: Sendable {
             return state.reconcile()
         })
         forgetWorld()
+    }
+
+    /// The selfie camera still shows the scene, finds people and sends frames, but it has no world to
+    /// place anything in, so the ghost, arrows and pins stay hidden while it's on.
+    public var supportsFrontCamera: Bool { driver.isSupported && driver.supportsFrontCamera }
+    public var usesFrontCamera: Bool { state.withLock { $0.frontCamera } }
+
+    public func setFrontCamera(_ front: Bool) {
+        guard supportsFrontCamera else { return }
+        let running: Bool? = state.withLock { state in
+            guard state.frontCamera != front else { return nil }
+            state.frontCamera = front
+            return state.arActive
+        }
+        guard let running else { return }
+        driver.setFrontCamera(front)
+        // Nothing placed in the old camera's world holds in the new one.
+        forgetWorld()
+        if running { driver.run() }
     }
 
     /// Forward every engine effect. The ones vision has no part in are ignored.
@@ -558,6 +583,7 @@ public final class VisionSession: Sendable {
         let carriedPoint = objects.carriedPoint(.aed)
         let callouts = objects.callouts()
         let holdsLimb = pose.holdsLimb
+        let patientSeen = seesPatient(at: now)
         var overlay = state.withLock { state in
             VisionOverlay.compose(
                 target: state.overlayTarget,
@@ -574,7 +600,8 @@ public final class VisionSession: Sendable {
                 items: callouts.filter { state.wanted.contains($0.key) },
                 handsGuide: state.showsHandsGuide(at: now),
                 ghost: state.ghostAnchor.flatMap { anchor in
-                    state.ghostBeatStart.map {
+                    guard state.ghostPractice || patientSeen else { return nil }
+                    return state.ghostBeatStart.map {
                         (anchor, GhostRescuer.push(sinceBeatStart: now - $0, beatInterval: GhostRescuer.beatInterval), state.ghostPractice)
                     }
                 },
@@ -764,8 +791,11 @@ public final class VisionSession: Sendable {
     /// own, a place to kneel, the beat on, and a fresh camera with normal tracking.
     public func ghostPlacement() -> GhostPlacement? {
         let now = clock()
+        let patientSeen = seesPatient(at: now)
         return state.withLock { state in
             guard state.overlayTarget == nil, let anchor = state.ghostAnchor, let start = state.ghostBeatStart,
+                  // A real patient's ghost only while that patient is still in view. The practice one has nobody to see.
+                  state.ghostPractice || patientSeen,
                   let camera = state.ledger.latest, camera.tracking == .normal,
                   now - camera.timestamp <= VisionOverlay.maxCameraAge
             else { return nil }
@@ -789,6 +819,14 @@ public final class VisionSession: Sendable {
         }
     }
 
+    /// How long the ghost holds after the patient was last picked out, riding out the rescuer's arms
+    /// hiding the body for a moment.
+    static let ghostPatientHold: TimeInterval = 2
+
+    private func seesPatient(at now: TimeInterval) -> Bool {
+        pose.patientSeenAt.map { (0...Self.ghostPatientHold).contains(now - $0) } ?? false
+    }
+
     /// The ghost is on screen and pushing on the beat, so it can stand in for the Push pulse.
     public var showsGhost: Bool { ghostPlacement() != nil }
 
@@ -804,7 +842,11 @@ public final class VisionSession: Sendable {
     /// nobody has been seen compressing lately.
     public func compressionFeedback() -> CompressionFeedback? {
         let now = clock()
-        return state.withLock { $0.feedback(at: now) }
+        let patientSeen = seesPatient(at: now)
+        return state.withLock { state in
+            guard state.ghostPractice || patientSeen else { return nil }
+            return state.feedback(at: now)
+        }
     }
 
     /// How often the ghost's place is found again while the chest is in view, so it settles on a
