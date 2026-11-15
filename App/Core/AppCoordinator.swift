@@ -1579,7 +1579,8 @@ extension SituationAssessment.Suggestion {
     /// The fixed button's words, the same on the panel, the "AI suggests" line, and the read's confirm.
     var buttonTitle: String {
         switch self {
-        case .startCpr, .notBreathing: "Not breathing"
+        case .startCpr: "Start CPR"
+        case .notBreathing: "Not breathing"
         case .notResponding: "Collapsed"
         case .awake: "Awake and talking"
         case .callForHelp: "Spawn 911 agent"
