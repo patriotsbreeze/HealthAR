@@ -227,7 +227,7 @@ private let rescuer = VisionOverlay.Figure(segments: [segment], head: CGPoint(x:
         view: CGSize(width: 400, height: 800),
         measure: { CGSize(width: CGFloat($0.count) * 8 + 20, height: 30) }
     )
-    #expect(scene.hint?.text == ARSceneBuilder.holdSteady)
+    #expect(scene.hint == nil, "no correction over marks that just went")
 }
 
 @Test func noCorrectionEverPraises() {

@@ -32,7 +32,7 @@ private func process(_ session: VisionSession, depth: BodyDepth? = nil) async th
     let target = try #require(TorsoMap.target(for: subject.torso, imageAspect: 4.0 / 3))
     #expect(marker == portraitMapping.ring(for: target))
     #expect(!session.overlay().patientIn3D)
-    #expect(session.overlay().chestEstimateLabel == "Estimated sternum region - Not anatomically verified")
+    #expect(session.overlay().chestEstimateLabel == nil, "the region shows with no caption")
     #expect(session.chestSurfacePlacement() == nil)
 }
 

@@ -611,11 +611,6 @@ public final class VisionSession: Sendable {
         // The 3D hands take over from the flat ones wherever they show.
         let patientBody = patientBodyPlacement()
         overlay.patientIn3D = patientBody != nil && state.withLock { $0.patientModelReady }
-        if overlay.patientIn3D {
-            overlay.chestEstimateLabel = patientBody?.showsChestEstimate == true
-                ? "Estimated hand placement - Not a sternum detection"
-                : state.withLock { $0.patientRigReady ? "3D body fit - Smooth joint-driven mesh" : "3D body fit - Rigid template" }
-        }
         let chest = pose.chestEstimate
         if let chest, (0...VisionOverlay.maxJointAge).contains(now - chest.capturedAt) {
             overlay.sternumEstimate = state.withLock { state in
@@ -624,9 +619,6 @@ public final class VisionSession: Sendable {
                       (0...VisionOverlay.maxCameraAge).contains(now - camera.timestamp), let mapping = state.mapping else { return nil }
                 return mapping.ring(for: chest.target)
             }
-        }
-        if overlay.sternumEstimate != nil {
-            overlay.chestEstimateLabel = "Estimated sternum region - Not anatomically verified"
         }
         overlay.handGuide = handGuide(at: now)
         overlay.handsIn3D = chestSurfacePlacement() != nil || handsPlacement() != nil
