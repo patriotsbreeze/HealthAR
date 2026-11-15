@@ -24,6 +24,12 @@ final class AppCoordinator {
     /// The same beat for an awake state, where the bad line is a different one.
     nonisolated static let seededAwakePhraseID = "seeded_bad_line_awake"
     nonisolated static let seededAwakeLine = "Seeded test line. It's definitely a heart attack."
+    /// Said a few seconds into compressions, just before the AED finder opens. Its clip is already in
+    /// the app, and the arrest bundle may not list it, so boot adds its text.
+    nonisolated static let aedNudgePhraseID = "aed_found"
+    nonisolated static let aedNudgeLine = "If there's an AED, have someone bring it. Follow the arrow if it shows."
+    /// How long after the compressions line ends the AED line plays and the finder opens.
+    private static let aedNudgeDelay: Duration = .seconds(5)
 
     private static let tickInterval: Duration = .milliseconds(200)
     private static let promptVisibleSeconds: TimeInterval = 8
@@ -124,6 +130,9 @@ final class AppCoordinator {
     private(set) var pinMessage: Prompt?
     private(set) var hasBegun = false
     private(set) var showsCamera = false
+    /// Goes up once per rescue, a few seconds into compressions, so the screen opens the AED finder.
+    private(set) var aedNudge = 0
+    private var aedNudgeDone = false
     private(set) var liveConnected = false
     /// One mode's session has stopped and the next isn't up, so nothing is hearing for now.
     private(set) var liveSwapping = false
@@ -322,6 +331,7 @@ final class AppCoordinator {
         // An awake step's lines, the dose among them, would otherwise play on ahead of the new rescue's
         // first question. Read from the old log, so an arrest-only restart goes as it always has.
         if enteredAwake { audio.cutPhrases() }
+        aedNudgeDone = false
         stopLive()
         if showsCamera { vision.stop() }
         audio.setMetronome(on: false)
@@ -610,6 +620,18 @@ final class AppCoordinator {
         dispatcherOpen = open
         dispatch(.human(open ? .dispatcherOn : .dispatcherOff))
         if open { location.refresh() }
+    }
+
+    /// Once per rescue: the AED line, then the finder, if CPR is still going and the finder can open.
+    private func scheduleAEDNudge() {
+        guard !aedNudgeDone else { return }
+        aedNudgeDone = true
+        Task { [weak self] in
+            try? await Task.sleep(for: Self.aedNudgeDelay)
+            guard let self, self.state.stateID == "compressions" else { return }
+            self.audio.play(phraseID: Self.aedNudgePhraseID)
+            if self.aedFinderAvailable { self.aedNudge += 1 }
+        }
     }
 
     func readAloud(_ text: String) {
@@ -999,6 +1021,7 @@ final class AppCoordinator {
             if audioHealth == .voiceFailed { audioHealth = .ok }
             // The seeded line isn't something the protocol said, so the model isn't told it was.
             if id != Self.seededPhraseID, id != Self.seededAwakePhraseID { dispatch(.phrasePlayed(id)) }
+            if id == "start_compressions", state.stateID == "compressions" { scheduleAEDNudge() }
             if Self.kickFollowsPhrase[state.stateID] == id {
                 kickPhraseDone = true
                 kickIfDue()

@@ -76,6 +76,7 @@ enum AppBoot {
         var texts = Dictionary(protocolBundle.phrases.phrases.map { ($0.id, $0.text) }, uniquingKeysWith: { first, _ in first })
         texts[AppCoordinator.seededPhraseID] = AppCoordinator.seededLine
         texts[AppCoordinator.seededAwakePhraseID] = AppCoordinator.seededAwakeLine
+        if texts[AppCoordinator.aedNudgePhraseID] == nil { texts[AppCoordinator.aedNudgePhraseID] = AppCoordinator.aedNudgeLine }
 
         #if DEBUG
         // The Simulator has no ARKit, so this stages a camera to look at every AR mark there.

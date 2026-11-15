@@ -91,6 +91,8 @@ struct MainScreen: View {
         .sensoryFeedback(DS.Haptics.compressions, trigger: coordinator.state.stateID) { _, new in new == "compressions" }
         // A confirmation never outlives the state it was raised in, so "Yes, stop CPR" can't act on another.
         .onChange(of: coordinator.state.stateID) { pendingStop = nil }
+        // A few seconds into CPR the voice says to get an AED, and its finder opens over the step.
+        .onChange(of: coordinator.aedNudge) { if sheet == nil { present(.aed) } }
         #if DEBUG
         .task {
             // After the staged walk, so what opens sits over the step it was asked for.
