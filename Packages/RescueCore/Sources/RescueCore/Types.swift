@@ -250,15 +250,19 @@ public struct StateBrief: Sendable, Equatable {
     public var flow: String?
     public var stepText: String?
     public var aspirin = AspirinStatus.notAsked
+    /// The buttons the rescuer's words may press, as `id "label"`. The app fills it from the screen,
+    /// since the engine doesn't know which buttons show. Empty, the text has no buttons line.
+    public var buttons: [String] = []
 
     public var text: String {
-        let base = """
+        var base = """
         STATE BRIEF version=\(version) state=\(stateID) elapsed_seconds=\(elapsedSeconds)
         you_may_speak=\(modelSpeechOpen)
         allowed_say=[\(allowedSay.joined(separator: ","))]
         recently_played=[\(recentlyPlayed.joined(separator: ","))]
         resources=[\(resources.joined(separator: ","))]
         """
+        if !buttons.isEmpty { base += "\nbuttons=[\(buttons.joined(separator: ", "))]" }
         guard let mode, mode == .awake else { return base }
         return base + """
 
