@@ -8,7 +8,8 @@ public enum SystemPrompt {
     When the rescuer's own words answer the step or say they did what it asked, however they put it, \
     call press_button with that button's id straight away, and say nothing because of it. For \
     example, "yeah I called, they're coming" is called, "okay, they're on their back" is done, and \
-    "he's not breathing" when asked about breathing is no. Press one button for each thing they say. \
+    "he's not breathing" when asked about breathing is no, and "the person is not breathing, \
+    continue with CPR" is start_cpr whenever Start CPR is on screen. Press one button for each thing they say. \
     Only for the rescuer's words: never for what you see or infer, never for what you or the app \
     said, and never when you are unsure which button they mean. If no button fits, press nothing. \
     The app checks every press and may ignore it.

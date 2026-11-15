@@ -32,6 +32,23 @@ import Testing
         #expect(VoiceCommands.action(for: "", among: controls) == nil)
     }
 
+    @Test func askingForCPRInASentenceStartsIt() {
+        #expect(VoiceCommands.action(for: "The person is not breathing, continue with CPR.", among: controls) == .startCpr)
+        #expect(VoiceCommands.action(for: "he's not breathing, let's do CPR", among: controls) == .startCpr)
+        #expect(VoiceCommands.action(for: "okay she's gone, start compressions now", among: controls) == .startCpr)
+    }
+
+    @Test func aNoOrAWaitAroundCPRStartsNothing() {
+        #expect(VoiceCommands.action(for: "don't start CPR yet, he's breathing", among: controls) == nil)
+        #expect(VoiceCommands.action(for: "wait, should I start CPR?", among: controls) == nil)
+        #expect(VoiceCommands.action(for: "If not, we start CPR.", among: controls) == nil)
+    }
+
+    @Test func askingForCPRWithNoCPRButtonPressesNothing() {
+        let noCPR = controls.filter { $0.action != .startCpr }
+        #expect(VoiceCommands.action(for: "not breathing, continue with CPR", among: noCPR) == nil)
+    }
+
     @Test func aButtonNotOnScreenPressesNothing() {
         #expect(VoiceCommands.action(for: "chest pain", among: controls) == nil)
     }
@@ -70,6 +87,14 @@ import Testing
         fixture.run(seconds: AppCoordinator.voiceCommandPause + 0.2)
         #expect(fixture.coordinator.state.stateID == "intake_breathing")
         #expect(fixture.coordinator.voicePressed?.text.hasPrefix("Heard:") == true)
+    }
+
+    @Test func sayingTheyreNotBreathingAndToContinueWithCPRGoesToCompressions() async throws {
+        let fixture = try await live()
+        try await say("The person is not breathing, continue with CPR", fixture)
+        fixture.run(seconds: AppCoordinator.voiceCommandPause + 0.2)
+        #expect(fixture.coordinator.state.stateID == "compressions")
+        #expect(fixture.coordinator.voicePressed?.text == "Heard: Start CPR")
     }
 
     @Test func aSentenceThatNamesAButtonPressesNothing() async throws {

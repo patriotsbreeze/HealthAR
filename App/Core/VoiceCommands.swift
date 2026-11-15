@@ -4,14 +4,35 @@ import RescueCore
 /// a button on screen as a tap would. Only when what they said is the button and nothing else, so a
 /// button's name inside a longer sentence, the app's own lines coming back through the mic among
 /// them, presses nothing. A button that stops CPR or leaves the path takes its hold, never a voice.
+/// The one exception is asking for CPR, which starts it from inside a sentence too.
 enum VoiceCommands {
     static func action(for utterance: String, among controls: [RescueControl]) -> HumanAction? {
         let said = normalized(utterance)
         guard !said.isEmpty else { return nil }
-        return controls.first { control in
-            pressable(control) && phrases(for: control).contains(said)
-        }?.action
+        if let exact = controls.first(where: { pressable($0) && phrases(for: $0).contains(said) }) {
+            return exact.action
+        }
+        guard asksForCPR(said) else { return nil }
+        return controls.first { pressable($0) && ($0.action == .startCpr || $0.action == .resumeCpr) }?.action
     }
+
+    /// "He's not breathing, continue with CPR": a rescuer who asks for CPR gets it, however long the
+    /// sentence, since waiting on the exact words costs compressions. A no or a wait in it presses
+    /// nothing. The app's own lines that say CPR come back through the mic only while they sound, and
+    /// words that overlap the app's speech press nothing.
+    static func asksForCPR(_ said: String) -> Bool {
+        let words = " \(said) "
+        guard cprRequests.contains(where: { words.contains(" \($0) ") }) else { return false }
+        return !cprRefusals.contains { words.contains(" \($0) ") }
+    }
+
+    private static let cprRequests = [
+        "continue with cpr", "continue cpr", "go on with cpr", "go ahead with cpr", "proceed with cpr",
+        "go to cpr", "move to cpr", "start cpr", "starting cpr", "begin cpr", "do cpr", "lets do cpr",
+        "start compressions", "begin compressions", "start chest compressions",
+    ]
+
+    private static let cprRefusals = ["dont", "do not", "not yet", "wait", "stop", "no cpr", "should i", "if"]
 
     static func pressable(_ control: RescueControl) -> Bool {
         control.role != .stopsCPR && control.role != .holdStep
