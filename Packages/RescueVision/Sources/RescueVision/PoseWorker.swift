@@ -154,6 +154,8 @@ final class PoseWorker: Sendable {
         var chestEstimate: TimedChestEstimate?
         /// When a lying patient was last picked out, in either pose mode. The ghost shows only while one is.
         var patientSeenAt: TimeInterval?
+        /// The frame whose pick for the patient lying down was upright by depth: sitting, standing or kneeling.
+        var uprightFrameID: UInt64?
         /// Hands are looked for only while the hand placement guide is up, since it costs a second request.
         var wantsHands = false
         var hands: TimedHands?
@@ -215,6 +217,7 @@ final class PoseWorker: Sendable {
             state.patientBody = nil
             state.chestEstimate = nil
             state.patientSeenAt = nil
+            state.uprightFrameID = nil
             state.hands = nil
             state.lastNoTargetReason = nil
             state.smoother.reset()
@@ -269,23 +272,28 @@ final class PoseWorker: Sendable {
     private func publishJoints(_ detection: PoseDetection, record: FrameRecord, generation: UInt64, depth: BodyDepth?) {
         var fitted: PatientBodyPlacement?
         let sel = selector.select(people: detection.people, gravity: record.pose.gravityInImage, imageAspect: record.pose.imageAspect)
-        let chest: TimedChestEstimate?
-        if case let .patient(person) = sel {
-            chest = TimedChestEstimate.estimate(person: person, depth: depth, record: record)
-        } else {
-            chest = nil
-        }
         // Only someone lying down gets the 3D body. Anyone sitting or standing gets none.
+        // The image alone can take someone seated for someone lying down, looking down at them. Depth
+        // can't: a torso it finds upright is never the patient, whatever its angle on screen.
+        var upright = false
         if record.tracking == .normal, let depth, case let .patient(person) = sel {
             fitted = PatientModelFit.fit(person: person, depth: depth, camera: record.pose)
+            if fitted == nil, let any = PatientModelFit.fit(person: person, depth: depth, camera: record.pose, requireLying: false) {
+                upright = !any.lying
+            }
+        }
+        var chest: TimedChestEstimate?
+        if case let .patient(person) = sel, !upright {
+            chest = TimedChestEstimate.estimate(person: person, depth: depth, record: record)
         }
         state.withLock { state in
             guard state.generation == generation else { return }
-            if case .patient = sel { state.patientSeenAt = record.timestamp }
+            state.uprightFrameID = upright ? record.id : nil
+            if case .patient = sel, !upright { state.patientSeenAt = record.timestamp }
             state.jointPose = TimedPose(regions: BodyRegions(), joints: detection.joints, skeletons: detection.skeletons, frameID: record.id, capturedAt: record.timestamp)
             // Never hold a chest marker on an ambiguous patient. One lost for a moment, as hands
             // cover the chest, keeps the last estimate, which still ages out where it's read.
-            if chest != nil || sel == .none(.multipleCandidates) { state.chestEstimate = chest }
+            if chest != nil || upright || sel == .none(.multipleCandidates) { state.chestEstimate = chest }
             // One frame failing the depth fit keeps the last good one, which still ages out on its own.
             if let fitted { state.patientBody = TimedPatientBody(placement: fitted, capturedAt: record.timestamp) }
         }
@@ -297,6 +305,8 @@ final class PoseWorker: Sendable {
         var reason: NoTargetReason?
         var found = false
         switch selector.select(people: people, gravity: gravity, imageAspect: pose.imageAspect) {
+        case .patient where state.uprightFrameID == record.id:
+            reason = .noHorizontalTorso
         case let .patient(person):
             let smoothed = state.smoother.smooth(person, at: record.timestamp, imageAspect: pose.imageAspect)
             if let target = TorsoMap.target(for: smoothed.torso, imageAspect: pose.imageAspect),
@@ -318,7 +328,7 @@ final class PoseWorker: Sendable {
         }
         state.scan.record(foundTarget: found)
         state.lastNoTargetReason = reason
-        if reason == .multipleCandidates {
+        if reason == .multipleCandidates || state.uprightFrameID == record.id {
             // The ring could be on the wrong person, so don't let it linger until stale.
             // Other misses just age out, which rides out a one-frame detection dropout.
             state.latest = nil

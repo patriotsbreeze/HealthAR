@@ -91,6 +91,8 @@ public final class VisionSession: Sendable {
         var ghostPractice = false
         var practiceRequestID: UInt64 = 0
         var lastGhostLockAt = -TimeInterval.infinity
+        /// Rescuer frames since the last look for the patient lying down, while the ghost is up.
+        var rescuerFramesSinceLying = 0
         /// When the metronome last turned on, which starts its beat grid afresh.
         var ghostBeatStart: TimeInterval?
         var coach = CompressionCoach()
@@ -147,8 +149,15 @@ public final class VisionSession: Sendable {
                 pinLive: pinLive(at: now),
                 holdsLimb: holdsLimb,
                 coaching: coaching,
+                seeksPatient: seeksPatient,
                 now: now
             )
+        }
+
+        /// Compressions with no ghost placed yet, past the hands guide's first seconds: pose keeps
+        /// looking for someone lying down, and the ghost kneels by them once it finds them.
+        var seeksPatient: Bool {
+            overlayTarget == nil && ghostBeatStart != nil && ghostAnchor == nil && !ghostPractice
         }
 
         func handsPlacement(at now: TimeInterval) -> HandsPlacement? {
@@ -814,6 +823,9 @@ public final class VisionSession: Sendable {
     /// How long the ghost holds after the patient was last picked out, riding out the rescuer's arms
     /// hiding the body for a moment.
     static let ghostPatientHold: TimeInterval = 2
+    /// Three rescuer frames to one look for the patient: about four looks a second at the rescuer's
+    /// 15, well inside the ghost's 2 s hold, and enough left over to time the pushes.
+    static let rescuerFramesPerLyingCheck = 3
 
     private func seesPatient(at now: TimeInterval) -> Bool {
         pose.patientSeenAt.map { (0...Self.ghostPatientHold).contains(now - $0) } ?? false
@@ -851,7 +863,7 @@ public final class VisionSession: Sendable {
         let now = clock()
         let latest = pose.latest
         let epoch: UInt64? = state.withLock { state in
-            guard state.overlayTarget == .chestCenter || state.showsHandsGuide(at: now),
+            guard state.overlayTarget == .chestCenter || state.showsHandsGuide(at: now) || state.seeksPatient,
                   record.tracking == .normal,
                   latest?.frameID == record.id,
                   now - state.lastGhostLockAt >= Self.ghostRelock
@@ -922,7 +934,17 @@ public final class VisionSession: Sendable {
                 case .lying: request = .lying
                 case .nearPin: request = .nearPin(anchor: state.pinAnchor(in: record, at: now))
                 case .upright: request = .upright
-                case .rescuer: request = .rescuer
+                case .rescuer:
+                    // The rescuer's pose is read upright only, which can miss someone lying across the
+                    // view. So every few frames look for the patient lying down instead, with the
+                    // rotation scan, or the ghost would hide under a patient who is still there.
+                    if state.rescuerFramesSinceLying >= Self.rescuerFramesPerLyingCheck {
+                        state.rescuerFramesSinceLying = 0
+                        request = .lying
+                    } else {
+                        state.rescuerFramesSinceLying += 1
+                        request = .rescuer
+                    }
                 }
             }
             return FrameJob(

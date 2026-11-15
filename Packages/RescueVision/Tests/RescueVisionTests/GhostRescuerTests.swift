@@ -275,6 +275,31 @@ private func frame(_ session: VisionSession, tracking: TrackingQuality = .normal
     #expect(ghost.patient == nil)
 }
 
+@Test func compressionsPlacesTheGhostOnAPatientFoundAfterTheGuide() async throws {
+    let clock = TestClock()
+    let lying = person(center: [0.5, 0.6], axisDegrees: 0, aspect: 4.0 / 3)
+    let session = makeSession(clock: clock, surface: chest, people: [lying])
+    session.apply(.overlay(nil))
+    session.setGhostBeat(on: true)
+    // Well past the hands guide's window: nobody was lying there when compressions began.
+    clock.advance(VisionSession.handsGuideSeconds + 1)
+    await frame(session)
+    #expect(await waitUntil { session.hasGhostAnchor })
+    #expect(session.overlay().ghost != nil)
+}
+
+@Test func compressionsPlacesNoGhostBesideSomeoneUpright() async throws {
+    let clock = TestClock()
+    let upright = person(center: [0.5, 0.5], axisDegrees: 90, aspect: 4.0 / 3)
+    let session = makeSession(clock: clock, surface: chest, people: [upright])
+    session.apply(.overlay(nil))
+    session.setGhostBeat(on: true)
+    clock.advance(VisionSession.handsGuideSeconds + 1)
+    await frame(session)
+    #expect(!session.hasGhostAnchor)
+    #expect(session.overlay().ghost == nil)
+}
+
 // MARK: - Fitting the patient to the body found
 
 @Test func theOutlineIsSizedToTheBodyFound() throws {

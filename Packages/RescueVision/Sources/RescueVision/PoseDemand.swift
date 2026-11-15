@@ -32,6 +32,7 @@ enum PoseDemand: Sendable, Equatable {
         pinLive: Bool,
         holdsLimb: Bool,
         coaching: Bool = false,
+        seeksPatient: Bool = false,
         now: TimeInterval
     ) -> PoseDemand {
         switch target {
@@ -48,6 +49,8 @@ enum PoseDemand: Sendable, Equatable {
             // Compressions takes no pixels, except for the hands guide the coordinator asked for, and
             // the rescuer's pose while the ghost is up to be followed.
             if let handsGuide, handsGuide.contains(now) { return .lying(since: handsGuide.lowerBound) }
+            // No ghost yet: keep looking for someone lying down, past the guide's first seconds.
+            if seeksPatient { return .lying(since: enteredAt) }
             return coaching ? .rescuer : .none
         }
     }

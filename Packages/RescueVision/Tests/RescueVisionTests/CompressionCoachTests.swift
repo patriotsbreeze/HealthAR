@@ -183,14 +183,14 @@ private func chestInImage() throws -> SIMD2<Double> {
     return point
 }
 
-@Test func nothingWatchesTheRescuerUntilTheGhostIsUp() async {
+@Test func compressionsLooksForSomeoneLyingDownUntilTheGhostIsUp() async {
     let clock = TestClock()
     let scene = Scene()
     let session = makeSession(clock: clock, scene: scene)
     session.apply(.overlay(nil))
     session.setGhostBeat(on: true)
-    #expect(await !frame(session), "no ghost placed, so no pixels in compressions")
-    #expect(session.compressionFeedback() == nil)
+    #expect(await frame(session), "no ghost placed, so pose looks for a patient lying down")
+    #expect(session.compressionFeedback() == nil, "and nobody is coached against a ghost that isn't there")
 }
 
 @Test func aRescuerOnTheBeatWithLockedArmsMatchesTheGhost() async throws {
