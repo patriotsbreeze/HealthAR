@@ -10,6 +10,8 @@ struct CommandDeck: View {
     @State private var bottomInset: CGFloat = 0
     @State private var contentHeight: CGFloat = 2000
     @State private var shownHeight: CGFloat = 0
+    /// Swiped down to a single line, for more of the camera. Every new step opens it again.
+    @State private var collapsed = false
     private static let top = "deck.top"
 
     var body: some View {
@@ -17,6 +19,19 @@ struct CommandDeck: View {
         let camera = coordinator.leavesRoomForCamera
         let stateID = coordinator.state.stateID
         VStack(alignment: .leading, spacing: 0) {
+            DeckGrabber(collapsed: collapsed) { setCollapsed(!collapsed) }
+            if collapsed {
+                Text(CommandEmphasis.attributed(coordinator.deckCommand, terms: coordinator.commandTerms))
+                    .dsFont(DS.Fonts.commandCompact)
+                    .foregroundStyle(DS.Colors.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture { setCollapsed(false) }
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityHint("Shows the step's buttons")
+            } else {
             // Takes its own height, and on a screen too short for it, or at a large text size, it
             // scrolls and the way out doesn't. Each new step starts at the top, with the step in view.
             ScrollViewReader { proxy in
@@ -68,17 +83,54 @@ struct CommandDeck: View {
                     }
                     .layoutPriority(1)
             }
+            }
         }
         .padding(.horizontal, DS.Space.deckPadding)
-        .padding(.top, DS.Space.s + DS.Space.xs)
+        .padding(.top, DS.Space.xs)
         // The home indicator's strip is already clear, so the deck only needs its own margin where there isn't one.
         .padding(.bottom, bottomInset > 0 ? 0 : DS.Space.m)
         // Exactly the width it's given. A row a fraction wider would otherwise widen the whole screen.
         .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
         .background { DeckSurface() }
+        // Alongside the step's own scroll and taps, so a swipe that starts on a row still counts.
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 24).onEnded { drag in
+                let dy = drag.translation.height
+                guard abs(dy) > 50, abs(dy) > abs(drag.translation.width) * 1.5 else { return }
+                // Only a step that fits can fold on a downward swipe; one that scrolls uses the drag to scroll.
+                if dy > 0, shownHeight >= contentHeight - 1 { setCollapsed(true) }
+                if dy < 0 { setCollapsed(false) }
+            }
+        )
+        .onChange(of: stateID) { setCollapsed(false) }
         .onGeometryChange(for: CGFloat.self, of: \.safeAreaInsets.bottom) { bottomInset = $0 }
         .padding(.horizontal, DS.Space.deckInset)
         .sensoryFeedback(DS.Haptics.step, trigger: stateID)
+    }
+}
+
+extension CommandDeck {
+    private func setCollapsed(_ value: Bool) {
+        guard value != collapsed else { return }
+        withAnimation(reduceMotion ? nil : DS.Motion.stepIn) { collapsed = value }
+    }
+}
+
+/// The handle at the top of the deck: swipe or tap to fold the deck to one line and back.
+private struct DeckGrabber: View {
+    let collapsed: Bool
+    let toggle: () -> Void
+
+    var body: some View {
+        Button(action: toggle) {
+            Capsule()
+                .fill(DS.Colors.textTertiary)
+                .frame(width: 36, height: 5)
+                .frame(maxWidth: .infinity, minHeight: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(collapsed ? "Show step" : "Hide step")
     }
 }
 
